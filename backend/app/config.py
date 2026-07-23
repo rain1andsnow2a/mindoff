@@ -1,0 +1,37 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """从 backend/.env 读取配置。环境变量名大小写不敏感（STEPFUN_API_KEY -> stepfun_api_key）。"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    # 阶跃接入
+    stepfun_api_key: str = ""
+    stepfun_base_url: str = "https://api.stepfun.com/v1"
+    stepfun_ws_base: str = "wss://api.stepfun.com/v1"
+
+    # 模型默认值
+    step_text_model: str = "step-3.5-flash"
+    step_asr_file_model: str = "stepaudio-2.5-asr"
+    step_asr_stream_model: str = "stepaudio-2.5-asr-stream"
+    step_realtime_model: str = "stepaudio-2.5-realtime"
+    step_realtime_voice: str = "linjiajiejie"
+    step_realtime_instructions: str = "你是 MindOff 的桌宠，温柔、不催促、不评判。"
+
+    # 服务
+    cors_origins: str = "*"
+
+    @property
+    def auth_header(self) -> dict[str, str]:
+        """阶跃鉴权头。key 只在服务端使用，绝不下发到前端。"""
+        return {"Authorization": f"Bearer {self.stepfun_api_key}"}
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
