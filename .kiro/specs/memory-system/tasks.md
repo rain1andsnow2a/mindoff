@@ -2,171 +2,148 @@
 
 ## Overview
 
-按 Phase 0 → Phase 6 顺序推进。Phase 0–2 打通「倾倒 → 双轴提取 → 分层存储 → 信箱表层交还」主链路（黑客松快赢，独立可交付）；Phase 3–6 为演化能力（下沉聚合、片场供给回写、信任门控主动陪伴、深度隐私），每项以开关控制、可回滚，异常不影响主链路。
+按「先主链路快赢、再叠加深加工与演化」推进。每个 Phase 独立可回滚，深加工/深层功能异常不影响倾倒/信箱主链路。任务粒度对齐 SDD，逐条可测，`_需求: x.y_` 回溯到 requirements。
+
+- Phase 0：存储底座（双轴 + 版本链 + history）
+- Phase 1：睡前倾倒采集与双轴提取
+- Phase 2：信箱表层交还（快赢闭环）
+- Phase 3：睡前做梦 Agent（每日定时深加工）
+- Phase 4：片场供给与结算回写
+- Phase 5：信任门控与主动陪伴
+- Phase 6：深度隐私 + 上下文注入 + 记忆审阅控制面
 
 ## Tasks
 
-### Phase 0：分层存储底座
+### Phase 0：存储底座
 
-- [ ] 1. 搭建后端骨架与数据模型
-  - 初始化 FastAPI + SQLAlchemy + SQLite 工程与配置开关
-  - 定义 `MemoryItem`、`MemoryHistory`（int 主键，字段见设计文档），注册 Base
-  - _需求: 2.1, 2.2, 2.3_
+- [x] 1. 搭建后端骨架（FastAPI 应用、配置、SQLite 连接、SQLAlchemy 基类、能力开关 settings）
+  - 引入 `dreaming_enabled`、`proactive_enabled` 等回滚开关
+  - _需求: 2.1, 10.3_
 
-- [ ] 2. Alembic 迁移
-  - 生成 `memory_items` + `memory_history` 迁移（revision id ≤ 32 字符），本地 upgrade 验证
-  - _需求: 2.1, 2.2_
+- [x] 2. 定义 MemoryItem 模型与 Alembic 初始迁移（int 主键；layer/kind/depth 枚举校验；版本链字段；索引）
+  - revision id ≤ 32 字符
+  - _需求: 2.1, 2.3, 2.6_
 
-- [ ] 3. MemoryStore CRUD 与版本链
-  - 实现 create/get/update/forget/list_by_layer/list_by_action，每次写操作同步写 history
-  - UPDATE 维护 version/parent_id/root_id/is_latest
-  - _需求: 2.4, 2.5, 2.6_
+- [x] 3. 定义 MemoryHistory 模型与迁移，封装「写 item 必写 history」的工具
+  - _需求: 2.2, 2.4_
 
-- [ ] 4. Phase 0 单测
-  - CRUD + history 写入 + 版本链一致（Property 3、4）
-  - _需求: 2.4, 2.5_
+- [x] 4. 实现 MemoryStore：create/get/update/forget/list_by_layer/list_by_kind/list_by_depth，含版本链逻辑与单测
+  - _需求: 2.4, 2.5, 2.6_（校验 Property 4、5）
 
-### Phase 1：倾倒采集与双轴提取
+### Phase 1：睡前倾倒采集与双轴提取
 
-- [ ] 5. 倾倒采集入口
-  - 实现 `dump_ingest`：接收语音转录/打字文本，raw_ref 落库（支持阈后即焚标记）
-  - _需求: 1.1, 1.5, 7.4_
+- [x] 5. 定义可配置 LLM Provider 封装（超时、重试、结构化输出解析）
+  - _需求: 1.1_
 
-- [ ] 6. 双轴提取器
-  - 实现 `extractor.extract`：LLM 分点输出事实列表，每条同时判定 action_type + iceberg_layer + confidence + evidence + entities + emotion
-  - 表层→event、情绪→feeling、信念/期望→belief；yearning 不产出
-  - 失败/空返回 `[]`，走兜底回执，raw_ref 不丢
-  - _需求: 1.2, 1.3, 1.4, 1.5_
+- [x] 6. 实现 extractor.extract：LLM 一次产出 [{layer, kind, depth, confidence, evidence, entities, emotion}]，含分类提示词
+  - 断言 core 不由单次提取产出
+  - _需求: 1.1, 1.2, 1.3, 1.4_（校验 Property 2、3）
 
-- [ ] 7. 提取结果落库与回执
-  - 逐条 `memory_store.create`；生成回执数据（各类计数 + 去向）供「妥了」界面
-  - _需求: 1.2, 1.6_
+- [x] 7. 实现 dump_ingest：raw_ref 落库（可即焚）→ 调 extract → 逐条 store.create；失败兜底不丢输入
+  - _需求: 1.5, 7.4_（校验 Property 1）
 
-- [ ] 8. Phase 1 单测
-  - 双轴打标断言（表层/情绪/信念归层）、多类型拆分、失败兜底不丢 raw_ref（Property 1、2）
-  - _需求: 1.2, 1.3, 1.4, 1.5_
+- [x] 8. 实现 receipt.build 与倾倒完成接口：返回各 kind 计数与去向（做梦 Agent 由 Phase 3 定时任务独立触发，不在此步派发）
+  - _需求: 1.6_
 
-### Phase 2：信箱表层交还
+### Phase 2：信箱表层交还（快赢闭环）
 
-- [ ] 9. 今日待启构建
-  - 实现 `inbox.build_today`：只读 event 层需行动记忆，附最小行动选项；缺信息归「待补区」
-  - _需求: 3.1, 3.2, 3.3_
+- [x] 9. 实现 inbox.build_today：只取 depth=surface 需行动记忆，附最小行动选项，缺信息归「待补区」
+  - _需求: 3.1, 3.2, 3.3_（校验 Property 6）
 
-- [ ] 10. 三日寄存与桌宠来信
-  - 72h 到期 → forget + history(FORGET)；桌宠来信每日 ≤1–2 封
-  - _需求: 3.4, 3.5_
+- [x] 10. 实现 72h 三日寄存遗忘任务（到期 forget + history(FORGET)）
+  - _需求: 3.4_
 
-- [ ] 11. Phase 2 单测
-  - 深度隔离（只出 event，Property 5）、待补区、72h 遗忘
-  - _需求: 3.1, 3.3, 3.4_
+- [x] 11. 实现 inbox.build_letters：桌宠来信每日 ≤1–2 封的组装与限频
+  - _需求: 3.5_
 
-### Phase 3：冰山下沉与假设聚合
+### Phase 3：睡前做梦 Agent（每日定时深加工）
 
-- [ ] 12. 下沉聚合任务
-  - 实现 `descent.aggregate`：聚类同主题 feeling/belief 信号，超阈值 LLM 生成更深层假设
-  - 强约束：层级更深、confidence ≤ 来源均值、relation_type=derives、provenance 记录来源、不确定措辞
-  - 离线/低频执行，不阻塞回执
-  - _需求: 4.1, 4.2, 4.3, 4.5_
+- [x] 12. 搭建 dreaming_agent 有界骨架：固定阶段 recall→cluster→descend→reconcile→forget→prepare，工具白名单=记忆读写，每阶段 try/except 隔离，受 dreaming_enabled 开关控制
+  - _需求: 4.1, 4.2, 4.6_（校验 Property 7）
 
-- [ ] 13. 角色化确认回写
-  - confirm → 提升 confidence + 标记 confirmed；deny → 降权/遗忘 + history
+- [x] 13. 实现 descend 下沉：主题超阈值 → LLM 生成更深 depth 假设（confidence ≤ 来源均值、relation_type=derives、provenance 全来源、不确定措辞）
+  - _需求: 4.3_（校验 Property 3、7）
+
+- [x] 14. 实现 reconcile 去重消解 + forget 保鲜（profile/state 高置信覆盖低置信、保版本链；过期写 FORGET）
   - _需求: 4.4_
 
-- [ ] 14. Phase 3 单测
-  - 下沉不僭越（Property 6）、confirm/deny 回写
-  - _需求: 4.2, 4.3, 4.4_
+- [x] 15. 实现角色化确认回写 confirm(accepted)：认可提 confidence+confirmed，否认降权/遗忘 + history
+  - _需求: 4.5_
+
+- [x] 16. 实现每日定时调度（APScheduler，默认 00:00）+ debug 手动触发端点（POST /api/v1/debug/dream），验证不阻塞主链路
+  - _需求: 4.1_（校验 Property 7）
 
 ### Phase 4：片场供给与结算回写
 
-- [ ] 15. 角色小冰山存储
-  - 定义 `RoleIceberg` 模型 + 迁移；提供按 (user, role, layer) 读写
+- [x] 17. 定义 RoleProfile 模型与迁移（普通档案占位，无冰山/深度）
   - _需求: 5.2_
 
-- [ ] 16. 片场供给
-  - 实现 `stage.supply`：候选片段 event 上下文 + 相关角色小冰山（belief/yearning）组装为剧本动机
-  - _需求: 5.1, 5.5_
+- [x] 18. 实现 stage.supply(segment)：组装 episodic 上下文 + 相关角色档案 + 相关 vulnerable/core 记忆为剧本动机
+  - _需求: 5.1_
 
-- [ ] 17. 结算回写
-  - 实现 `stage.settle`：最小行动 → event 层（可进信箱）；触碰的期待/渴望 → 角色小冰山；珍藏/结束删除分支
+- [x] 19. 实现 stage.settle 结算回写：最小行动→新建 surface 记忆（可进信箱）；领悟→关联相关记忆/角色档案笔记；珍藏/即焚分支
   - _需求: 5.3, 5.4_
-
-- [ ] 18. Phase 4 单测
-  - 供给取到角色小冰山、结算三类回写路径、珍藏与即焚
-  - _需求: 5.1, 5.3, 5.4_
 
 ### Phase 5：信任门控与主动陪伴
 
-- [ ] 19. 信任状态
-  - 定义 `TrustState` 模型 + 迁移；据互动/确认/否认演化 value
+- [x] 20. 定义 TrustState 模型与更新逻辑（互动/确认/否认演化 value）
   - _需求: 6.1_
 
-- [ ] 20. 门控主动陪伴
-  - 实现 `proactive.pick`：候选按 provenance 充分性排序，过滤 visibility_gate > trust；遵循有依据/低频/无红点；尊重"关闭主动陪伴"
-  - _需求: 6.2, 6.3, 6.4, 6.5_
+- [x] 21. 实现 proactive.pick + 信任门控：候选按 provenance 排序，过滤 visibility_gate > trust，尊重「关闭主动陪伴」；depth 越深默认 gate 越高
+  - _需求: 6.2, 6.3, 6.4, 6.5_（校验 Property 8）
 
-- [ ] 21. Phase 5 单测
-  - 信任门控过滤（Property 7）、关闭后无主动发声
-  - _需求: 6.2, 6.5_
+### Phase 6：深度隐私 + 上下文注入 + 记忆审阅控制面
 
-### Phase 6：深度隐私与上下文注入
+- [x] 22. 实现 privacy 分级落地：depth→privacy 默认映射、本机/即焚策略、vulnerable/core 不外流
+  - _需求: 7.1, 7.2, 7.3, 7.5_（校验 Property 9）
 
-- [ ] 22. 深度分级隐私
-  - 按冰山层设默认 privacy（event=cloud，其余 local）；本机识别不出设备；阈后即焚读取后遗忘；关闭"保留原始倾诉"只留 surface_text
-  - belief/yearning 默认不进同步/外部 Provider
-  - _需求: 7.1, 7.2, 7.3, 7.4, 7.5_
+- [x] 23. 实现 context_builder：profile/query/full 三模式 + 分层预算去重 + `<memory-context>` 围栏 + 检索容错退化
+  - _需求: 8.1, 8.2, 8.3, 8.4, 8.5_（校验 Property 11）
 
-- [ ] 23. 共享上下文构建器
-  - 实现 `context_builder.build_context`（profile/query/full 三模式），分层预算 + 去重 + `<memory-context>` 围栏 + 流式剔除；任一检索源 try/except 退化为空
-  - 供桌宠对话、倾倒、片场复用
-  - _需求: 8.1, 8.2, 8.3, 8.4, 8.5_
-
-- [ ] 24. 伦理边界护栏与回归
-  - 输出层过滤：任何面向用户文本不含冰山层名/诊断/人格标签（Property 10）
-  - 各 Phase 可回滚开关校验；Property 1–10 断言用例回归全绿
-  - _需求: 9.1, 9.3_
+- [x] 24. 实现 memory_review 控制面接口：list（带 provenance + 敏感度软标签）/edit（UPDATE 版本链）/delete（FORGET 不再召回）/按 depth·kind 过滤；断言不输出冰山层名/诊断
+  - _需求: 9.1, 9.2, 9.3, 9.4, 9.5, 10.1_（校验 Property 10）
 
 ## Task Dependency Graph
 
 ```json
 {
   "waves": [
-    {"wave": 1, "tasks": [1], "depends_on": []},
-    {"wave": 2, "tasks": [2], "depends_on": [1]},
-    {"wave": 3, "tasks": [3], "depends_on": [2]},
-    {"wave": 4, "tasks": [4], "depends_on": [3]},
-    {"wave": 5, "tasks": [5], "depends_on": [3]},
-    {"wave": 6, "tasks": [6], "depends_on": [5]},
-    {"wave": 7, "tasks": [7], "depends_on": [6]},
-    {"wave": 8, "tasks": [8], "depends_on": [7]},
-    {"wave": 9, "tasks": [9], "depends_on": [7]},
-    {"wave": 10, "tasks": [10], "depends_on": [9]},
-    {"wave": 11, "tasks": [11], "depends_on": [10]},
-    {"wave": 12, "tasks": [12], "depends_on": [7]},
-    {"wave": 13, "tasks": [13], "depends_on": [12]},
-    {"wave": 14, "tasks": [14], "depends_on": [13]},
-    {"wave": 15, "tasks": [15], "depends_on": [3]},
-    {"wave": 16, "tasks": [16], "depends_on": [15, 12]},
-    {"wave": 17, "tasks": [17], "depends_on": [16]},
-    {"wave": 18, "tasks": [18], "depends_on": [17]},
-    {"wave": 19, "tasks": [19], "depends_on": [3]},
-    {"wave": 20, "tasks": [20], "depends_on": [19, 12]},
-    {"wave": 21, "tasks": [21], "depends_on": [20]},
-    {"wave": 22, "tasks": [22], "depends_on": [3]},
-    {"wave": 23, "tasks": [23], "depends_on": [3, 12]},
-    {"wave": 24, "tasks": [24], "depends_on": [23, 20, 22]}
+    { "wave": 1, "tasks": [1] },
+    { "wave": 2, "tasks": [2] },
+    { "wave": 3, "tasks": [3] },
+    { "wave": 4, "tasks": [4] },
+    { "wave": 5, "tasks": [5] },
+    { "wave": 6, "tasks": [6] },
+    { "wave": 7, "tasks": [7] },
+    { "wave": 8, "tasks": [8] },
+    { "wave": 9, "tasks": [9] },
+    { "wave": 10, "tasks": [10, 11] },
+    { "wave": 11, "tasks": [12] },
+    { "wave": 12, "tasks": [13, 14, 15] },
+    { "wave": 13, "tasks": [16] },
+    { "wave": 14, "tasks": [17] },
+    { "wave": 15, "tasks": [18, 19] },
+    { "wave": 16, "tasks": [20] },
+    { "wave": 17, "tasks": [21] },
+    { "wave": 18, "tasks": [22, 23] },
+    { "wave": 19, "tasks": [24] }
+  ],
+  "notes": [
+    "task 4 依赖 2、3（模型齐备才实现 store）",
+    "task 7 依赖 5、6（Provider + extractor）",
+    "task 8 仅生成回执，做梦 Agent 由 task 16 的定时调度独立触发",
+    "Phase 2（9–11）在 Phase 3 前完成，构成可演示的快赢闭环",
+    "task 13/14/15 均依赖 12 的有界骨架，可并行",
+    "task 24 审阅面依赖 store（4）与 history，隐私（22）建议先行"
   ]
 }
 ```
 
-说明：
-- Phase 0–2（任务 1–11）为独立可交付主链路，不依赖后续 Phase，黑客松优先完成。
-- 任务 16/20/23 依赖 Phase 3 下沉产出的深层记忆（任务 12）才能取到 belief/yearning。
-- Phase 4（15–18）与 Phase 5（19–21）在主链路 + 下沉就绪后可并行推进。
-
 ## Notes
 
-- 冰山仅为内部 schema，输出层必须过滤层名与诊断措辞（伦理红线，任务 24 校验）。
-- 每个 Phase 完成后跑对应单测 + Property 断言回归。
-- Alembic 迁移 revision id ≤ 32 字符。
-- 桌宠形象/切换由设计队友负责，本 spec 只占位其「发声出口」。
-- 主链路与演化链路开关分离；深层功能异常时关开关即回退，不影响倾倒/信箱。
+- **伦理护栏贯穿全程**：任何面向用户的输出都不得包含诊断/人格标签/冰山层名；深层假设一律不确定措辞、附 provenance。
+- **主链路优先**：Phase 0–2 完成即具备可演示闭环（倾倒→提取→分层→次日信箱）；做梦/片场/门控/审阅为增量叠加。
+- **可回滚**：`dreaming_enabled`、`proactive_enabled` 等开关关闭时，系统退化为纯主链路且不报错。
+- **定时隔离**：做梦 Agent 每日凌晨定时运行，失败只记日志、跳过阶段，绝不回滚已完成的倾倒/信箱数据。
+- Alembic 每次迁移 revision id ≤ 32 字符。
+- 桌宠形象、角色深度建模、片场立绘由设计队友负责，本 spec 仅占位其数据出入口。

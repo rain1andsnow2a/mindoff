@@ -1,45 +1,75 @@
-# MindOff AI 网关（基础层）
+# MindOff 后端
 
-MindOff 全项目的模型调用统一走**阶跃星辰**。本服务是 AI 基础层：把阶跃的
-**文本 / 语音转文字 / 实时通话**封装成前端（React Native）可直连的接口，
-**API key 只留服务端**，前端永远拿不到。
+FastAPI + SQLAlchemy(SQLite) + LangGraph。分两层：
+
+- **AI 网关 `/ai/*`**：阶跃星辰的文本/语音转写/实时通话封装，API key 只留服务端。
+- **业务层 `/api/v1/*`**：账号、对话、睡前倾倒、双轴记忆、信箱、桌宠等，全部
+  `Authorization: Bearer <token>` 按用户隔离。接口契约见 [docs/api-design.md](docs/api-design.md)，
+  记忆系统规格见 `../.kiro/specs/memory-system/`。
 
 ## 快速开始
 
 ```bash
 cd backend
-cp .env.example .env          # 然后把 STEPFUN_API_KEY 填成真实 key
-uv sync                        # 装依赖
-uv run uvicorn app.main:app --reload   # 启动，默认 http://127.0.0.1:8000
+cp .env.example .env          # 填 STEPFUN_API_KEY；JWT_SECRET 生产必改
+uv sync                       # 装依赖（或直接 .venv/Scripts/python.exe）
+uv run uvicorn app.main:app --reload   # 默认 http://127.0.0.1:8000
 ```
 
-## 接口
+启动时自动 `create_all` 建表（dev）；生产走 Alembic：`uv run alembic upgrade head`。
 
-| 方法 | 路径 | 说明 |
+## 业务接口一览（/api/v1）
+
+| 资源 | 路径 | 状态 |
 |---|---|---|
-| GET | `/health` | 存活检查（含 key 是否加载、默认模型） |
-| POST | `/ai/chat` | 文本。body `{messages, model?, tools?, tool_choice?, temperature?, stream?}`；`stream:true` 返回 SSE。支持 tool calling |
-| POST | `/ai/stt` | 一次性识别。multipart：`file` + `type`(wav/mp3/pcm/ogg) + pcm 时的 `rate/bits/channel` + `language` |
-| WS | `/ai/stt/stream` | 边说边转。按阶跃协议发 `session.update` / `input_audio_buffer.append`(base64 pcm)，回传 `transcription.delta/completed` |
-| WS | `/ai/realtime` | 桌宠实时语音。网关自动注入鉴权 + 默认 session（人设/音色/server_vad/pcm16），RN 可发 `session.update` 覆盖 |
+| 账号 | `/auth/register|login|refresh|logout`、`/users/me` | ✅ |
+| 对话 | `/conversations[/{id}[/messages]]`（`?stream=true` 走 SSE） | ✅ |
+| 睡前倾倒 | `POST /brain-dumps`（SSE 流式回执）、`GET /brain-dumps/{id}` | ✅ |
+| 五类存储 | `/todos`、`/summaries`、`/ideas`、`/emotions` | ✅ |
+| 记忆 | `/memories`（CRUD+清空）、`/memory-review`（审阅面·软标签） | ✅ |
+| 信箱 | `/mailbox`、`/letters`、`/ephemeral`、`/treasures` | ✅ |
+| 桌宠 | `/pets[/presets|/active|/{id}]`（切换触发交接信） | ✅ |
+| 交接信 | `/handoffs[/{id}]`（只读） | ✅ |
 
-### ⚠️ 给前端的关键约定
-- 流式识别的 `transcription.delta.text` 是**累计全量文本**，**整体替换展示，不要追加拼接**。
-- 实时语音音频输入/输出均为 **pcm16 + base64**。
-- `voice` 音色不可中途更改（阶跃限制），首帧 session 定好。
-
-## 验证
+## 验证（需先启动服务）
 
 ```bash
-# 需先启动服务
-uv run python scripts/smoke_test.py   # /health + /ai/chat（普通/tool/SSE）
-uv run python scripts/ws_smoke.py     # /ai/realtime 握手+鉴权+中继链路
+uv run python scripts/smoke_test.py          # 网关：/health + /ai/chat
+uv run python scripts/ws_smoke.py            # 网关：/ai/realtime 链路
+uv run python scripts/auth_smoke.py          # 账号全流程
+uv run python scripts/test_conversations.py  # 对话 + 从会话生成倾倒
+uv run python scripts/test_brain_dumps.py    # 倾倒 SSE + 回执回取
+uv run python scripts/test_pets.py           # 桌宠 + 交接信
+uv run python scripts/test_mailbox_ext.py    # 来信/三日寄存/珍藏
+uv run python scripts/test_memories.py       # 记忆 CRUD
+uv run python scripts/test_stores.py         # 五类存储（待办/小结/灵感/情绪）
+uv run python scripts/handoff_smoke.py       # 交接信
+uv run python scripts/test_phase2.py         # 记忆 phase2（信箱交还）
+uv run python scripts/test_phase3.py         # 记忆 phase3（做梦 Agent）
 ```
 
-语音**全链路**（真麦克风→转录/语音回复）需 RN 真机带麦联调；本地脚本只验证到
-网关↔阶跃 WS 链路通。
+service 层测试（免启动服务，需 `PYTHONPATH=.`）：
 
-## 分层与下一步
-- 本层：模型接入原语（网关）。
-- 下一层：LangGraph 编排图（睡前分类 / 来信门控 / 剧情状态机 / 记忆 TTL），
-  通过 `app/llm.py` 的 `get_chat_model()` 接入阶跃。
+```bash
+uv run python scripts/test_stage.py      # 片场供给/结算
+uv run python scripts/test_proactive.py  # 信任门控
+uv run python scripts/test_phase6.py     # 隐私/上下文/审阅（含 HTTP 段，需服务）
+```
+
+> Windows 控制台跑脚本请加 `PYTHONUTF8=1`（否则 emoji print 报 GBK 编码错）。
+
+## 开发约定（踩过的坑）
+
+1. **dev 库由 `create_all` 建**：不会给已存在的表加列。改列需手动 ALTER 或删
+   `mindoff.db` 重建；新表无需处理。Alembic 迁移（`alembic/versions/`）是 prod 路径，
+   模型/字段变更要同步写迁移，revision id ≤ 32 字符。
+2. **新模型要注册** `app/models/__init__.py`；**新 router 要挂载** `app/main.py`。
+3. `--reload` 监视整个目录：写 `scripts/*.py` 会触发重启，先建好文件再测。
+4. 桌宠/片段等跨表引用暂用裸 Integer + 名称快照，不设 FK（与 user_id 先例一致）。
+
+## 红线
+
+- 不向用户输出心理诊断/人格标签/冰山层名；深层假设一律不确定措辞 + provenance。
+- vulnerable/core 记忆默认 privacy=local，外发（同步/外部 Provider）必须过
+  `app/services/privacy.py` 的 `can_send_external`。
+- 来信每天 ≤1–2 封；三日寄存到期真删。

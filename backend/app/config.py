@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     step_realtime_voice: str = "linjiajiejie"
     step_realtime_instructions: str = "你是 MindOff 的桌宠，温柔、不催促、不评判。"
 
+    # 数据库
+    database_url: str = "sqlite:///./mindoff.db"
+
+    # 能力开关（可回滚）
+    dreaming_enabled: bool = True
+    proactive_enabled: bool = True
+
+    # 鉴权（JWT）—— 生产务必用 .env 覆盖 jwt_secret
+    jwt_secret: str = "dev-only-change-me"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 天（黑客松从宽）
+    refresh_token_expire_days: int = 30
+
     # 服务
     cors_origins: str = "*"
 

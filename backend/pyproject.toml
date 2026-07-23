@@ -1,7 +1,7 @@
 [project]
 name = "mindoff-backend"
-version = "0.1.0"
-description = "MindOff AI 网关 — 阶跃星辰模型接入基础层（文本/语音转文字/实时通话）"
+version = "0.2.0"
+description = "MindOff 后端 — AI 网关 + 双轴记忆系统（LangGraph 编排）"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -12,6 +12,10 @@ dependencies = [
     "python-multipart>=0.0.9",
     "langchain-openai>=0.2",
     "langgraph>=0.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pyjwt>=2.13.0",
+    "bcrypt>=5.0.0",
 ]
 
 [tool.uv]

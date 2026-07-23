@@ -2,4 +2,8 @@ node_modules/
 dist/
 .env
 *.log
+*.err
+*.db
+*.db-shm
+*.db-wal
 theater/_verify_*.png
