@@ -35,24 +35,36 @@ type Screen =
   | "profile" | "pet-change" | "pet-handoff"
   | "memory-list" | "memory-review";
 
-type PetInfo = { id: number; name: string; emoji: string; summary: string };
+type PetInfo = {
+  id: number;
+  presetId: string | null;
+  name: string;
+  emoji: string;
+  summary: string;
+};
 
 // 内置预设的展示映射（后端预设无 emoji，前端按 preset_id 补表情）。
 const PRESET_EMOJI: Record<string, string> = { miro: "✨", bobi: "☀️" };
-const DEFAULT_PET: PetInfo = { id: 0, name: "米露", emoji: "✨", summary: "情绪碎片收藏家" };
+const DEFAULT_PET: PetInfo = {
+  id: 0,
+  presetId: "miro",
+  name: "米露",
+  emoji: "✨",
+  summary: "情绪碎片收藏家",
+};
 
 function petFromPreset(p: any): PetInfo {
   const presetId = p.id as string;
   const emoji = PRESET_EMOJI[presetId] ?? "🌿";
   const summary = (p.personality as string) || "陪伴伙伴";
-  return { id: presetId as any, name: p.name, emoji, summary };
+  return { id: presetId as any, presetId, name: p.name, emoji, summary };
 }
 
 function petFromOwned(p: any): PetInfo {
   const presetId = (p.preset_id as string) || "";
   const emoji = PRESET_EMOJI[presetId] ?? "🌿";
   const summary = (p.personality as string) || "陪伴伙伴";
-  return { id: p.id as number, name: p.name, emoji, summary };
+  return { id: p.id as number, presetId: presetId || null, name: p.name, emoji, summary };
 }
 
 // 开发/验收钩子：web 下可用 ?screen=xxx 直达某屏（原生无 window，自动跳过）
@@ -189,8 +201,8 @@ export default function App() {
     listPetPresets()
       .then((data) => setPresets((data as any[]).map(petFromPreset)))
       .catch(() => setPresets([
-        { id: "miro" as any, name: "米露", emoji: "✨", summary: "情绪碎片收藏家：安静、敏锐、擅长倾听和承接情绪" },
-        { id: "bobi" as any, name: "波比", emoji: "☀️", summary: "晨光信使：温暖、热烈、有行动力，也尊重边界" },
+        { id: "miro" as any, presetId: "miro", name: "米露", emoji: "✨", summary: "情绪碎片收藏家：安静、敏锐、擅长倾听和承接情绪" },
+        { id: "bobi" as any, presetId: "bobi", name: "波比", emoji: "☀️", summary: "晨光信使：温暖、热烈、有行动力，也尊重边界" },
       ]));
   }, [screen, tokens]);
 
@@ -314,7 +326,7 @@ export default function App() {
             )}
 
             {screen === "companion" && (
-              <CompanionIdle petName={pet.name} petEmoji={pet.emoji}
+              <CompanionIdle petName={pet.name} petEmoji={pet.emoji} petPresetId={pet.presetId}
                 night={night} onNightToggle={() => setNight(n => !n)}
                 onChat={() => go("chat")}
                 onVoiceChat={(text) => { setChatSeedText(text); go("chat"); }}
