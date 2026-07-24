@@ -43,6 +43,15 @@ class PetStore:
             select(Pet).where(Pet.id == pet_id, Pet.user_id == user_id)
         )
 
+    def get_by_preset(self, user_id: int, preset_id: str) -> Pet | None:
+        """取该用户由某预设实例化的桌宠；优先主桌宠，否则最早创建的一只。
+        用于「从预设激活」时复用已拥有的实例，避免每次都新建导致重复堆积。"""
+        return self._db.scalar(
+            select(Pet)
+            .where(Pet.user_id == user_id, Pet.preset_id == preset_id)
+            .order_by(Pet.is_active.desc(), Pet.id.asc())  # noqa: E712
+        )
+
     def list_for_user(self, user_id: int) -> Sequence[Pet]:
         """按 id 倒序（最新创建的在前）。"""
         stmt = select(Pet).where(Pet.user_id == user_id).order_by(Pet.id.desc())

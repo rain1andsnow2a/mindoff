@@ -7,10 +7,12 @@
 前端应整体替换展示，不要再追加拼接。
 """
 from fastapi import APIRouter, File, Form, UploadFile, WebSocket
+from pydantic import BaseModel
 
 from app.config import get_settings
 from app.stepfun.asr import transcribe_once
 from app.stepfun.constants import WS_ASR_STREAM
+from app.stepfun.tts import TtsError, synthesize_and_store
 from app.stepfun.ws_relay import relay
 
 router = APIRouter(prefix="/ai", tags=["stt"])
@@ -31,6 +33,24 @@ async def stt(
     if type == "pcm":
         fmt.update({"codec": "pcm_s16le", "rate": rate, "bits": bits, "channel": channel})
     return await transcribe_once(audio, fmt, language=language)
+
+
+class TtsBody(BaseModel):
+    text: str
+    voice: str | None = None  # 缺省用 config 的「元气少女」音色
+
+
+@router.post("/tts")
+async def tts(body: TtsBody):
+    """桌宠语音回复：文本 -> 阶跃 TTS -> 转存本地，返回 {url}。
+
+    失败返回 {url: null}，前端静默降级（仍保留字幕）。
+    """
+    try:
+        url = await synthesize_and_store(body.text, voice=body.voice)
+        return {"url": url}
+    except TtsError:
+        return {"url": None}
 
 
 @router.websocket("/stt/stream")

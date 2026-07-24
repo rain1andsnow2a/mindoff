@@ -19,6 +19,7 @@ import {
 import type { EventSubscription } from "expo-modules-core";
 
 import { createConversation, getActivePet, streamChatReply, wsUrl } from "./api";
+import { speakReply, stopSpeaking } from "./speak";
 
 export type CallStatus =
   | "idle"
@@ -62,13 +63,15 @@ const SESSION_UPDATE = {
           language: "zh",
           enable_itn: true,
         },
-        turn_detection: { type: "server_vad", silence_duration_ms: 800, threshold: 0.5 },
+        // server_vad：threshold 越高越不灵敏（需更清晰人声才触发，抗风声/背景噪音）；
+        // silence_duration_ms 为判定「说完了」所需的静音时长，略放长避免噪音频繁误触发断句。
+        turn_detection: { type: "server_vad", silence_duration_ms: 1000, threshold: 0.72 },
       },
     },
   },
 };
 
-export function useRealtimeCall(): RealtimeCall {
+export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const [status, setStatus] = useState<CallStatus>("idle");
   const [liveUser, setLiveUser] = useState("");
   const [turns, setTurns] = useState<CallTurn[]>([]);
@@ -80,6 +83,9 @@ export function useRealtimeCall(): RealtimeCall {
   const convIdRef = useRef<number | null>(null);
   const closedRef = useRef(false);
   const turnIdRef = useRef(0);
+  // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
+  const voiceReplyRef = useRef(voiceReply);
+  voiceReplyRef.current = voiceReply;
 
   const addTurn = useCallback((role: "user" | "pet", text: string): number => {
     const id = ++turnIdRef.current;
@@ -98,6 +104,7 @@ export function useRealtimeCall(): RealtimeCall {
     } catch {
       /* ignore */
     }
+    stopSpeaking();
     setLevel(0);
   }, []);
 
@@ -117,7 +124,9 @@ export function useRealtimeCall(): RealtimeCall {
       addTurn("user", clean);
       const petId = addTurn("pet", "");
       setStatus("thinking");
+      let full = "";
       streamChatReply(convId, clean, (delta) => {
+        full += delta;
         setTurns((prev) =>
           prev.map((t) => (t.id === petId ? { ...t, text: t.text + delta } : t))
         );
@@ -132,7 +141,10 @@ export function useRealtimeCall(): RealtimeCall {
           );
         })
         .finally(() => {
-          if (!closedRef.current) setStatus("listening");
+          if (!closedRef.current) {
+            setStatus("listening");
+            if (voiceReplyRef.current) speakReply(full);
+          }
         });
     },
     [addTurn]

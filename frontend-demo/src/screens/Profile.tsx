@@ -2,8 +2,8 @@
  * 我的模块（移植自 proto: ProfileScreen / PetChange / PetHandoff）。
  * 设置接 /api/v1/preferences；记忆管理接 /api/v1/memories 与 /api/v1/memory-review。
  */
-import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Archive, Bell, ChevronRight, Clock, Layers, Moon, Shield, Trash2, Type,
 } from "lucide-react-native";
@@ -22,6 +22,90 @@ export type Preferences = {
   reduce_transparency: boolean;
 };
 
+// ─── 睡前提醒 · 双列滚轮时间选择器（零依赖：自制 ScrollView + snap）─────────────
+const WHEEL_ITEM_H = 44;
+const WHEEL_VISIBLE = 5;
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")); // 5 分钟步进
+
+function WheelColumn({ data, index, onChange, night }: {
+  data: string[]; index: number; onChange: (i: number) => void; night: boolean;
+}) {
+  const ref = useRef<ScrollView>(null);
+  const [active, setActive] = useState(index);
+  useEffect(() => {
+    // 初次挂载滚到选中行（延迟等布局完成）
+    const t = setTimeout(() => ref.current?.scrollTo({ y: index * WHEEL_ITEM_H, animated: false }), 10);
+    return () => clearTimeout(t);
+  }, []);
+  const pick = (y: number) => Math.max(0, Math.min(data.length - 1, Math.round(y / WHEEL_ITEM_H)));
+  return (
+    <View style={{ height: WHEEL_ITEM_H * WHEEL_VISIBLE, width: 78 }}>
+      <ScrollView
+        ref={ref} showsVerticalScrollIndicator={false}
+        snapToInterval={WHEEL_ITEM_H} decelerationRate="fast" scrollEventThrottle={16}
+        onScroll={(e) => setActive(pick(e.nativeEvent.contentOffset.y))}
+        onScrollEndDrag={(e) => onChange(pick(e.nativeEvent.contentOffset.y))}
+        onMomentumScrollEnd={(e) => { const i = pick(e.nativeEvent.contentOffset.y); setActive(i); onChange(i); }}
+        contentContainerStyle={{ paddingVertical: WHEEL_ITEM_H * 2 }}>
+        {data.map((v, i) => (
+          <View key={i} style={{ height: WHEEL_ITEM_H, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{
+              fontSize: 26, fontVariant: ["tabular-nums"],
+              color: i === active ? (night ? "#F4EFEA" : "#4B463F") : (night ? "#7F767D" : "#C0B5A8"),
+              fontWeight: i === active ? "600" : "400",
+            }}>{v}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
+  visible: boolean; initial: string; night: boolean; onCancel: () => void; onConfirm: (t: string) => void;
+}) {
+  const [h, setH] = useState(22);
+  const [m, setM] = useState(0);
+  useEffect(() => {
+    if (!visible) return;
+    const [hh, mm] = (initial || "22:00").split(":").map((x) => parseInt(x, 10));
+    setH(Number.isFinite(hh) ? Math.max(0, Math.min(23, hh)) : 22);
+    setM(Number.isFinite(mm) ? (Math.round((mm % 60) / 5) % 12) : 0);
+  }, [visible]);
+  const bg = night ? "#2E2A34" : "#FFFBF3";
+  const txt = night ? "#F4EFEA" : "#4B463F";
+  const sub = night ? "#A399A0" : "#C0B5A8";
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable style={{ flex: 1, backgroundColor: "rgba(30,22,12,0.35)" }} onPress={onCancel} />
+      <View style={{ backgroundColor: bg, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 34 }}>
+        <View style={{ width: 38, height: 4, borderRadius: 999, backgroundColor: "rgba(150,140,130,0.3)", alignSelf: "center", marginBottom: 14 }} />
+        <Text style={{ fontSize: 16, fontWeight: "600", textAlign: "center", color: txt }}>睡前提醒</Text>
+        <Text style={{ fontSize: 12, textAlign: "center", color: sub, marginTop: 3, marginBottom: 14 }}>到点了我会轻声提醒你，该歇一歇了</Text>
+        <View style={{ height: WHEEL_ITEM_H * WHEEL_VISIBLE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <View pointerEvents="none" style={{
+            position: "absolute", left: 24, right: 24, height: WHEEL_ITEM_H, top: (WHEEL_ITEM_H * (WHEEL_VISIBLE - 1)) / 2,
+            borderRadius: 14, backgroundColor: "rgba(246,231,168,0.5)", borderWidth: 1, borderColor: "rgba(196,149,58,0.25)",
+          }} />
+          <WheelColumn data={HOURS} index={h} onChange={setH} night={night} />
+          <Text style={{ fontSize: 26, fontWeight: "600", color: txt }}>:</Text>
+          <WheelColumn data={MINS} index={m} onChange={setM} night={night} />
+        </View>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
+          <Pressable onPress={onCancel} style={{ flex: 1, paddingVertical: 13, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(140,125,114,0.12)" }}>
+            <Text style={{ fontSize: 14, color: sub }}>取消</Text>
+          </Pressable>
+          <Pressable onPress={() => onConfirm(`${HOURS[h]}:${MINS[m]}`)}
+            style={{ flex: 1, paddingVertical: 13, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.85)" }}>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: "#4D4249" }}>保存 {HOURS[h]}:{MINS[m]}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function ProfileScreen({
   onChangePet, night, onNightToggle, petName, petEmoji, petSummary,
   onMemory, onMemoryReview, preferences, onSetPreference,
@@ -33,17 +117,12 @@ export function ProfileScreen({
   onSetPreference: (patch: Partial<Preferences>) => void;
 }) {
   const C = palette(night);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const cycleFrequency = () => {
     const order = ["安静", "温和", "活跃"];
     const idx = order.indexOf(preferences.proactive_frequency);
     onSetPreference({ proactive_frequency: order[(idx + 1) % order.length] });
-  };
-
-  const cycleSleepTime = () => {
-    const times = ["21:30", "22:00", "22:30", "23:00", "23:30"];
-    const idx = times.indexOf(preferences.sleep_reminder_time);
-    onSetPreference({ sleep_reminder_time: times[(idx + 1) % times.length] });
   };
 
   const cycleFontSize = () => {
@@ -55,7 +134,7 @@ export function ProfileScreen({
   const sections = [
     { title: "陪伴设置", rows: [
       { icon: <Bell size={16} color={C.text2} />, label: "主动陪伴频率", val: preferences.proactive_frequency, act: cycleFrequency },
-      { icon: <Clock size={16} color={C.text2} />, label: "睡前提醒", val: preferences.sleep_reminder_time, act: cycleSleepTime },
+      { icon: <Clock size={16} color={C.text2} />, label: "睡前提醒", val: preferences.sleep_reminder_time, act: () => setShowTimePicker(true) },
     ]},
     { title: "记忆与隐私", rows: [
       { icon: <Archive size={16} color={C.text2} />, label: "记忆管理", val: "", act: onMemory },
@@ -118,15 +197,23 @@ export function ProfileScreen({
           </View>
         ))}
       </ScrollView>
+
+      <TimePickerSheet
+        visible={showTimePicker}
+        initial={preferences.sleep_reminder_time}
+        night={night}
+        onCancel={() => setShowTimePicker(false)}
+        onConfirm={(t) => { onSetPreference({ sleep_reminder_time: t }); setShowTimePicker(false); }}
+      />
     </View>
   );
 }
 
 export function PetChange({ pets, activePetId, onBack, onHandoff }: {
-  pets: { id: number; name: string; emoji: string; summary?: string }[];
-  activePetId: number | null;
+  pets: { id: number | string; name: string; emoji: string; summary?: string }[];
+  activePetId: number | string | null;
   onBack: () => void;
-  onHandoff: (petId: number) => void;
+  onHandoff: (petId: number | string) => void;
 }) {
   const night = useNight();
   const C = palette(night);

@@ -135,6 +135,45 @@ def generate_manual(
     return _generate(manual_desc(title=title, people=people, place=place, plot=plot, intent=intent))
 
 
+_IMG_PROMPT_SYSTEM = """你是 galgame 美术指导。根据一段场景种子，输出两段中文文生图 prompt。规则：
+- 背景（bg）：描述场景/环境/氛围/时间/光线，galgame 视觉小说风格插画，柔和唯美，无人物、无文字水印。
+- 立绘（sprite）：单个主要人物半身立绘，纯色背景，动漫赛璐璐风格，表情柔和，无文字。
+- 每段 prompt 不超过 200 字；只输出 JSON：
+  {"bg": "背景 prompt", "character_name": "人物名", "sprite": "立绘 prompt"}"""
+
+
+def generate_image_prompts(
+    *, title: str | None = None, people: str | None = None,
+    place: str | None = None, plot: str | None = None, intent: str | None = None,
+    setting: str | None = None,
+) -> dict:
+    """从场景种子生成 galgame 背景 + 立绘的文生图 prompt。
+
+    返回 {"bg": str, "character_name": str, "sprite": str}；LLM 失败退模板兜底。
+    """
+    desc = manual_desc(title=title, people=people, place=place, plot=plot, intent=intent)
+    if setting:
+        desc = f"{desc}\n开场氛围：{setting}"
+    first_person = (people.split("、")[0] if people else "").strip() or "角色"
+    try:
+        model = get_chat_model(temperature=0.7)
+        resp = model.invoke([SystemMessage(content=_IMG_PROMPT_SYSTEM), HumanMessage(content=desc)])
+        data = _parse_json(resp.content)
+        bg = str(data.get("bg") or "").strip()
+        sprite = str(data.get("sprite") or "").strip()
+        name = str(data.get("character_name") or "").strip() or first_person
+        if bg and sprite:
+            return {"bg": bg[:480], "character_name": name[:20], "sprite": sprite[:480]}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[theater] image prompts fallback: %s", e)
+    place_txt = place or setting or "一个安静的地方"
+    return {
+        "bg": f"galgame 视觉小说风格插画，{place_txt}，柔和唯美的光线与氛围，无人物、无文字",
+        "character_name": first_person[:20],
+        "sprite": f"动漫赛璐璐风格，{first_person}的半身立绘，表情柔和，纯色背景，无文字水印",
+    }
+
+
 def advance(scene: dict, chosen_label: str) -> dict:
     """按所选回应推进剧情。scene = {setting, beats, history, turn}。返回 {beats, choices, ended}。"""
     turn = int(scene.get("turn") or 0) + 1

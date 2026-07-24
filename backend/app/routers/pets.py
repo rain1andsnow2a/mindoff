@@ -132,7 +132,9 @@ def activate_pet(
         preset = get_preset(body.pet_id)
         if preset is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "预设不存在")
-        pet = store.create_from_preset(user_id=user.id, preset=preset)
+        # 复用该用户已由此预设实例化的桌宠，没有才新建（避免重复堆积同名桌宠）
+        pet = store.get_by_preset(user.id, preset["id"]) \
+            or store.create_from_preset(user_id=user.id, preset=preset)
 
     from_pet = store.get_active(user.id)
 

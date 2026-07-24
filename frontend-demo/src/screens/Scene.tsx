@@ -6,18 +6,19 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Easing, Pressable, ScrollView, Text, TextInput, View,
+  Animated, Dimensions, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronLeft, Mic, Play } from "lucide-react-native";
+import { ChevronLeft, Mic, Play, Send, Edit3 } from "lucide-react-native";
 import { CreamRipple, PrimaryBtn, SafeHeader } from "../components";
 import { GOLD_DEEP, palette, useNight } from "../theme";
 import { Scene3D } from "./Scene3D";
 import {
   listSceneTemplates, listScenes, streamCreateScene,
   listCandidates, dismissCandidate, streamConfirmCandidate,
-  getScene, streamSceneChoice, calibrateScene, settleScene,
+  getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, absUrl,
 } from "../api";
+import type { SSEEvent } from "../api";
 import type { TheaterSceneId } from "../theater";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -61,14 +62,23 @@ type SceneSubState = "browsing" | "capturing" | "reviewing" | "setup";
 
 // ─── Scene Portal ────────────────────────────────────────────────────────────
 
-function ScenePortal({ scene, isActive, onEnter }: {
-  scene: BuiltInScene; isActive: boolean; onEnter: () => void;
+const CAROUSEL_CARD_W = 310;
+const CAROUSEL_GAP = 16;
+const CAROUSEL_SNAP = CAROUSEL_CARD_W + CAROUSEL_GAP;   // 每次吸附一张的间距
+const CAROUSEL_SIDE = Math.max(16, (Dimensions.get("window").width - CAROUSEL_CARD_W) / 2); // 两端留白，让首尾卡片也能居中
+
+function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
+  scene: BuiltInScene; index: number; scrollX: Animated.Value; isActive: boolean; onEnter: () => void;
 }) {
+  // 跟手连续缩放/淡入：当前卡片 1.0，相邻卡片缩到 0.9 且变淡，随滑动平滑过渡。
+  const inputRange = [(index - 1) * CAROUSEL_SNAP, index * CAROUSEL_SNAP, (index + 1) * CAROUSEL_SNAP];
+  const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: "clamp" });
+  const opacity = scrollX.interpolate({ inputRange, outputRange: [0.55, 1, 0.55], extrapolate: "clamp" });
   return (
+    <Animated.View style={{ transform: [{ scale }], opacity }}>
     <Pressable onPress={isActive ? onEnter : undefined}
       style={{
-        width: 310, height: 390, borderRadius: 30, overflow: "hidden",
-        opacity: isActive ? 1 : 0.72, transform: [{ scale: isActive ? 1 : 0.93 }],
+        width: CAROUSEL_CARD_W, height: 390, borderRadius: 30, overflow: "hidden",
       }}>
       <LinearGradient colors={scene.colors} style={{ flex: 1 }}>
         {/* 环境光斑近似 */}
@@ -108,6 +118,7 @@ function ScenePortal({ scene, isActive, onEnter }: {
         </LinearGradient>
       </LinearGradient>
     </Pressable>
+    </Animated.View>
   );
 }
 
@@ -457,6 +468,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   const night = useNight();
   const C = palette(night);
   const [activeIdx, setActiveIdx] = useState(0);
+  const scrollX = useRef(new Animated.Value(0)).current;
   const [subState, setSubState] = useState<SceneSubState>("browsing");
   const [selectedScene, setSelectedScene] = useState<BuiltInScene | null>(null);
   const [templates, setTemplates] = useState<BuiltInScene[]>(BUILT_IN_SCENES);
@@ -564,6 +576,12 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
   return (
     <View style={{ flex: 1 }}>
+      {/* 整屏一个纵向滚动：标题 + 轮播 + 列表一起滚，轮播不再固定遮挡下方内容 */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
         <Text style={{ fontSize: 26, fontWeight: "500", letterSpacing: -0.5, color: C.text }}>片场</Text>
         <Text style={{ fontSize: 13, marginTop: 4, color: C.muted }}>进入一个场景，试着说出不同的话。</Text>
@@ -571,20 +589,27 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
       {/* Carousel */}
       <View style={{ height: 420 }}>
-        <ScrollView
+        <Animated.ScrollView
           horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 16, paddingHorizontal: 24, alignItems: "center" }}
-          onScroll={e => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / 326);
-            setActiveIdx(Math.max(0, Math.min(idx, templates.length - 1)));
-          }}
+          snapToInterval={CAROUSEL_SNAP} snapToAlignment="start" decelerationRate="fast" disableIntervalMomentum
+          contentContainerStyle={{ gap: CAROUSEL_GAP, paddingHorizontal: CAROUSEL_SIDE, alignItems: "center" }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            {
+              useNativeDriver: true,
+              listener: (e: any) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_SNAP);
+                setActiveIdx(Math.max(0, Math.min(idx, templates.length - 1)));
+              },
+            }
+          )}
           scrollEventThrottle={16}
         >
           {templates.map((scene, i) => (
-            <ScenePortal key={scene.id} scene={scene} isActive={activeIdx === i}
+            <ScenePortal key={scene.id} scene={scene} index={i} scrollX={scrollX} isActive={activeIdx === i}
               onEnter={() => { setSelectedScene(scene); setSubState("setup"); }} />
           ))}
-        </ScrollView>
+        </Animated.ScrollView>
         <View style={{ position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
           {templates.map((_, i) => (
             <View key={i} style={{
@@ -595,7 +620,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+      <View style={{ paddingHorizontal: 20 }}>
         {/* 我的场景（后端） */}
         {myScenes.length > 0 && (
           <View style={{ marginBottom: 8 }}>
@@ -656,6 +681,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         )}
         <View style={{ height: 1, marginVertical: 24, backgroundColor: "rgba(91,79,62,0.08)" }} />
         <CreateSceneEntry onStart={() => setSubState("capturing")} />
+      </View>
       </ScrollView>
     </View>
   );
@@ -663,8 +689,8 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
 // ─── Character Artwork ───────────────────────────────────────────────────────
 
-function CharacterArtwork({ name, isSpeaking, isListening }: {
-  name: string; isSpeaking: boolean; isListening: boolean;
+function CharacterArtwork({ name, isSpeaking, isListening, spriteUrl }: {
+  name: string; isSpeaking: boolean; isListening: boolean; spriteUrl: string;
 }) {
   const bounce = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -680,25 +706,21 @@ function CharacterArtwork({ name, isSpeaking, isListening }: {
     }
   }, [isSpeaking, bounce]);
 
+  // 动态 galgame 立绘：图片人物（保留呼吸浮动 + 说话声波动效）
   return (
     <Animated.View style={{ alignItems: "center", transform: [{ translateY: bounce }] }}>
       {isListening && (
         <View style={{
-          position: "absolute", width: 190, height: 190, borderRadius: 95,
-          backgroundColor: "rgba(246,231,168,0.20)",
+          position: "absolute", top: 20, width: 260, height: 260, borderRadius: 130,
+          backgroundColor: "rgba(246,231,168,0.18)",
         }} />
       )}
-      <View style={{
-        width: 150, height: 150, borderRadius: 75, alignItems: "center", justifyContent: "center",
-        backgroundColor: "rgba(255,252,245,0.55)", borderWidth: 2, borderColor: "rgba(255,255,255,0.6)",
-      }}>
-        <Text style={{ fontSize: 40, fontWeight: "500", color: "#8C6D3A" }}>{name.slice(0, 1)}</Text>
-        <Text style={{ fontSize: 13, marginTop: 4, color: "#84726A" }}>{name}</Text>
-      </View>
+      <Image source={{ uri: spriteUrl }} resizeMode="contain"
+        style={{ width: 300, height: 380 }} />
       {isSpeaking && (
-        <View style={{ flexDirection: "row", gap: 3, marginTop: 14, alignItems: "flex-end", height: 14 }}>
+        <View style={{ flexDirection: "row", gap: 3, marginTop: 6, alignItems: "flex-end", height: 14 }}>
           {[1, 2, 3].map(j => (
-            <View key={j} style={{ width: 3, height: 4 + j * 3, backgroundColor: "rgba(196,149,58,0.6)", borderRadius: 1.5 }} />
+            <View key={j} style={{ width: 3, height: 4 + j * 3, backgroundColor: "rgba(255,255,255,0.75)", borderRadius: 1.5 }} />
           ))}
         </View>
       )}
@@ -710,10 +732,15 @@ function CharacterArtwork({ name, isSpeaking, isListening }: {
 
 interface SceneBeat { speaker: string; text: string; }
 interface SceneChoice { id: string; label: string; }
+interface SceneCharacter { name: string; sprite_url: string | null; }
 interface SceneDetail {
   id: number; title: string; status: string; setting: string;
   beats: SceneBeat[] | null; choices: SceneChoice[] | null;
   history: any[] | null; turn: number;
+  render_kind?: string | null;
+  theater_id?: string | null;
+  bg_image?: string | null;
+  characters?: SceneCharacter[] | null;
 }
 
 export function ScenePlay({ sceneId, theater, onEnd }: {
@@ -728,6 +755,8 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const [streamText, setStreamText] = useState("");
   const [adjustInput, setAdjustInput] = useState("");
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showCustom, setShowCustom] = useState(false);   // 「自己说」输入行是否展开
+  const [customText, setCustomText] = useState("");
 
   const loadScene = async () => {
     if (!sceneId) return;
@@ -744,30 +773,53 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   const speakers = new Set((scene?.beats ?? []).map(b => b.speaker).filter(s => s && s !== "旁白"));
   const charName = speakers.size > 0 ? Array.from(speakers)[0] : (scene?.title ?? "TA");
+  const isDynamic = scene?.render_kind === "dynamic_image";
+  const bgImageUrl = isDynamic ? absUrl(scene?.bg_image) : null;
+  const spriteUrl = isDynamic ? absUrl(scene?.characters?.[0]?.sprite_url) : null;
+  const spriteCharName = scene?.characters?.[0]?.name;
+  // theater 优先用后端下发的 theater_id，其次 props，最后兜底 dining
+  const effectiveTheater = ((scene?.theater_id as TheaterSceneId | undefined) ?? theater ?? "dining");
   const sceneName = scene?.title ?? "片场";
   const latestBeat = scene?.beats?.[scene.beats.length - 1];
   const isStreaming = phase === "busy" && streamText.length > 0;
   const isSpeaking = isStreaming || (phase === "playing" && latestBeat?.speaker === "旁白");
 
+  // 推进剧情的公共 SSE 回调：逐字收 token，done 时刷新场景 / 结束。
+  const advanceCb = (e: SSEEvent) => {
+    if (e.event === "token" && e.data?.delta) setStreamText(t => t + e.data.delta);
+    if (e.event === "done") {
+      setTimeout(() => {
+        loadScene().then(() => {
+          setStreamText("");
+          if (e.data?.ended) {
+            onEnd();
+          } else {
+            setPhase("playing");
+          }
+        });
+      }, e.data?.ended ? 1400 : 100);
+    }
+  };
+
   const handleChoice = (choice: SceneChoice) => {
     if (!sceneId || phase === "busy") return;
     setPhase("busy");
     setStreamText("");
-    streamSceneChoice(sceneId, choice.id, (e) => {
-      if (e.event === "token" && e.data?.delta) setStreamText(t => t + e.data.delta);
-      if (e.event === "done") {
-        setTimeout(() => {
-          loadScene().then(() => {
-            setStreamText("");
-            if (e.data?.ended) {
-              onEnd();
-            } else {
-              setPhase("playing");
-            }
-          });
-        }, e.data?.ended ? 1400 : 100);
-      }
-    }).catch((err) => {
+    streamSceneChoice(sceneId, choice.id, advanceCb).catch((err) => {
+      setPhase("playing");
+      setError((err as any)?.message ?? "推进失败，请重试");
+    });
+  };
+
+  // 「自己说」：提交用户自由输入，作为一次回应推进剧情。
+  const handleCustom = () => {
+    const text = customText.trim();
+    if (!sceneId || phase === "busy" || !text) return;
+    setShowCustom(false);
+    setCustomText("");
+    setPhase("busy");
+    setStreamText("");
+    streamSceneCustom(sceneId, text, advanceCb).catch((err) => {
       setPhase("playing");
       setError((err as any)?.message ?? "推进失败，请重试");
     });
@@ -796,8 +848,20 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* 场景背景：theater 低多边形 3D 舞台（随内置场景切换） */}
-      <Scene3D sceneId={theater ?? "dining"} />
+      {/* 场景背景：动态 galgame 用背景图 / 无图兜底渐变，否则预置 3D 舞台 */}
+      {isDynamic && bgImageUrl ? (
+        <>
+          <Image source={{ uri: bgImageUrl }} resizeMode="cover"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          {/* 暗化遮罩：保证字幕/按钮文字可读 */}
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(20,14,10,0.28)" }} />
+        </>
+      ) : isDynamic ? (
+        <LinearGradient colors={["#2A1E14", "#3A2A1C", "#4A3626"]}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+      ) : (
+        <Scene3D sceneId={effectiveTheater} />
+      )}
 
       {/* Top bar */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, zIndex: 10 }}>
@@ -823,78 +887,115 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
         </Pressable>
       </View>
 
-      {/* Character（box-none：空白区手势穿透到底层 Scene3D，可拖动转视角；角色/按钮本身仍可点） */}
-      <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: 10 }}>
-        <CharacterArtwork name={charName} isSpeaking={isSpeaking} isListening={false} />
+      {/* Character（box-none：空白区手势穿透到底层 Scene3D，可拖动转视角；角色/按钮本身仍可点）
+          始终占中间 flex:1 把底部字幕推到屏幕下方；仅动态 galgame 有立绘时才画人物，
+          预置 3D 舞台交给场景本身表现（空容器手势穿透到 Scene3D）。 */}
+      <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: spriteUrl ? 10 : 1 }}>
+        {spriteUrl && (
+          <CharacterArtwork name={spriteCharName || charName} isSpeaking={isSpeaking} isListening={false} spriteUrl={spriteUrl} />
+        )}
       </View>
 
-      {/* 字幕 + 控制面板 */}
-      <View style={{
-        marginHorizontal: 12, marginBottom: 16, borderRadius: 28, overflow: "hidden", zIndex: 10,
-        backgroundColor: "rgba(255,252,245,0.88)", borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
-      }}>
-        {phase === "intro" && (
-          <View style={{ padding: 20 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <Text style={{ fontSize: 14 }}>🌿</Text>
-              <Text style={{ fontSize: 12, color: "#A39A9F" }}>小栖</Text>
-            </View>
-            <Text style={{ fontSize: 14, lineHeight: 22, marginBottom: 16, color: "#484145" }}>
-              场景准备好了。你可以随时离开，这里没有对错。
+      {/* playing / busy：电影字幕层（半透明渐变，尽量露出背后的 3D 舞台） */}
+      {(phase === "playing" || phase === "busy") && (
+        <LinearGradient
+          colors={["transparent", "rgba(20,14,10,0.5)", "rgba(20,14,10,0.9)"]}
+          style={{ paddingTop: 72, paddingHorizontal: 16, paddingBottom: 14, zIndex: 10 }}>
+          {/* 旁白 / 对白：限高，可下拉滚动看全文 */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: "500", color: "#E8C877" }}>
+              {isStreaming ? "旁白" : (latestBeat?.speaker || charName)}
             </Text>
-            <Pressable onPress={() => setPhase("playing")}
-              style={{ paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.82)" }}>
-              <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>好的，开始</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {(phase === "playing" || phase === "busy") && (
-          <View>
-            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, minHeight: 90 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <Text style={{ fontSize: 12, fontWeight: "500", color: GOLD_DEEP }}>
-                  {isStreaming ? "旁白" : (latestBeat?.speaker || charName)}
-                </Text>
-                {isSpeaking && (
-                  <View style={{ flexDirection: "row", gap: 2, alignItems: "flex-end", height: 12 }}>
-                    {[1, 2, 3].map(j => (
-                      <View key={j} style={{ width: 2, height: 4 + j * 3, backgroundColor: "rgba(196,149,58,0.6)", borderRadius: 1 }} />
-                    ))}
-                  </View>
-                )}
-              </View>
-              <Text style={{ fontSize: 15, lineHeight: 23, color: "#484145" }}>
-                {isStreaming ? streamText : (latestBeat?.text ?? "……")}
-              </Text>
-            </View>
-
-            {phase === "playing" && (
-              <View style={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}>
-                <Text style={{ fontSize: 12, color: "#A39A9F", marginBottom: 2 }}>你想怎么回应？</Text>
-                {(scene?.choices ?? []).map(choice => (
-                  <Pressable key={choice.id} onPress={() => handleChoice(choice)}
-                    style={({ pressed }) => ({
-                      paddingVertical: 12, paddingHorizontal: 16, borderRadius: 999,
-                      backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
-                      opacity: pressed ? 0.85 : 1,
-                    })}>
-                    <Text style={{ fontSize: 13, color: "#4D4249" }}>{choice.label}</Text>
-                  </Pressable>
+            {isSpeaking && (
+              <View style={{ flexDirection: "row", gap: 2, alignItems: "flex-end", height: 12 }}>
+                {[1, 2, 3].map(j => (
+                  <View key={j} style={{ width: 2, height: 4 + j * 3, backgroundColor: "rgba(232,200,119,0.7)", borderRadius: 1 }} />
                 ))}
-                <Pressable onPress={onEnd} style={{ paddingVertical: 8, alignItems: "center" }}>
-                  <Text style={{ fontSize: 12, color: "#A39A9F" }}>离开场景</Text>
-                </Pressable>
-              </View>
-            )}
-
-            {phase === "busy" && (
-              <View style={{ paddingHorizontal: 20, paddingBottom: 16, alignItems: "center" }}>
-                <Text style={{ fontSize: 12, color: "#A39A9F" }}>正在继续…</Text>
               </View>
             )}
           </View>
-        )}
+          <ScrollView style={{ maxHeight: 148 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+            <Text style={{ fontSize: 15, lineHeight: 24, color: "rgba(255,255,255,0.95)" }}>
+              {isStreaming ? streamText : (latestBeat?.text ?? "……")}
+            </Text>
+          </ScrollView>
+
+          {phase === "playing" && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {(scene?.choices ?? []).map(choice => (
+                <Pressable key={choice.id} onPress={() => handleChoice(choice)}
+                  style={({ pressed }) => ({
+                    paddingVertical: 11, paddingHorizontal: 15, borderRadius: 16,
+                    backgroundColor: "rgba(255,252,245,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)",
+                    opacity: pressed ? 0.7 : 1,
+                  })}>
+                  <Text style={{ fontSize: 13, lineHeight: 19, color: "#FFFFFF" }}>{choice.label}</Text>
+                </Pressable>
+              ))}
+              {/* 第三项：自己说（点开展开输入行） */}
+              {!showCustom ? (
+                <Pressable onPress={() => setShowCustom(true)}
+                  style={{
+                    flexDirection: "row", alignItems: "center", gap: 7,
+                    paddingVertical: 11, paddingHorizontal: 15, borderRadius: 16,
+                    borderWidth: 1, borderColor: "rgba(255,255,255,0.3)", borderStyle: "dashed",
+                    backgroundColor: "rgba(255,252,245,0.06)",
+                  }}>
+                  <Edit3 size={13} color="rgba(255,255,255,0.72)" />
+                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.72)" }}>自己说……</Text>
+                </Pressable>
+              ) : (
+                <View style={{
+                  flexDirection: "row", alignItems: "center", gap: 8,
+                  paddingLeft: 15, paddingRight: 6, paddingVertical: 6, borderRadius: 24,
+                  backgroundColor: "rgba(255,252,245,0.95)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+                }}>
+                  <TextInput
+                    value={customText} onChangeText={setCustomText} autoFocus
+                    placeholder="说点你自己想说的…" placeholderTextColor="#A39A9F"
+                    onSubmitEditing={handleCustom} returnKeyType="send"
+                    style={{ flex: 1, fontSize: 14, color: "#484145", paddingVertical: 6 }} />
+                  <Pressable onPress={handleCustom}
+                    style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: GOLD_DEEP }}>
+                    <Send size={15} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              )}
+              <Pressable onPress={onEnd} style={{ paddingVertical: 6, alignItems: "center" }}>
+                <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>离开场景</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {phase === "busy" && (
+            <View style={{ paddingTop: 12, alignItems: "center" }}>
+              <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>正在继续…</Text>
+            </View>
+          )}
+        </LinearGradient>
+      )}
+
+      {/* intro / paused：控制白面板（设置类界面，保留可读性好的实底） */}
+      {(phase === "intro" || phase === "paused") && (
+        <View style={{
+          marginHorizontal: 12, marginBottom: 16, borderRadius: 28, overflow: "hidden", zIndex: 10,
+          backgroundColor: "rgba(255,252,245,0.88)", borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
+        }}>
+          {phase === "intro" && (
+            <View style={{ padding: 20 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Text style={{ fontSize: 14 }}>🌿</Text>
+                <Text style={{ fontSize: 12, color: "#A39A9F" }}>小栖</Text>
+              </View>
+              <Text style={{ fontSize: 14, lineHeight: 22, marginBottom: 16, color: "#484145" }}>
+                场景准备好了。你可以随时离开，这里没有对错。
+              </Text>
+              <Pressable onPress={() => setPhase("playing")}
+                style={{ paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.82)" }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>好的，开始</Text>
+              </Pressable>
+            </View>
+          )}
 
         {phase === "paused" && (
           <View style={{ padding: 20 }}>
@@ -945,6 +1046,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
           </View>
         )}
       </View>
+      )}
     </View>
   );
 }
