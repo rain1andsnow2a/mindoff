@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { Film, Mail, MessageCircle, User } from "lucide-react-native";
 
 import { useTheme } from "../theme";
@@ -34,6 +40,27 @@ function NavigationItem({
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
+  const selectedBackground = theme.isNight
+    ? "rgba(232, 211, 139, 0.20)"
+    : "rgba(246, 225, 143, 0.48)";
+  const selectedForeground = theme.isNight ? "#E8D38B" : "#6E5A28";
+  const selectedBorder = theme.isNight
+    ? "rgba(232, 211, 139, 0.24)"
+    : "rgba(224, 193, 84, 0.30)";
+  const selectedGlow: ViewStyle = Platform.select({
+    web: {
+      boxShadow: theme.isNight
+        ? "0 0 18px rgba(232, 211, 139, 0.14)"
+        : "0 0 18px rgba(232, 199, 88, 0.22)",
+    },
+    default: {
+      shadowColor: "#E8C758",
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: theme.isNight ? 0.12 : 0.18,
+      shadowRadius: 10,
+      elevation: 1,
+    },
+  }) as ViewStyle;
 
   return (
     <Pressable
@@ -54,24 +81,27 @@ function NavigationItem({
         alignItems: "center",
         justifyContent: "center",
         gap: spacing[1],
+        borderWidth: 1,
+        borderColor: active ? selectedBorder : "transparent",
         backgroundColor: active
-          ? theme.colors.accentSoft
+          ? selectedBackground
           : hovered
             ? theme.colors.surfaceHover
             : "transparent",
         opacity: pressed ? 0.82 : 1,
         transform: [{ scale: pressed ? 0.97 : 1 }],
+        ...(active ? selectedGlow : null),
       })}
     >
       <Icon
         size={iconSizes.default}
-        color={active ? theme.colors.accent : theme.colors.textMuted}
+        color={active ? selectedForeground : theme.colors.textMuted}
         strokeWidth={active ? 2.2 : 1.8}
       />
       <Text
         style={[
           theme.typography.textStyles.label,
-          { color: active ? theme.colors.textPrimary : theme.colors.textMuted },
+          { color: active ? selectedForeground : theme.colors.textMuted },
         ]}
       >
         {label}
