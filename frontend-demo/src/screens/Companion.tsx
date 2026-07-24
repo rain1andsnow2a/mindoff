@@ -15,12 +15,13 @@ import {
   createConversation, getActivePet, getCompanionHome, streamChatReply,
 } from "../api";
 import { useVoiceInput } from "../useVoiceInput";
+import { HomePetArtwork } from "../components/HomePetArtwork";
 
 // ─── Idle ────────────────────────────────────────────────────────────────────
 
-export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, onNightToggle, night, petName, petEmoji }: {
+export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, onNightToggle, night, petName, petEmoji, petPresetId }: {
   onChat: () => void; onVoiceChat: (text: string) => void; onVoiceCall: () => void; onModeSheet: () => void; onNightToggle: () => void;
-  night: boolean; petName: string; petEmoji: string;
+  night: boolean; petName: string; petEmoji: string; petPresetId: string | null;
 }) {
   const C = palette(night);
   const [bubbleVisible, setBubbleVisible] = useState(true);
@@ -81,7 +82,7 @@ export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, o
             <Text style={{ fontSize: 15, color: "#484145" }}>{bubbleText}</Text>
           </Animated.View>
         )}
-        <PetPlaceholder size={215} emoji={petEmoji} />
+        <HomePetArtwork presetId={petPresetId} fallbackEmoji={petEmoji} size={215} />
         <Text style={{ marginTop: 20, fontSize: 13, color: C.muted }}>轻触和它说话</Text>
       </Pressable>
 
