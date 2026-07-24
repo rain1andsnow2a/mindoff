@@ -14,10 +14,10 @@ import {
 import { ChevronLeft, Clock, Mic, Square } from "lucide-react-native";
 
 import { streamBrainDump, type SSEEvent } from "../api";
-import { CreamRipple } from "../components";
 import {
   Button,
   Card,
+  CreamRipple,
   IconButton,
   PageContainer,
   useReducedMotion,

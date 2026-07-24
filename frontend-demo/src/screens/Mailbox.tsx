@@ -9,11 +9,11 @@ import {
   Check, ChevronLeft, ChevronRight, Film, Heart, Mail, MapPin, Music,
   Play, Plus, SlidersHorizontal, Star, Archive, X,
 } from "lucide-react-native";
-import { CreamRipple } from "../components";
 import {
   Button,
   Card,
   Chip,
+  CreamRipple,
   EmptyState,
   IconButton,
   PageContainer,

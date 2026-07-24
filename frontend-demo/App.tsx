@@ -4,14 +4,14 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StatusBar } from "react-native";
-import { MistBackground } from "./src/components";
 import {
   AppShell,
   DesignSystemPreview,
+  MistBackground,
+  NightCtx,
   ToastSurface,
   type AppTab,
 } from "./src/design-system";
-import { NightCtx } from "./src/theme";
 import {
   OnboardHow, OnboardPermission, OnboardPet, OnboardWelcome,
 } from "./src/screens/Onboarding";
@@ -90,6 +90,15 @@ const DEV_SCREEN: Screen | null = (() => {
 })();
 
 const INITIAL_SCREEN: Screen = DEV_SCREEN ?? "onboard-1";
+const INITIAL_TAB: AppTab =
+  DEV_SCREEN === "mailbox" || DEV_SCREEN === "task-detail" || DEV_SCREEN === "storage-detail"
+    ? "mailbox"
+    : DEV_SCREEN === "scene" || DEV_SCREEN === "scene-play" || DEV_SCREEN === "scene-end"
+      ? "scene"
+      : DEV_SCREEN === "profile" || DEV_SCREEN === "pet-change" || DEV_SCREEN === "pet-handoff"
+          || DEV_SCREEN === "memory-list" || DEV_SCREEN === "memory-review"
+        ? "profile"
+        : "companion";
 
 // auth 预览强制显示登录；其他合法页面 ID 才跳过登录。
 const DEV_AUTH = DEV_SCREEN === "auth";
@@ -116,7 +125,7 @@ const PREFERENCE_DEFAULTS: Preferences = {
 export default function App() {
   const [screen, setScreen] = useState<Screen>(INITIAL_SCREEN);
   const [tokens, setTokens] = useState<Tokens | null>(DEV_BYPASS ? DEV_TOKENS : null);
-  const [tab, setTab] = useState<AppTab>("companion");
+  const [tab, setTab] = useState<AppTab>(INITIAL_TAB);
   const [night, setNight] = useState(false);
   const [pet, setPet] = useState<PetInfo>(DEFAULT_PET);
   const [presets, setPresets] = useState<PetInfo[]>([]);

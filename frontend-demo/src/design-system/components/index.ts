@@ -41,3 +41,9 @@ export {
   MessageBubble,
   StatusDot,
 } from "./business";
+
+export {
+  CreamRipple,
+  MistBackground,
+  PetPlaceholder,
+} from "./effects";

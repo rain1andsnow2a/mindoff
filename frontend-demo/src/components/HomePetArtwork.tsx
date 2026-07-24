@@ -8,9 +8,8 @@ import {
   View,
 } from "react-native";
 
-import { PetPlaceholder } from "../components";
+import { PetPlaceholder, useTheme } from "../design-system";
 import { getPetArtwork } from "../pets/assets";
-import { useNight } from "../theme";
 
 type HomePetArtworkProps = {
   presetId: string | null;
@@ -34,7 +33,7 @@ export function HomePetArtwork({
   fallbackEmoji,
   size = 215,
 }: HomePetArtworkProps) {
-  const night = useNight();
+  const night = useTheme().isNight;
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
   const [assetsReady, setAssetsReady] = useState(false);
   const [animationFailed, setAnimationFailed] = useState(false);

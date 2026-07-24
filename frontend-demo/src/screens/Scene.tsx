@@ -10,11 +10,11 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronLeft, Mic, Play, Send, Edit3 } from "lucide-react-native";
-import { CreamRipple } from "../components";
 import {
   Button,
   Card,
   Chip,
+  CreamRipple,
   EmptyState,
   IconButton,
   PageContainer,
