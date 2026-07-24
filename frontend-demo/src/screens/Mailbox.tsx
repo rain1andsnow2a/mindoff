@@ -9,11 +9,46 @@ import {
   Check, ChevronLeft, ChevronRight, Film, Heart, Mail, MapPin, Music,
   Play, Plus, SlidersHorizontal, Star, Archive, X,
 } from "lucide-react-native";
+import { CreamRipple } from "../components";
 import {
-  BottomSheet, CreamRipple, GlassCard, PrimaryBtn, SafeHeader,
-} from "../components";
-import { CREAM, GOLD_DEEP, palette, useNight } from "../theme";
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  IconButton,
+  PageContainer,
+  PageHeader,
+  ResponsiveOverlay,
+  useResponsive,
+  useTheme,
+} from "../design-system";
 import { acceptSceneInvite, createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
+
+function useMailboxSurface() {
+  const theme = useTheme();
+  return {
+    theme,
+    night: theme.isNight,
+    C: {
+      bg: theme.colors.background,
+      text: theme.colors.textPrimary,
+      text2: theme.colors.textSecondary,
+      text3: theme.colors.textMuted,
+      muted: theme.colors.textMuted,
+      placeholder: theme.colors.placeholder,
+      glass: theme.colors.surface,
+      glassBorder: theme.colors.border,
+      cardBg: theme.colors.surface,
+      divider: theme.colors.divider,
+      rowDivider: theme.colors.divider,
+      chevron: theme.colors.textMuted,
+      lsPri: theme.colors.textPrimary,
+      lsSec: theme.colors.textSecondary,
+      lsTer: theme.colors.textMuted,
+      gold: theme.colors.warning,
+    },
+  };
+}
 
 // ─── Types & Mock ────────────────────────────────────────────────────────────
 
@@ -123,8 +158,7 @@ function WeekNavigator({ weekOffset, selectedDate, onWeekChange, onSelectDate, t
   onWeekChange: (d: number) => void; onSelectDate: (s: string) => void;
   tasks: Task[];
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { night, C } = useMailboxSurface();
   const baseMonday = getMondayOf(parseISO(TODAY_DATE));
   const monday = shiftDays(baseMonday, weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, i) => shiftDays(monday, i));
@@ -241,8 +275,7 @@ function TaskRow({ task, onToggle, onDelete }: {
 // ─── CompletedTasksSection ───────────────────────────────────────────────────
 
 function CompletedTasksSection({ tasks }: { tasks: Task[] }) {
-  const night = useNight();
-  const C = palette(night);
+  const { C } = useMailboxSurface();
   const [open, setOpen] = useState(false);
   if (!tasks.length) return null;
   return (
@@ -284,7 +317,7 @@ function AddTaskSheet({ visible, defaultDate, onClose, onAdd }: {
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="添加一件事">
+    <ResponsiveOverlay visible={visible} onClose={onClose} title="添加一件事">
       <View style={{ paddingHorizontal: 20, paddingBottom: 32, gap: 16, paddingTop: 4 }}>
         <TextInput
           value={title} onChangeText={setTitle}
@@ -312,9 +345,9 @@ function AddTaskSheet({ visible, defaultDate, onClose, onAdd }: {
             }}
           />
         </View>
-        <PrimaryBtn onClick={commit} full disabled={!title.trim()}>放到这一天</PrimaryBtn>
+        <Button onPress={commit} fullWidth disabled={!title.trim()}>放到这一天</Button>
       </View>
-    </BottomSheet>
+    </ResponsiveOverlay>
   );
 }
 
@@ -324,8 +357,7 @@ function DailyTaskList({ selectedDate, tasks, onToggle, onDelete, onAdd }: {
   selectedDate: string; tasks: Task[];
   onToggle: (id: string) => void; onDelete: (id: string) => void; onAdd: () => void;
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { C } = useMailboxSurface();
   const d = parseISO(selectedDate);
   const dayName = `星期${DAY_CN[d.getDay()]}`;
   const label = `${d.getMonth() + 1}月${d.getDate()}日，${dayName}`;
@@ -457,7 +489,7 @@ function KeepsakeDetail({ item, onClose, onRemove }: {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const meta = TYPE_META[item.type];
   return (
-    <BottomSheet visible onClose={onClose}>
+    <ResponsiveOverlay visible onClose={onClose}>
       <View style={{ paddingHorizontal: 20, paddingBottom: 32 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.65)" }}>
@@ -514,7 +546,7 @@ function KeepsakeDetail({ item, onClose, onRemove }: {
           )}
         </View>
       </View>
-    </BottomSheet>
+    </ResponsiveOverlay>
   );
 }
 
@@ -523,7 +555,7 @@ function KeepsakeFilterSheet({ visible, active, onSelect, onClose }: {
 }) {
   const filters = ["全部", "来信", "洞察", "灵感", "场景", "音乐与书籍"];
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="筛选珍藏">
+    <ResponsiveOverlay visible={visible} onClose={onClose} title="筛选珍藏">
       <View style={{ paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {filters.map(f => (
           <Pressable key={f} onPress={() => { onSelect(f); onClose(); }}
@@ -537,7 +569,7 @@ function KeepsakeFilterSheet({ visible, active, onSelect, onClose }: {
           </Pressable>
         ))}
       </View>
-    </BottomSheet>
+    </ResponsiveOverlay>
   );
 }
 
@@ -648,8 +680,7 @@ function _fmtLetterDate(iso: string): string {
 function SealedEnvelope({ letter, onOpen, isOpening }: {
   letter: ApiLetter; onOpen: () => void; isOpening: boolean;
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { night, C } = useMailboxSurface();
   const [showRipple, setShowRipple] = useState(false);
   const handleTap = () => {
     setShowRipple(true);
@@ -882,8 +913,7 @@ function LetterPaper({ letter, petName, saved, onAck, onReply, onSave, onEnterSc
 }
 
 function WaitingLetterState() {
-  const night = useNight();
-  const C = palette(night);
+  const { night, C } = useMailboxSurface();
   return (
     <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 48, gap: 20 }}>
       <View style={{
@@ -940,8 +970,8 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   onPlayScene?: (sceneId: number, theaterId: string | null) => void;
   petName?: string;
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, night, C } = useMailboxSurface();
+  const { isExpanded } = useResponsive();
   const [sec, setSec] = useState(0);
   const sections = ["桌宠来信", "今日待启", "长久珍藏", "三日寄存"];
 
@@ -1071,84 +1101,107 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     deleteTreasure(Number(id)).catch(() => {});
   };
 
+  const unreadLetters = letters.filter(l => !l.is_read).length;
+  const sectionContent = (
+    <>
+      {sec === 1 && (
+        <>
+          <WeekNavigator weekOffset={weekOffset} selectedDate={selectedDate}
+            onWeekChange={d => setWeekOffset(o => o + d)} onSelectDate={setSelectedDate} tasks={tasks} />
+          <DailyTaskList selectedDate={selectedDate} tasks={dayTasks}
+            onToggle={toggleTask} onDelete={deleteTask} onAdd={() => setShowAddTask(true)} />
+          <Button variant="ghost" onPress={onTaskDetail}>查看任务详情示例</Button>
+        </>
+      )}
+      {sec === 0 && (
+        <DailyLetterView letters={letters} petName={petName} letterState={letterState}
+          onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
+          onAckLetter={handleAckLetter} onReply={onReplyLetter}
+          onEnterScene={handleEnterScene} entering={enteringScene} />
+      )}
+      {sec === 2 && (
+        <KeepsakeAlbum keepsakes={keepsakes} onSelectItem={setSelectedKeepsake} onRemove={removeKeepsake} />
+      )}
+      {sec === 3 && (
+        <>
+          {ephem.length === 0 && (
+            <EmptyState
+              icon={<Archive color={theme.colors.textMuted} size={24} />}
+              title="暂时没有寄存"
+              description="睡前说的情绪和碎片会先在这里待三天。"
+            />
+          )}
+          {ephem.map((it) => (
+            <Card key={it.id} style={{ marginBottom: theme.spacing[3] }}>
+              <Text style={[theme.typography.textStyles.bodyStrong, { marginBottom: theme.spacing[2], color: C.text }]}>
+                {it.surface_text || it.content}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing[2], marginBottom: theme.spacing[3] }}>
+                <Chip>{it.kind}</Chip>
+                <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>{remainText(it.expires_at)}</Text>
+              </View>
+              <View style={{ flexDirection: "row", gap: theme.spacing[3] }}>
+                <View style={{ flex: 1 }}><Button fullWidth onPress={() => keepEph(it.id)}>珍藏</Button></View>
+                <View style={{ flex: 1 }}><Button fullWidth variant="secondary" onPress={() => dropEph(it.id)}>放下</Button></View>
+              </View>
+            </Card>
+          ))}
+          {ephem.length > 0 ? <Button variant="ghost" onPress={onStorageDetail}>查看寄存详情示例</Button> : null}
+        </>
+      )}
+    </>
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 12 }}>
-        <Text style={{ fontSize: 26, fontWeight: "500", letterSpacing: -0.5, color: C.text }}>信箱</Text>
-      </View>
-      <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {sections.map((s, i) => {
-            const unread = i === 0 ? letters.filter(l => !l.is_read).length : 0;
-            return (
-            <Pressable key={i} onPress={() => setSec(i)}
-              style={{
-                paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                backgroundColor: sec === i
-                  ? (night ? "rgba(216,188,118,0.32)" : "rgba(246,231,168,0.88)")
-                  : (night ? "rgba(59,51,64,0.55)" : "rgba(255,252,245,0.65)"),
-                borderWidth: 1,
-                borderColor: night ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.4)",
-              }}>
-              <Text style={{
-                fontSize: 13, fontWeight: "500",
-                color: sec === i ? (night ? "#F4EFEA" : "#494145") : (night ? "#B7ADB4" : "#6E6764"),
-              }}>{s}{unread > 0 ? ` · ${unread}` : ""}</Text>
-            </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
-        {sec === 1 && (
-          <>
-            <WeekNavigator weekOffset={weekOffset} selectedDate={selectedDate}
-              onWeekChange={d => setWeekOffset(o => o + d)} onSelectDate={setSelectedDate} tasks={tasks} />
-            <DailyTaskList selectedDate={selectedDate} tasks={dayTasks}
-              onToggle={toggleTask} onDelete={deleteTask} onAdd={() => setShowAddTask(true)} />
-          </>
-        )}
-        {sec === 0 && (
-          <DailyLetterView letters={letters} petName={petName} letterState={letterState}
-            onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
-            onAckLetter={handleAckLetter} onReply={onReplyLetter}
-            onEnterScene={handleEnterScene} entering={enteringScene} />
-        )}
-        {sec === 2 && (
-          <KeepsakeAlbum keepsakes={keepsakes} onSelectItem={setSelectedKeepsake} onRemove={removeKeepsake} />
-        )}
-        {sec === 3 && (
-          <>
-            {ephem.length === 0 && (
-              <Text style={{ fontSize: 13, color: C.muted, paddingVertical: 24, textAlign: "center" }}>
-                这里暂时空空的，睡前说的情绪和碎片会先在这儿待三天。
-              </Text>
-            )}
-            {ephem.map((it) => (
-              <GlassCard key={it.id} style={{ padding: 16, marginBottom: 12 }}>
-                <Text style={{ fontSize: 15, fontWeight: "500", marginBottom: 6, color: C.text }}>
-                  {it.surface_text || it.content}
-                </Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(246,231,168,0.65)" }}>
-                    <Text style={{ fontSize: 11, color: "#655D61" }}>{it.kind}</Text>
-                  </View>
-                  <Text style={{ fontSize: 12, color: C.muted }}>{remainText(it.expires_at)}</Text>
-                </View>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Pressable onPress={() => keepEph(it.id)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center", backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>珍藏</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <PageContainer maxWidth={1180}>
+          <PageHeader
+            eyebrow="日常收纳"
+            title="信箱"
+            description="来信、待办和想留下的片段，都安静地收在这里。"
+          />
+          {!isExpanded ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.spacing[2], paddingBottom: theme.spacing[5] }}>
+              {sections.map((s, i) => (
+                <Chip key={s} selected={sec === i} onPress={() => setSec(i)}>
+                  {s}{i === 0 && unreadLetters > 0 ? ` · ${unreadLetters}` : ""}
+                </Chip>
+              ))}
+            </ScrollView>
+          ) : null}
+          <View style={{ flexDirection: isExpanded ? "row" : "column", alignItems: "flex-start", gap: theme.spacing[6] }}>
+            {isExpanded ? (
+              <Card style={{ width: 260, padding: theme.spacing[2] }}>
+                {sections.map((s, i) => (
+                  <Pressable
+                    key={s}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: sec === i }}
+                    onPress={() => setSec(i)}
+                    style={({ pressed }) => ({
+                      minHeight: 52,
+                      paddingHorizontal: theme.spacing[4],
+                      borderRadius: theme.radii.control,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      backgroundColor: sec === i ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent",
+                    })}
+                  >
+                    <Text style={[theme.typography.textStyles.bodyStrong, { color: sec === i ? theme.colors.accent : theme.colors.textSecondary }]}>
+                      {s}
+                    </Text>
+                    {i === 0 && unreadLetters > 0 ? <Chip>{unreadLetters}</Chip> : null}
                   </Pressable>
-                  <Pressable onPress={() => dropEph(it.id)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center", backgroundColor: "rgba(221,237,227,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>放下</Text>
-                  </Pressable>
-                </View>
-              </GlassCard>
-            ))}
-          </>
-        )}
+                ))}
+              </Card>
+            ) : null}
+            <Card style={{ flex: 1, width: "100%", minWidth: 0 }}>
+              {sectionContent}
+            </Card>
+          </View>
+        </PageContainer>
       </ScrollView>
 
       <AddTaskSheet visible={showAddTask} defaultDate={selectedDate}
@@ -1164,105 +1217,110 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
 // ─── Task Detail ─────────────────────────────────────────────────────────────
 
 export function TaskDetail({ onBack }: { onBack: () => void }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, C } = useMailboxSurface();
   const [done, setDone] = useState(false);
   return (
-    <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} title="今日待启" />
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100, gap: 16 }}>
-        <GlassCard style={{ padding: 24 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+      <PageContainer maxWidth={760}>
+        <PageHeader
+          action={<IconButton accessibilityLabel="返回信箱" icon={<ChevronLeft color={theme.colors.textSecondary} size={20} />} onPress={onBack} />}
+          eyebrow="今日待启"
+          title="与朋友的约定"
+          description="下午 3:00 · 你昨晚提到担心会迟到"
+        />
+        <View style={{ gap: theme.spacing[4] }}>
+        <Card>
           <Text style={{ fontSize: 28, marginBottom: 12 }}>📅</Text>
-          <Text style={{ fontSize: 20, fontWeight: "500", marginBottom: 6, color: C.text }}>与朋友的约定</Text>
-          <Text style={{ fontSize: 14, marginBottom: 12, color: C.text2 }}>下午 3:00 · 你昨晚提到担心会迟到</Text>
-          <Text style={{ fontSize: 14, lineHeight: 22, color: C.text2 }}>昨晚你说起这件事，有点担心来不及。我帮你留着了。</Text>
-        </GlassCard>
+          <Text style={[theme.typography.textStyles.body, { color: C.text2 }]}>昨晚你说起这件事，有点担心来不及。我帮你留着了。</Text>
+        </Card>
         <Pressable onPress={() => setDone(!done)}
-          style={{
-            padding: 16, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 12,
-            backgroundColor: done ? "rgba(246,231,168,0.6)" : "rgba(255,252,245,0.65)",
-            borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
-          }}>
+          style={({ pressed }) => ({
+            padding: theme.spacing[4], borderRadius: theme.radii.card, flexDirection: "row", alignItems: "center", gap: theme.spacing[3],
+            backgroundColor: done ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface,
+            borderWidth: 1, borderColor: done ? theme.colors.accentSoft : theme.colors.border,
+            transform: [{ scale: pressed ? 0.99 : 1 }],
+          })}>
           <View style={{
             width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center",
-            backgroundColor: done ? "rgba(196,149,58,0.8)" : "transparent",
-            borderWidth: 2, borderColor: done ? "rgba(196,149,58,0.8)" : "rgba(91,79,62,0.22)",
+            backgroundColor: done ? theme.colors.accent : "transparent",
+            borderWidth: 2, borderColor: done ? theme.colors.accent : theme.colors.border,
           }}>
-            {done && <Check size={12} color="#fff" />}
+            {done && <Check size={12} color={theme.colors.textOnAccent} />}
           </View>
-          <Text style={{
-            fontSize: 15, fontWeight: "500", color: C.text,
-            textDecorationLine: done ? "line-through" : "none",
-          }}>
+          <Text style={[theme.typography.textStyles.bodyStrong, { color: C.text, textDecorationLine: done ? "line-through" : "none" }]}>
             {done ? "已完成，做到了" : "标记为完成"}
           </Text>
         </Pressable>
         {done && (
-          <GlassCard style={{ padding: 16, alignItems: "center", backgroundColor: "rgba(221,237,227,0.45)" }}>
-            <Text style={{ fontSize: 14, color: C.text }}>做完了，今天又少了一件事 🌿</Text>
-          </GlassCard>
+          <Card style={{ alignItems: "center", backgroundColor: theme.colors.accentSoft }}>
+            <Text style={[theme.typography.textStyles.body, { color: C.text }]}>做完了，今天又少了一件事 🌿</Text>
+          </Card>
         )}
-      </View>
-    </View>
+        </View>
+      </PageContainer>
+    </ScrollView>
   );
 }
 
 // ─── Storage Detail ──────────────────────────────────────────────────────────
 
 export function StorageDetail({ onBack }: { onBack: () => void }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, C } = useMailboxSurface();
   const [action, setAction] = useState<"none" | "treasure" | "release">("none");
   return (
-    <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} title="三日寄存" />
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100, gap: 16 }}>
-        <GlassCard style={{ padding: 24 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+      <PageContainer maxWidth={760}>
+        <PageHeader
+          action={<IconButton accessibilityLabel="返回信箱" icon={<ChevronLeft color={theme.colors.textSecondary} size={20} />} onPress={onBack} />}
+          eyebrow="三日寄存"
+          title="那次和妈妈的通话"
+          description="有些感受不必立刻决定去留。"
+        />
+        <View style={{ gap: theme.spacing[4] }}>
+        <Card>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(246,231,168,0.7)" }}>
-              <Text style={{ fontSize: 11, fontWeight: "500", color: "#655D61" }}>情绪</Text>
-            </View>
-            <Text style={{ fontSize: 12, color: C.muted }}>1天后到期</Text>
+            <Chip>情绪</Chip>
+            <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>1天后到期</Text>
           </View>
-          <Text style={{ fontSize: 18, fontWeight: "500", marginBottom: 12, color: C.text }}>那次和妈妈的通话</Text>
-          <Text style={{ fontSize: 14, lineHeight: 22, color: C.text2 }}>
+          <Text style={[theme.typography.textStyles.body, { color: C.text2 }]}>
             昨晚说到你们的对话，你有点担心她最近的状态。这个感受被我留在这里了，三天后如果你没有更多想说的，我会轻轻放下它。
           </Text>
-        </GlassCard>
+        </Card>
         {action === "none" && (
           <View style={{ flexDirection: "row", gap: 12 }}>
             <Pressable onPress={() => setAction("treasure")}
               style={({ pressed }) => [{
                 flex: 1, paddingVertical: 16, borderRadius: 20, alignItems: "center", gap: 8,
-                backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",
+                backgroundColor: theme.colors.accentSoft, borderWidth: 1, borderColor: theme.colors.border,
                 transform: [{ scale: pressed ? 0.97 : 1 }],
               }]}>
-              <Star size={20} color={GOLD_DEEP} />
+              <Star size={20} color={theme.colors.accent} />
               <Text style={{ fontSize: 14, fontWeight: "500", color: C.text }}>珍藏</Text>
             </Pressable>
             <Pressable onPress={() => setAction("release")}
               style={({ pressed }) => [{
                 flex: 1, paddingVertical: 16, borderRadius: 20, alignItems: "center", gap: 8,
-                backgroundColor: "rgba(221,237,227,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",
+                backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
                 transform: [{ scale: pressed ? 0.97 : 1 }],
               }]}>
-              <Archive size={20} color="#5A8A6A" />
+              <Archive size={20} color={theme.colors.support} />
               <Text style={{ fontSize: 14, fontWeight: "500", color: C.text }}>放下</Text>
             </Pressable>
           </View>
         )}
         {action !== "none" && (
-          <GlassCard style={{
+          <Card style={{
             padding: 20, alignItems: "center",
-            backgroundColor: action === "treasure" ? "rgba(246,231,168,0.42)" : "rgba(221,237,227,0.42)",
+            backgroundColor: action === "treasure" ? theme.colors.accentSoft : theme.colors.surface,
           }}>
             <Text style={{ fontSize: 22, marginBottom: 8 }}>{action === "treasure" ? "⭐" : "🌊"}</Text>
             <Text style={{ fontSize: 14, color: C.text }}>
               {action === "treasure" ? "已加入长久珍藏" : "已轻轻放下，谢谢你把它告诉我"}
             </Text>
-          </GlassCard>
+          </Card>
         )}
-      </View>
-    </View>
+        </View>
+      </PageContainer>
+    </ScrollView>
   );
 }
