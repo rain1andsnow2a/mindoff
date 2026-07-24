@@ -148,13 +148,17 @@ export function IconButton({
 type FieldProps = TextInputProps & {
   error?: string;
   label?: string;
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
 };
 
 function Field({
   error,
   label,
+  leading,
   multiline,
   style,
+  trailing,
   ...props
 }: FieldProps) {
   const theme = useTheme();
@@ -172,40 +176,56 @@ function Field({
           {label}
         </Text>
       ) : null}
-      <TextInput
-        {...props}
-        multiline={multiline}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
+      <View
+        style={{
+          minHeight: multiline ? 112 : controlHeights.default,
+          paddingLeft: leading ? spacing[3] : spacing[4],
+          paddingRight: trailing ? spacing[1] : spacing[4],
+          borderRadius: theme.radii.control,
+          borderWidth: focused ? 2 : 1,
+          borderColor: error
+            ? theme.colors.error
+            : focused
+              ? theme.colors.focus
+              : theme.colors.border,
+          backgroundColor: theme.colors.surface,
+          flexDirection: "row",
+          alignItems: multiline ? "flex-start" : "center",
+          gap: spacing[2],
         }}
-        onFocus={(event) => {
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        placeholderTextColor={theme.colors.placeholder}
-        selectionColor={theme.colors.accent}
-        style={[
-          theme.typography.textStyles.body,
-          {
-            minHeight: multiline ? 112 : controlHeights.default,
-            paddingHorizontal: spacing[4],
-            paddingVertical: multiline ? spacing[3] : spacing[2],
-            borderRadius: theme.radii.control,
-            borderWidth: focused ? 2 : 1,
-            borderColor: error
-              ? theme.colors.error
-              : focused
-                ? theme.colors.focus
-                : theme.colors.border,
-            backgroundColor: theme.colors.surface,
-            color: theme.colors.textPrimary,
-            textAlignVertical: multiline ? "top" : "center",
-            outlineWidth: 0,
-          } as TextStyle,
-          style,
-        ]}
-      />
+      >
+        {leading ? (
+          <View style={{ paddingTop: multiline ? spacing[3] : 0 }}>{leading}</View>
+        ) : null}
+        <TextInput
+          {...props}
+          multiline={multiline}
+          onBlur={(event) => {
+            setFocused(false);
+            props.onBlur?.(event);
+          }}
+          onFocus={(event) => {
+            setFocused(true);
+            props.onFocus?.(event);
+          }}
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
+          style={[
+            theme.typography.textStyles.body,
+            {
+              flex: 1,
+              minHeight: multiline ? 110 : controlHeights.default - 2,
+              paddingHorizontal: 0,
+              paddingVertical: multiline ? spacing[3] : spacing[2],
+              color: theme.colors.textPrimary,
+              textAlignVertical: multiline ? "top" : "center",
+              outlineWidth: 0,
+            } as TextStyle,
+            style,
+          ]}
+        />
+        {trailing}
+      </View>
       {error ? (
         <Text
           accessibilityRole="alert"

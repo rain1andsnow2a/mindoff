@@ -1,7 +1,6 @@
 /**
- * 登录 / 注册（方案 A · 晨雾 · 白天玻璃卡）。
- * 复用 theme.ts 色板与 components 的 GlassCard / PrimaryBtn；对接 api.ts 的 login/register。
- * 仅用户名 + 密码，无验证码（demo）。
+ * 登录与注册。
+ * 保留用户名、密码校验和认证 API，仅统一跨端布局与表单状态。
  */
 import React, { useState } from "react";
 import {
@@ -10,227 +9,408 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import { Eye, EyeOff, Lock, User } from "lucide-react-native";
-import { GlassCard, PrimaryBtn } from "../components";
-import { GOLD_DEEP, palette, useNight } from "../theme";
-import { login as apiLogin, register as apiRegister, Tokens } from "../api";
+import {
+  Eye,
+  EyeOff,
+  HeartHandshake,
+  Lock,
+  ShieldCheck,
+  Sparkles,
+  User,
+} from "lucide-react-native";
+
+import { login as apiLogin, register as apiRegister, type Tokens } from "../api";
+import {
+  Button,
+  Card,
+  IconButton,
+  TextField,
+  useResponsive,
+  useTheme,
+} from "../design-system";
 
 type Mode = "login" | "register";
 
-// Web 预览时，浏览器（尤其 Edge）会在 password 输入框内自带一个原生"显示密码"眼睛，
-// 与卡片右侧自定义眼睛重叠成"两个眼睛"。这里隐藏原生控件，只保留外层自定义眼睛。
-// 仅在 web 生效；原生端 RN 不渲染该控件，此段自动跳过。
+// Edge 会在 password 输入框里渲染原生“显示密码”按钮，隐藏它以免和应用按钮重叠。
 if (Platform.OS === "web" && typeof document !== "undefined") {
-  const STYLE_ID = "mindoff-hide-native-reveal";
-  if (!document.getElementById(STYLE_ID)) {
+  const styleId = "mindoff-hide-native-reveal";
+  if (!document.getElementById(styleId)) {
     const style = document.createElement("style");
-    style.id = STYLE_ID;
+    style.id = styleId;
     style.textContent =
       "input::-ms-reveal,input::-ms-clear{display:none!important;}";
     document.head.appendChild(style);
   }
 }
 
-export function AuthScreen({
-  onAuthed,
-}: {
+type AuthScreenProps = {
   onAuthed: (tokens: Tokens, mode: Mode) => void;
-}) {
-  const night = useNight();
-  const C = palette(night);
+};
+
+const authBenefits = [
+  {
+    description: "随时说说话，不催促，也不评判。",
+    icon: HeartHandshake,
+    title: "有人安静地听",
+  },
+  {
+    description: "重要的念头会被妥善整理和保存。",
+    icon: Sparkles,
+    title: "让思绪有地方放",
+  },
+  {
+    description: "你始终可以查看、调整或删除自己的内容。",
+    icon: ShieldCheck,
+    title: "主动权一直在你",
+  },
+];
+
+export function AuthScreen({ onAuthed }: AuthScreenProps) {
+  const theme = useTheme();
+  const { isCompact, isExpanded } = useResponsive();
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(false);
-  const [focus, setFocus] = useState<null | "u" | "p">(null);
   const isLogin = mode === "login";
-
-  const accent = night ? "#D8BC76" : GOLD_DEEP;
 
   const switchMode = () => {
     setMode(isLogin ? "register" : "login");
     setHint("");
     setPassword("");
-    setShowPw(false);
+    setShowPassword(false);
   };
 
   const submit = async () => {
     if (loading) return;
-    if (username.trim().length < 3) return setHint("用户名至少 3 个字符");
-    if (password.length < 6) return setHint("密码至少 6 位");
+    if (username.trim().length < 3) {
+      setHint("用户名至少 3 个字符");
+      return;
+    }
+    if (password.length < 6) {
+      setHint("密码至少 6 位");
+      return;
+    }
+
     setHint("");
     setLoading(true);
     try {
-      const fn = isLogin ? apiLogin : apiRegister;
-      const tokens = await fn(username.trim(), password);
+      const authenticate = isLogin ? apiLogin : apiRegister;
+      const tokens = await authenticate(username.trim(), password);
       onAuthed(tokens, mode);
-    } catch (e: any) {
-      setHint(e?.message || "出了点问题，待会儿再试试");
+    } catch (error: any) {
+      setHint(error?.message || "出了点问题，待会儿再试试");
     } finally {
       setLoading(false);
     }
   };
 
-  const field = (
-    which: "u" | "p",
-    icon: React.ReactNode,
-    props: React.ComponentProps<typeof TextInput>,
-    trailing?: React.ReactNode
-  ) => {
-    const focused = focus === which;
-    return (
+  const brand = (
+    <View style={{ maxWidth: 460 }}>
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: 11,
-          backgroundColor: C.glass,
-          borderRadius: 16,
-          paddingHorizontal: 15,
-          paddingVertical: 13,
-          borderWidth: 1.5,
-          borderColor: focused ? accent : C.glassBorder,
+          gap: theme.spacing[3],
         }}
       >
-        {icon}
-        <TextInput
-          {...props}
-          onFocus={() => {
-            setFocus(which);
-            setHint("");
+        <View
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: theme.radii.card,
+            alignItems: "center",
+            justifyContent: "center",
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            backgroundColor: theme.colors.accentSoft,
           }}
-          onBlur={() => setFocus(null)}
-          placeholderTextColor={C.placeholder}
-          style={{ flex: 1, fontSize: 16, color: C.text, padding: 0 }}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {trailing}
+        >
+          <Sparkles color={theme.colors.accent} size={24} />
+        </View>
+        <View>
+          <Text
+            style={[
+              theme.typography.textStyles.sectionTitle,
+              { color: theme.colors.textPrimary },
+            ]}
+          >
+            MindOff
+          </Text>
+          <Text
+            style={[
+              theme.typography.textStyles.caption,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            陪你把心里的事，轻轻放下
+          </Text>
+        </View>
       </View>
-    );
-  };
+
+      {isExpanded ? (
+        <View style={{ gap: theme.spacing[5], marginTop: theme.spacing[10] }}>
+          <Text
+            style={[
+              theme.typography.textStyles.display,
+              { color: theme.colors.textPrimary },
+            ]}
+          >
+            给纷乱的思绪，{"\n"}留一块安静的地方
+          </Text>
+          <View style={{ gap: theme.spacing[4] }}>
+            {authBenefits.map((benefit) => {
+              const BenefitIcon = benefit.icon;
+              return (
+                <View
+                  key={benefit.title}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    gap: theme.spacing[3],
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: theme.radii.control,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: theme.colors.surface,
+                    }}
+                  >
+                    <BenefitIcon color={theme.colors.support} size={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        theme.typography.textStyles.bodyStrong,
+                        { color: theme.colors.textPrimary },
+                      ]}
+                    >
+                      {benefit.title}
+                    </Text>
+                    <Text
+                      style={[
+                        theme.typography.textStyles.caption,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
+                      {benefit.description}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 26, paddingTop: 44, paddingBottom: 36 }}
+        contentContainerStyle={{
+          minHeight: "100%",
+          paddingHorizontal: isCompact ? theme.spacing[5] : theme.spacing[8],
+          paddingVertical: isCompact ? theme.spacing[6] : theme.spacing[10],
+          alignItems: "center",
+          justifyContent: "center",
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* 品牌 */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <View
+        <View
+          style={{
+            width: "100%",
+            maxWidth: 1040,
+            flexDirection: isExpanded ? "row" : "column",
+            alignItems: isExpanded ? "center" : "stretch",
+            justifyContent: "space-between",
+            gap: isExpanded ? theme.spacing[16] : theme.spacing[8],
+          }}
+        >
+          {brand}
+
+          <Card
             style={{
-              width: 54,
-              height: 54,
-              borderRadius: 27,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: night ? "rgba(59,51,64,0.5)" : "rgba(255,252,245,0.72)",
-              borderWidth: 1.5,
-              borderColor: night ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.6)",
+              width: isExpanded ? 440 : "100%",
+              maxWidth: 520,
+              alignSelf: isExpanded ? undefined : "center",
+              padding: isCompact ? theme.spacing[5] : theme.spacing[8],
+              ...theme.shadows.floating,
             }}
           >
+            <Text
+              accessibilityRole="header"
+              style={[
+                theme.typography.textStyles.pageTitle,
+                { color: theme.colors.textPrimary },
+              ]}
+            >
+              {isLogin ? "欢迎回来" : "第一次见面"}
+            </Text>
+            <Text
+              style={[
+                theme.typography.textStyles.body,
+                {
+                  marginTop: theme.spacing[2],
+                  marginBottom: theme.spacing[6],
+                  color: theme.colors.textSecondary,
+                },
+              ]}
+            >
+              {isLogin
+                ? "它一直在这儿，等你回来说说话。"
+                : "给自己起个名字，我们慢慢认识。"}
+            </Text>
+
+            <View style={{ gap: theme.spacing[4] }}>
+              <TextField
+                accessibilityLabel="用户名"
+                autoCapitalize="none"
+                autoCorrect={false}
+                label="用户名"
+                leading={<User color={theme.colors.textMuted} size={18} />}
+                onChangeText={(value) => {
+                  setUsername(value);
+                  setHint("");
+                }}
+                placeholder={isLogin ? "你的名字" : "想让我怎么称呼你"}
+                returnKeyType="next"
+                value={username}
+              />
+              <TextField
+                accessibilityLabel="密码"
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect={false}
+                importantForAutofill="no"
+                label="密码"
+                leading={<Lock color={theme.colors.textMuted} size={18} />}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setHint("");
+                }}
+                onSubmitEditing={submit}
+                placeholder="悄悄话，只有你知道"
+                returnKeyType="done"
+                secureTextEntry={!showPassword}
+                textContentType="none"
+                trailing={
+                  <IconButton
+                    accessibilityLabel={showPassword ? "隐藏密码" : "显示密码"}
+                    icon={
+                      showPassword ? (
+                        <EyeOff color={theme.colors.textMuted} size={18} />
+                      ) : (
+                        <Eye color={theme.colors.textMuted} size={18} />
+                      )
+                    }
+                    onPress={() => setShowPassword((current) => !current)}
+                  />
+                }
+                value={password}
+              />
+            </View>
+
+            <View
+              accessibilityLiveRegion="polite"
+              style={{
+                minHeight: 24,
+                justifyContent: "center",
+                marginVertical: theme.spacing[3],
+              }}
+            >
+              {hint ? (
+                <Text
+                  accessibilityRole="alert"
+                  style={[
+                    theme.typography.textStyles.caption,
+                    { color: theme.colors.warning },
+                  ]}
+                >
+                  {hint}
+                </Text>
+              ) : null}
+            </View>
+
+            <Button
+              fullWidth
+              loading={loading}
+              onPress={submit}
+              size="large"
+            >
+              {loading
+                ? isLogin
+                  ? "登录中…"
+                  : "创建中…"
+                : isLogin
+                  ? "进来坐坐"
+                  : "开始吧"}
+            </Button>
+
             <View
               style={{
-                width: 12,
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: night ? "rgba(216,188,118,0.6)" : "rgba(196,149,58,0.55)",
+                flexDirection: "row",
+                justifyContent: "center",
+                alignItems: "center",
+                marginTop: theme.spacing[4],
               }}
-            />
-          </View>
-          <View>
-            <Text style={{ fontSize: 22, fontWeight: "500", letterSpacing: -0.4, color: C.text }}>
-              MindOff
-            </Text>
-            <Text style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>
-              陪你把心里的事，轻轻放下
-            </Text>
-          </View>
-        </View>
-
-        {/* 标题 */}
-        <Text style={{ fontSize: 27, fontWeight: "500", letterSpacing: -0.6, color: C.text, lineHeight: 34 }}>
-          {isLogin ? "欢迎回来" : "第一次见面"}
-        </Text>
-        <Text style={{ fontSize: 14, color: C.text2, marginTop: 9, lineHeight: 21 }}>
-          {isLogin ? "它一直在这儿，等你回来说说话。" : "给自己起个名字，我们慢慢认识。"}
-        </Text>
-
-        {/* 玻璃卡表单 */}
-        <GlassCard style={{ padding: 18, marginTop: 22, gap: 14 }}>
-          <View>
-            <Text style={{ fontSize: 12.5, color: C.text2, marginBottom: 7 }}>用户名</Text>
-            {field(
-              "u",
-              <User size={18} color={focus === "u" ? accent : C.text3} strokeWidth={1.75} />,
-              {
-                value: username,
-                onChangeText: setUsername,
-                placeholder: isLogin ? "你的名字" : "想让我怎么称呼你",
-              }
-            )}
-          </View>
-          <View>
-            <Text style={{ fontSize: 12.5, color: C.text2, marginBottom: 7 }}>密码</Text>
-            {field(
-              "p",
-              <Lock size={18} color={focus === "p" ? accent : C.text3} strokeWidth={1.75} />,
-              {
-                value: password,
-                onChangeText: setPassword,
-                placeholder: "悄悄话，只有你知道",
-                secureTextEntry: !showPw,
-                // 关掉 Android 原生自动填充/密码管理器的"内层"眼睛，只保留 App 自绘的外层眼睛（DAY-173）
-                autoComplete: "off",
-                importantForAutofill: "no",
-                textContentType: "none",
-              },
-              <Pressable onPress={() => setShowPw((s) => !s)} hitSlop={8}>
-                {showPw ? (
-                  <EyeOff size={18} color={C.text3} strokeWidth={1.75} />
-                ) : (
-                  <Eye size={18} color={C.text3} strokeWidth={1.75} />
-                )}
+            >
+              <Text
+                style={[
+                  theme.typography.textStyles.caption,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {isLogin ? "还没有账号？" : "已经有账号了？"}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={switchMode}
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+              >
+                <Text
+                  style={[
+                    theme.typography.textStyles.caption,
+                    {
+                      marginLeft: theme.spacing[2],
+                      color: theme.colors.accent,
+                      fontWeight: "500",
+                    },
+                  ]}
+                >
+                  {isLogin ? "创建一个" : "回来登录"}
+                </Text>
               </Pressable>
-            )}
-          </View>
-        </GlassCard>
+            </View>
 
-        {/* 温柔提示（非红色 error） */}
-        <View style={{ minHeight: 20, marginTop: 11 }}>
-          {hint ? <Text style={{ fontSize: 12.5, color: accent }}>{hint}</Text> : null}
+            {!isLogin ? (
+              <Text
+                style={[
+                  theme.typography.textStyles.label,
+                  {
+                    marginTop: theme.spacing[3],
+                    textAlign: "center",
+                    color: theme.colors.textMuted,
+                  },
+                ]}
+              >
+                demo 版只需用户名与密码，无需验证码
+              </Text>
+            ) : null}
+          </Card>
         </View>
-
-        <View style={{ flex: 1, minHeight: 20 }} />
-
-        <PrimaryBtn onClick={submit} full disabled={loading}>
-          {loading ? (isLogin ? "登录中…" : "创建中…") : isLogin ? "进来坐坐" : "开始吧"}
-        </PrimaryBtn>
-
-        <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 16 }}>
-          <Text style={{ fontSize: 13, color: C.text2 }}>
-            {isLogin ? "还没有账号？" : "已经有账号了？"}
-          </Text>
-          <Pressable onPress={switchMode} hitSlop={8}>
-            <Text style={{ fontSize: 13, color: accent, fontWeight: "500", marginLeft: 6 }}>
-              {isLogin ? "创建一个" : "回来登录"}
-            </Text>
-          </Pressable>
-        </View>
-        {!isLogin && (
-          <Text style={{ fontSize: 11, color: C.text3, textAlign: "center", marginTop: 10 }}>
-            demo 版只需用户名与密码，无需验证码
-          </Text>
-        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -34,6 +34,7 @@ import type { TheaterSceneId } from "./src/theater";
 import { THEATER_SCENE_IDS } from "./src/theater";
 
 const SCREEN_IDS = [
+  "auth",
   "onboard-1", "onboard-2", "onboard-3", "onboard-4",
   "companion", "chat", "voice-call", "sleep-dump", "processing", "receipt",
   "mailbox", "task-detail", "storage-detail",
@@ -90,8 +91,9 @@ const DEV_SCREEN: Screen | null = (() => {
 
 const INITIAL_SCREEN: Screen = DEV_SCREEN ?? "onboard-1";
 
-// 只有合法页面 ID 才跳过登录，非法参数不能绕过认证。
-const DEV_BYPASS = DEV_SCREEN !== null;
+// auth 预览强制显示登录；其他合法页面 ID 才跳过登录。
+const DEV_AUTH = DEV_SCREEN === "auth";
+const DEV_BYPASS = DEV_SCREEN !== null && !DEV_AUTH;
 const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_type: "bearer" };
 
 const FULL_SCREENS: Screen[] = [
@@ -139,7 +141,7 @@ export default function App() {
 
   // 启动时从存储恢复登录态（token 持久化，重启免重登）。
   useEffect(() => {
-    if (DEV_BYPASS) return;
+    if (DEV_BYPASS || DEV_AUTH) return;
     loadTokens().then((t) => {
       if (t) {
         setTokens(t);
@@ -299,7 +301,7 @@ export default function App() {
   };
 
   const isMainApp = !screen.startsWith("onboard");
-  const showTabBar = isMainApp && !FULL_SCREENS.includes(screen);
+  const showTabBar = Boolean(tokens) && isMainApp && !FULL_SCREENS.includes(screen);
 
   return (
     <NightCtx.Provider value={night}>

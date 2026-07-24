@@ -21,6 +21,7 @@ Web 验收可以使用 `?screen=<screen-id>` 绕过登录并直达合法页面�
 
 | 页面 | 参数 |
 |---|---|
+| 登录 / 注册 | `?screen=auth` |
 | 引导欢迎 | `?screen=onboard-1` |
 | 引导说明 | `?screen=onboard-2` |
 | 选择伙伴 | `?screen=onboard-3` |
