@@ -50,3 +50,17 @@ def trigger_evening_letter(
         "title": letter.title,
         "body": letter.body,
     }
+
+
+@router.post("/scene-recommend")
+def trigger_scene_recommend(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手动触发当前用户的场景推荐分析（无需等夜间调度）。"""
+    from app.services.scene_recommend import analyze_for_user
+
+    rec = analyze_for_user(db, user.id)
+    if rec is None:
+        return {"recommended": False}
+    return {"recommended": True, "recommend": rec}

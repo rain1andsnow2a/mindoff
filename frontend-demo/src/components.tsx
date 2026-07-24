@@ -304,7 +304,7 @@ export function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) =
     { id: "profile", label: "我的", icon: User },
   ];
   return (
-    <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: 24 }}>
+    <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: 8 }}>
       <View style={{
         marginHorizontal: 16, borderRadius: 28, paddingHorizontal: 8, paddingVertical: 6,
         flexDirection: "row",

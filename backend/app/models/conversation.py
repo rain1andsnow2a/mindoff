@@ -20,6 +20,7 @@ class ConversationMode(str, enum.Enum):
     brain_dump = "brain_dump"        # 一股脑倒
     hard_thing = "hard_thing"        # 说件放不下的事
     review_fragment = "review_fragment"  # 回看片段（带 fragment_id）
+    voice_call = "voice_call"        # 实时语音通话（网关旁路落库）
 
 
 class MessageRole(str, enum.Enum):

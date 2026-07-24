@@ -823,8 +823,8 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
         </Pressable>
       </View>
 
-      {/* Character */}
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: 10 }}>
+      {/* Character（box-none：空白区手势穿透到底层 Scene3D，可拖动转视角；角色/按钮本身仍可点） */}
+      <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: 10 }}>
         <CharacterArtwork name={charName} isSpeaking={isSpeaking} isListening={false} />
       </View>
 

@@ -15,7 +15,7 @@ import { streamSSE, type SSEEvent } from "./sse";
 export { streamSSE };
 export type { SSEEvent };
 
-const LAN_HOST = "10.80.1.27";
+const LAN_HOST = "30.201.213.119";
 // web（浏览器预览）连本机 localhost；android/iOS 真机与模拟器都连同网段的后端 LAN_HOST
 export const API_BASE =
   Platform.OS === "web" ? "http://localhost:8000" : `http://${LAN_HOST}:8000`;
@@ -231,6 +231,11 @@ export const getMailbox = () => get("/api/v1/mailbox");
 export const listLetters = (q = "") => get(`/api/v1/letters${q}`);
 export const getLetter = (id: number) => get(`/api/v1/letters/${id}`);
 export const markLetterRead = (id: number) => patch(`/api/v1/letters/${id}`, { read: true });
+/** 接受场景邀请信：幂等创建场景，返回 { scene_id, render_kind, theater_id, already_accepted }。 */
+export const acceptSceneInvite = (id: number) =>
+  post<{ scene_id: number; render_kind: string; theater_id: string | null; already_accepted: boolean }>(
+    `/api/v1/letters/${id}/accept-scene`
+  );
 export const listEphemeral = () => get("/api/v1/ephemeral");
 export const keepEphemeral = (id: number) => post(`/api/v1/ephemeral/${id}/keep`);
 export const dropEphemeral = (id: number) => del(`/api/v1/ephemeral/${id}`);

@@ -5,6 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -29,6 +30,10 @@
     },
     "android": {
       "package": "com.mindoff.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F3E9C9"
+      },
       "permissions": [
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",

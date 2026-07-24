@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # 模型默认值
     step_text_model: str = "step-3.5-flash"
+    step_image_model: str = "step-image-edit-2"  # 文生图（size 为 height x width）
     step_asr_file_model: str = "stepaudio-2.5-asr"
     step_asr_stream_model: str = "stepaudio-2.5-asr-stream"
     step_realtime_model: str = "stepaudio-2.5-realtime"

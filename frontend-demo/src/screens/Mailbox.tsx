@@ -13,7 +13,7 @@ import {
   BottomSheet, CreamRipple, GlassCard, PrimaryBtn, SafeHeader,
 } from "../components";
 import { CREAM, GOLD_DEEP, palette, useNight } from "../theme";
-import { createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
+import { acceptSceneInvite, createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
 
 // ─── Types & Mock ────────────────────────────────────────────────────────────
 
@@ -606,6 +606,16 @@ function KeepsakeAlbum({ keepsakes, onSelectItem, onRemove }: {
 
 export type LetterState = "waiting" | "sealed" | "opening" | "opened" | "saved";
 
+/** scene_invite 信件附件（后端 scene_recommend.generate_scene_invite 写入） */
+export interface SceneInviteAttachment {
+  kind: "scene_invite";
+  render_kind: "preset_3d" | "dynamic_image";
+  theater_id: string | null;
+  seed: { title?: string; people?: string[]; place?: string; plot?: string; intent?: string };
+  confidence?: number;
+  scene_id?: number; // 接受后回写
+}
+
 /** 后端 LetterOut */
 export interface ApiLetter {
   id: number;
@@ -614,9 +624,15 @@ export interface ApiLetter {
   body: string;
   pet_id: number | null;
   ref_memory_id: number | null;
-  attachment: { label?: string; title?: string; artist?: string; reason?: string } | null;
+  attachment:
+    | ({ label?: string; title?: string; artist?: string; reason?: string } & Partial<SceneInviteAttachment>)
+    | null;
   is_read: boolean;
   created_at: string;
+}
+
+function isSceneInvite(letter: ApiLetter): boolean {
+  return letter.type === "scene_invite" || letter.attachment?.kind === "scene_invite";
 }
 
 function _fmtLetterDate(iso: string): string {
@@ -651,11 +667,19 @@ function SealedEnvelope({ letter, onOpen, isOpening }: {
           <View style={{ alignItems: "flex-end", marginBottom: 14 }}>
             <View style={{
               width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center",
-              backgroundColor: "rgba(246,231,168,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
+              backgroundColor: isSceneInvite(letter) ? "rgba(243,218,202,0.75)" : "rgba(246,231,168,0.72)",
+              borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
             }}>
-              <Text style={{ fontSize: 17 }}>🌿</Text>
+              {isSceneInvite(letter)
+                ? <Film size={16} color="#A26458" />
+                : <Text style={{ fontSize: 17 }}>🌿</Text>}
             </View>
           </View>
+          {isSceneInvite(letter) && (
+            <View style={{ alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginBottom: 6, backgroundColor: "rgba(243,218,202,0.5)" }}>
+              <Text style={{ fontSize: 10, fontWeight: "500", letterSpacing: 1, color: "#A26458" }}>场景邀请</Text>
+            </View>
+          )}
           <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: "#4D4249" }}>{letter.title}</Text>
           <Text style={{ fontSize: 12, marginBottom: 5, color: "#8C8187" }}>{_fmtLetterDate(letter.created_at)}</Text>
           <Text style={{ fontSize: 12, color: "#A39A9F" }} numberOfLines={1}>{letter.body.slice(0, 24)}…</Text>
@@ -724,11 +748,58 @@ function LetterAttachment({ attachment, saved, onSave }: {
   );
 }
 
-function LetterPaper({ letter, petName, saved, onAck, onReply, onSave }: {
+/** scene_invite 场景邀请卡：Film 图标 + 场景种子摘要 + 「进入场景」按钮 */
+function SceneInviteCard({ attachment, onEnter, entering }: {
+  attachment: SceneInviteAttachment; onEnter?: () => void; entering?: boolean;
+}) {
+  const seed = attachment.seed || {};
+  const people = Array.isArray(seed.people) ? seed.people.filter(Boolean).join("、") : "";
+  return (
+    <View style={{
+      marginVertical: 20, borderRadius: 18, overflow: "hidden",
+      backgroundColor: "rgba(243,218,202,0.4)", borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
+    }}>
+      <View style={{ padding: 16 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <Film size={12} color="#A26458" />
+          <Text style={{ fontSize: 12, fontWeight: "500", color: "#A26458" }}>为你备好了一个小场景</Text>
+        </View>
+        {!!seed.title && (
+          <Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 6, color: "#4D4249" }}>{seed.title}</Text>
+        )}
+        {(!!seed.place || !!people) && (
+          <Text style={{ fontSize: 12, marginBottom: 6, color: "#8C8187" }}>
+            {[seed.place, people].filter(Boolean).join(" · ")}
+          </Text>
+        )}
+        {!!seed.plot && (
+          <Text style={{ fontSize: 13, lineHeight: 19, marginBottom: 12, color: "#62575D" }}>{seed.plot}</Text>
+        )}
+        <Pressable onPress={onEnter} disabled={!onEnter || entering}
+          style={({ pressed }) => [{
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+            paddingVertical: 12, borderRadius: 999,
+            backgroundColor: entering ? "rgba(243,218,202,0.4)" : "rgba(243,218,202,0.8)",
+            borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+            transform: [{ scale: pressed ? 0.97 : 1 }],
+          }]}>
+          <Play size={12} color="#4D4249" />
+          <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>
+            {entering ? "正在布置场景…" : "进入场景"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function LetterPaper({ letter, petName, saved, onAck, onReply, onSave, onEnterScene, entering }: {
   letter: ApiLetter; petName: string;
   saved: boolean; onAck: () => void; onReply: () => void; onSave: () => void;
+  onEnterScene?: () => void; entering?: boolean;
 }) {
   const [attachSaved, setAttachSaved] = useState(false);
+  const sceneInvite = isSceneInvite(letter);
   const paras = letter.body.split("\n").filter(p => p.trim());
   return (
     <View style={{
@@ -757,7 +828,11 @@ function LetterPaper({ letter, petName, saved, onAck, onReply, onSave }: {
           ))}
         </View>
 
-        {letter.attachment && (
+        {letter.attachment && sceneInvite && (
+          <SceneInviteCard attachment={letter.attachment as SceneInviteAttachment}
+            onEnter={onEnterScene} entering={entering} />
+        )}
+        {letter.attachment && !sceneInvite && (
           <LetterAttachment attachment={letter.attachment} saved={attachSaved} onSave={() => setAttachSaved(s => !s)} />
         )}
 
@@ -825,9 +900,10 @@ function WaitingLetterState() {
   );
 }
 
-function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter }: {
+function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter, onEnterScene, entering }: {
   letters: ApiLetter[]; petName: string; letterState: LetterState;
   onReply: () => void; onOpenLetter: () => void; onSaveLetter: () => void; onAckLetter: () => void;
+  onEnterScene?: (letter: ApiLetter) => void; entering?: boolean;
 }) {
   const letter = letters[0] ?? null;
   const saved = letterState === "saved";
@@ -845,7 +921,9 @@ function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter,
       )}
       {showLetter && (
         <LetterPaper letter={letter} petName={petName} saved={saved}
-          onAck={onAckLetter} onReply={onReply} onSave={onSaveLetter} />
+          onAck={onAckLetter} onReply={onReply} onSave={onSaveLetter}
+          onEnterScene={onEnterScene ? () => onEnterScene(letter) : undefined}
+          entering={entering} />
       )}
     </View>
   );
@@ -853,11 +931,13 @@ function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter,
 
 // ─── Mailbox Screen ──────────────────────────────────────────────────────────
 
-export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, onToast, petName = "你的伙伴" }: {
+export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, onToast, onPlayScene, petName = "你的伙伴" }: {
   onTaskDetail: () => void;
   onStorageDetail: () => void;
   onReplyLetter: () => void;
   onToast?: (msg: string) => void;
+  /** 接受场景邀请后进入片场演绎（sceneId + 预设剧场 id，dynamic_image 时 theaterId 为 null） */
+  onPlayScene?: (sceneId: number, theaterId: string | null) => void;
   petName?: string;
 }) {
   const night = useNight();
@@ -918,6 +998,23 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   };
 
   const handleAckLetter = () => onToast?.("它知道你收到了");
+
+  // ─── scene_invite：接受邀请 → 建场景 → 进片场 ───
+  const [enteringScene, setEnteringScene] = useState(false);
+  const handleEnterScene = async (letter: ApiLetter) => {
+    if (enteringScene) return;
+    setEnteringScene(true);
+    try {
+      const res = await acceptSceneInvite(letter.id);
+      setLetters(ls => ls.map(l => l.id === letter.id ? { ...l, is_read: true } : l));
+      if (onPlayScene) onPlayScene(res.scene_id, res.theater_id ?? null);
+      else onToast?.("场景已备好，去片场看看吧");
+    } catch (e: any) {
+      onToast?.(e?.message || "场景没布置好，待会儿再试试");
+    } finally {
+      setEnteringScene(false);
+    }
+  };
 
   const dayTasks = tasks.filter(t => t.date === selectedDate);
   const reloadTasks = async () => {
@@ -1014,7 +1111,8 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
         {sec === 0 && (
           <DailyLetterView letters={letters} petName={petName} letterState={letterState}
             onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
-            onAckLetter={handleAckLetter} onReply={onReplyLetter} />
+            onAckLetter={handleAckLetter} onReply={onReplyLetter}
+            onEnterScene={handleEnterScene} entering={enteringScene} />
         )}
         {sec === 2 && (
           <KeepsakeAlbum keepsakes={keepsakes} onSelectItem={setSelectedKeepsake} onRemove={removeKeepsake} />

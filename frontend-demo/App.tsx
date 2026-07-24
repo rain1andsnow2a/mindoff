@@ -25,6 +25,7 @@ import {
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
 import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
+import { THEATER_SCENE_IDS } from "./src/theater";
 
 type Screen =
   | "onboard-1" | "onboard-2" | "onboard-3" | "onboard-4"
@@ -350,6 +351,16 @@ export default function App() {
                 onStorageDetail={() => go("storage-detail")}
                 petName={pet.name}
                 onToast={showToast}
+                onPlayScene={(sceneId, theaterId) => {
+                  setSceneId(sceneId);
+                  setSceneTheater(
+                    THEATER_SCENE_IDS.includes((theaterId ?? "") as TheaterSceneId)
+                      ? (theaterId as TheaterSceneId)
+                      : "dining" // 一期：dynamic_image 邀请先用默认剧场兜底
+                  );
+                  go("scene-play");
+                  setTab("scene");
+                }}
                 onReplyLetter={() => { go("chat"); setTab("companion"); }} />
             )}
             {screen === "task-detail" && <TaskDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}

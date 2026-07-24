@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
+  Animated, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { ChevronRight, Mic, Moon, Plus, Send, Square, Sun } from "lucide-react-native";
 import {
@@ -91,17 +91,20 @@ export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, o
             style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}>
             <Text style={{ fontSize: 15, flex: 1, color: C.muted }}>说点什么…</Text>
             <Pressable
-              onPressIn={voice.start}
-              onPressOut={voice.stop}
+              onPress={voice.isRecording ? voice.stop : voice.start}
               disabled={voice.transcribing}
+              hitSlop={8}
               style={({ pressed }) => [{
                 width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
-                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.18)" : "transparent",
+                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.22)" : "rgba(196,149,58,0.12)",
+                borderWidth: 1, borderColor: voice.isRecording ? "rgba(196,149,58,0.55)" : "rgba(196,149,58,0.3)",
                 transform: [{ scale: pressed ? 0.9 : 1 }],
               }]}>
-              {voice.isRecording
-                ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
-                : <Mic size={17} color={voice.transcribing ? C.placeholder : C.muted} />}
+              {voice.transcribing
+                ? <ActivityIndicator size="small" color={GOLD_DEEP} />
+                : voice.isRecording
+                  ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
+                  : <Mic size={17} color={GOLD_DEEP} />}
             </Pressable>
           </LiquidGlassShell>
           <Pressable onPress={onModeSheet}
@@ -142,8 +145,9 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
     setInput("");
     setMessages(m => [...m, { role: "user", text }]);
     setThinking(true);
-    // 追加一条空 assistant 泡，逐 token 填充
-    setMessages(m => [...m, { role: "agent", text: "" }]);
+    // 首个 token 到达前只显示"•••"占位泡；到达后再追加 assistant 泡逐 token 填充，
+    // 避免出现「空泡 + 思考泡」两个气泡（DAY-201）。
+    let started = false;
     try {
       if (convIdRef.current == null) {
         let petId: number | null = null;
@@ -157,7 +161,12 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
       const convId = convIdRef.current;
       if (convId == null) throw new Error("会话创建失败");
       await streamChatReply(convId, text, (delta) => {
+        setThinking(false);
         setMessages(m => {
+          if (!started) {
+            started = true;
+            return [...m, { role: "agent", text: delta }];
+          }
           const next = [...m];
           const last = next[next.length - 1];
           next[next.length - 1] = { ...last, text: last.text + delta };
@@ -165,9 +174,11 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
         });
       });
     } catch (e: any) {
+      const msg = e?.message || "刚刚走神了，能再说一次吗？";
       setMessages(m => {
+        if (!started) return [...m, { role: "agent", text: msg }];
         const next = [...m];
-        next[next.length - 1] = { role: "agent", text: e?.message || "刚刚走神了，能再说一次吗？" };
+        next[next.length - 1] = { role: "agent", text: msg };
         return next;
       });
     } finally {
@@ -221,7 +232,7 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
         )}
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 16, paddingBottom: 110, paddingTop: 8 }}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: Platform.OS === "ios" ? 34 : 16, paddingTop: 8 }}>
         <LiquidGlassShell style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24 }}>
           <TextInput
             value={input} onChangeText={setInput}
@@ -240,17 +251,20 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
             </Pressable>
           ) : (
             <Pressable
-              onPressIn={voice.start}
-              onPressOut={voice.stop}
+              onPress={voice.isRecording ? voice.stop : voice.start}
               disabled={voice.transcribing}
+              hitSlop={8}
               style={({ pressed }) => [{
                 width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
-                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.18)" : "rgba(91,79,62,0.07)",
+                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.22)" : "rgba(196,149,58,0.12)",
+                borderWidth: 1, borderColor: voice.isRecording ? "rgba(196,149,58,0.55)" : "rgba(196,149,58,0.3)",
                 transform: [{ scale: pressed ? 0.9 : 1 }],
               }]}>
-              {voice.isRecording
-                ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
-                : <Mic size={15} color={voice.transcribing ? C.placeholder : C.muted} />}
+              {voice.transcribing
+                ? <ActivityIndicator size="small" color={GOLD_DEEP} />
+                : voice.isRecording
+                  ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
+                  : <Mic size={15} color={GOLD_DEEP} />}
             </Pressable>
           )}
         </LiquidGlassShell>

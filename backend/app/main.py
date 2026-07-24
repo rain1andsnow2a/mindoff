@@ -96,6 +96,20 @@ async def _dream_scheduler():
             finally:
                 db.close()
 
+        # 做梦之后：夜间场景推荐（分析当天语音通话 → 信箱场景邀请）
+        from app.db import SessionLocal as _SessionLocal
+        from app.services.scene_recommend import run_scene_recommend_all
+
+        db = _SessionLocal()
+        try:
+            results = run_scene_recommend_all(db)
+            n = sum(1 for r in results if r.get("recommended"))
+            logger.info("[scheduler] scene recommend: %d recommended / %d users", n, len(results))
+        except Exception as e:
+            logger.error("[scheduler] scene recommend failed: %s", e)
+        finally:
+            db.close()
+
 
 async def _evening_letter_scheduler():
     """后台协程：每晚 21:30（东八区）由桌宠给每个用户写一封晚间来信。
@@ -160,6 +174,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MindOff Backend", version="0.3.0", lifespan=lifespan)
+
+# 静态文件：阶跃生图转存目录（/static/scene_images/xxx.png）
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from app.stepfun.image import SCENE_IMAGE_DIR, STATIC_DIR  # noqa: E402
+
+SCENE_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] or ["*"]
 app.add_middleware(

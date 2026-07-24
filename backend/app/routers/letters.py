@@ -143,3 +143,78 @@ def reply_letter(
         "conversation_id": conv.id,
         "reply": {"id": reply.id, "role": reply.role, "content": reply.content},
     }
+
+
+@router.post("/{letter_id}/accept-scene")
+def accept_scene_invite(
+    letter_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """接受场景邀请信：按信中场景种子生成 Scene，返回进场信息。
+
+    - 仅 type=scene_invite 可接受；
+    - 幂等：已接受过（attachment 里有 scene_id）直接返回同一场景；
+    - 生成成功后把 scene_id 回写进 attachment，并标记已读。
+    """
+    from app.graphs import theater
+    from app.models.scene import Scene
+
+    letter = _require_letter(db, user, letter_id)
+    if letter.type != "scene_invite":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "这封信不是场景邀请")
+
+    att = dict(letter.attachment or {})
+    seed = dict(att.get("seed") or {})
+    render_kind = att.get("render_kind") or "dynamic_image"
+    theater_id = att.get("theater_id")
+
+    # 幂等：已接受过 → 返回已有场景
+    existing_id = att.get("scene_id")
+    if existing_id is not None:
+        existing = db.get(Scene, existing_id)
+        if existing is not None and existing.user_id == user.id:
+            return {
+                "scene_id": existing.id,
+                "render_kind": render_kind,
+                "theater_id": theater_id,
+                "already_accepted": True,
+            }
+
+    people = seed.get("people")
+    people_text = "、".join(people) if isinstance(people, list) else (people or None)
+    opening = theater.generate_manual(
+        title=seed.get("title") or letter.title,
+        people=people_text,
+        place=seed.get("place") or None,
+        plot=seed.get("plot") or None,
+        intent=seed.get("intent") or None,
+    )
+
+    scene = Scene(
+        user_id=user.id,
+        title=opening["title"],
+        status="active",
+        source_fragment_id=None,
+        setting=opening["setting"],
+        beats=opening["beats"],
+        choices=opening["choices"],
+        history=[],
+        turn=0,
+    )
+    db.add(scene)
+    db.commit()
+    db.refresh(scene)
+
+    # 回写 scene_id（JSON 列需整体重新赋值才会脏检查）+ 标记已读
+    att["scene_id"] = scene.id
+    letter.attachment = att
+    letter.is_read = True
+    db.commit()
+
+    return {
+        "scene_id": scene.id,
+        "render_kind": render_kind,
+        "theater_id": theater_id,
+        "already_accepted": False,
+    }
