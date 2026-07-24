@@ -345,3 +345,7 @@ export async function sttOnce(
   }
   return data as { text: string; usage?: any };
 }
+
+/** 桌宠语音回复：文本 -> 阶跃 TTS，返回可播放的 {url}（失败时 url 为 null）。 */
+export const synthTts = (text: string, voice?: string) =>
+  post<{ url: string | null }>("/ai/tts", { text, voice });

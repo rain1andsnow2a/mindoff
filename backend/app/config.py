@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     step_realtime_model: str = "stepaudio-2.5-realtime"
     step_realtime_voice: str = "linjiajiejie"
     step_realtime_instructions: str = "你是 MindOff 的桌宠，温柔、不催促、不评判。"
+    # 桌宠语音回复（TTS）：step-tts-mini 快而省，音色「元气少女」偏可爱活泼
+    step_tts_model: str = "step-tts-mini"
+    step_tts_voice: str = "yuanqishaonv"
 
     # 数据库
     database_url: str = "sqlite:///./mindoff.db"

@@ -18,6 +18,7 @@ import {
   listCandidates, dismissCandidate, streamConfirmCandidate,
   getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, absUrl,
 } from "../api";
+import type { SSEEvent } from "../api";
 import type { TheaterSceneId } from "../theater";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -575,6 +576,12 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
   return (
     <View style={{ flex: 1 }}>
+      {/* 整屏一个纵向滚动：标题 + 轮播 + 列表一起滚，轮播不再固定遮挡下方内容 */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
         <Text style={{ fontSize: 26, fontWeight: "500", letterSpacing: -0.5, color: C.text }}>片场</Text>
         <Text style={{ fontSize: 13, marginTop: 4, color: C.muted }}>进入一个场景，试着说出不同的话。</Text>
@@ -613,7 +620,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+      <View style={{ paddingHorizontal: 20 }}>
         {/* 我的场景（后端） */}
         {myScenes.length > 0 && (
           <View style={{ marginBottom: 8 }}>
@@ -674,6 +681,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         )}
         <View style={{ height: 1, marginVertical: 24, backgroundColor: "rgba(91,79,62,0.08)" }} />
         <CreateSceneEntry onStart={() => setSubState("capturing")} />
+      </View>
       </ScrollView>
     </View>
   );
