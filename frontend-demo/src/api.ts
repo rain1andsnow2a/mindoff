@@ -25,6 +25,13 @@ export function wsUrl(path: string): string {
   return `${API_BASE.replace(/^http/, "ws")}${path}`;
 }
 
+/** 把后端下发的 /static 相对路径拼成可访问的绝对 URL；已是 http(s) 则原样返回。 */
+export function absUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export interface Tokens {
   access_token: string;
   refresh_token: string;

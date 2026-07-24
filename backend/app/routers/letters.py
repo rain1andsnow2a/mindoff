@@ -46,6 +46,51 @@ def _require_letter(db: Session, user: User, letter_id: int):
     return letter
 
 
+def _gen_scene_images(
+    *, title=None, people=None, place=None, plot=None, intent=None, setting=None,
+) -> tuple[str | None, list | None]:
+    """动态 galgame：并发生成背景图 + 角色立绘并转存本地。
+
+    生图失败（风控/网络/密钥缺失）不阻断接受流程：整体降级为无图
+    （返回 (None, None) 或立绘缺失时只留背景），前端用兜底渐变背景。
+    """
+    import asyncio
+    import logging
+
+    from app.graphs import theater
+    from app.stepfun.image import generate_and_store
+
+    log = logging.getLogger(__name__)
+    prompts = theater.generate_image_prompts(
+        title=title, people=people, place=place, plot=plot, intent=intent, setting=setting,
+    )
+
+    async def _both():
+        return await asyncio.gather(
+            generate_and_store(prompts["bg"], kind="bg"),
+            generate_and_store(prompts["sprite"], kind="sprite"),
+            return_exceptions=True,
+        )
+
+    try:
+        bg_res, sprite_res = asyncio.run(_both())
+    except Exception as e:  # noqa: BLE001
+        log.warning("[letters] scene image gen failed wholesale: %s", e)
+        return None, None
+
+    bg_image = bg_res if isinstance(bg_res, str) else None
+    if not isinstance(bg_res, str):
+        log.warning("[letters] bg image gen failed: %s", bg_res)
+
+    characters: list | None = None
+    if isinstance(sprite_res, str):
+        characters = [{"name": prompts["character_name"], "sprite_url": sprite_res}]
+    else:
+        log.warning("[letters] sprite image gen failed: %s", sprite_res)
+
+    return bg_image, characters
+
+
 @router.get("", response_model=list[LetterOut])
 def list_letters(
     type: str | None = Query(None, description="music|movie|book|greeting|relationship|scene_invite|weekly|reminder"),
@@ -176,8 +221,10 @@ def accept_scene_invite(
         if existing is not None and existing.user_id == user.id:
             return {
                 "scene_id": existing.id,
-                "render_kind": render_kind,
-                "theater_id": theater_id,
+                "render_kind": existing.render_kind or render_kind,
+                "theater_id": existing.theater_id or theater_id,
+                "bg_image": existing.bg_image,
+                "characters": existing.characters,
                 "already_accepted": True,
             }
 
@@ -191,6 +238,19 @@ def accept_scene_invite(
         intent=seed.get("intent") or None,
     )
 
+    # 动态 galgame：从 seed 生成背景 + 立绘（失败降级为无图，前端兜底渐变背景）
+    bg_image: str | None = None
+    characters: list | None = None
+    if render_kind == "dynamic_image":
+        bg_image, characters = _gen_scene_images(
+            title=seed.get("title") or letter.title,
+            people=people_text,
+            place=seed.get("place") or None,
+            plot=seed.get("plot") or None,
+            intent=seed.get("intent") or None,
+            setting=opening.get("setting"),
+        )
+
     scene = Scene(
         user_id=user.id,
         title=opening["title"],
@@ -201,6 +261,10 @@ def accept_scene_invite(
         choices=opening["choices"],
         history=[],
         turn=0,
+        render_kind=render_kind if render_kind in ("preset_3d", "dynamic_image") else "dynamic_image",
+        theater_id=theater_id,
+        bg_image=bg_image,
+        characters=characters,
     )
     db.add(scene)
     db.commit()
@@ -214,7 +278,9 @@ def accept_scene_invite(
 
     return {
         "scene_id": scene.id,
-        "render_kind": render_kind,
-        "theater_id": theater_id,
+        "render_kind": scene.render_kind,
+        "theater_id": scene.theater_id,
+        "bg_image": scene.bg_image,
+        "characters": scene.characters,
         "already_accepted": False,
     }

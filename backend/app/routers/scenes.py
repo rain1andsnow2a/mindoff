@@ -61,6 +61,12 @@ class SceneOut(BaseModel):
     source_fragment_id: int | None
     created_at: datetime
 
+    # 渲染层（DAY-209）：旧数据缺字段时按 preset_3d 兼容
+    render_kind: str = "preset_3d"
+    theater_id: str | None = None
+    bg_image: str | None = None
+    characters: list | None = None
+
     model_config = {"from_attributes": True}
 
 

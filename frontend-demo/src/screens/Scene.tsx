@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Easing, Pressable, ScrollView, Text, TextInput, View,
+  Animated, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronLeft, Mic, Play } from "lucide-react-native";
@@ -16,7 +16,7 @@ import { Scene3D } from "./Scene3D";
 import {
   listSceneTemplates, listScenes, streamCreateScene,
   listCandidates, dismissCandidate, streamConfirmCandidate,
-  getScene, streamSceneChoice, calibrateScene, settleScene,
+  getScene, streamSceneChoice, calibrateScene, settleScene, absUrl,
 } from "../api";
 import type { TheaterSceneId } from "../theater";
 
@@ -663,8 +663,8 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
 // ─── Character Artwork ───────────────────────────────────────────────────────
 
-function CharacterArtwork({ name, isSpeaking, isListening }: {
-  name: string; isSpeaking: boolean; isListening: boolean;
+function CharacterArtwork({ name, isSpeaking, isListening, spriteUrl }: {
+  name: string; isSpeaking: boolean; isListening: boolean; spriteUrl?: string | null;
 }) {
   const bounce = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -679,6 +679,29 @@ function CharacterArtwork({ name, isSpeaking, isListening }: {
       return () => loop.stop();
     }
   }, [isSpeaking, bounce]);
+
+  // 动态 galgame：有立绘则用图片替换首字母圆圈（保留呼吸浮动 + 说话动效）
+  if (spriteUrl) {
+    return (
+      <Animated.View style={{ alignItems: "center", transform: [{ translateY: bounce }] }}>
+        {isListening && (
+          <View style={{
+            position: "absolute", top: 20, width: 260, height: 260, borderRadius: 130,
+            backgroundColor: "rgba(246,231,168,0.18)",
+          }} />
+        )}
+        <Image source={{ uri: spriteUrl }} resizeMode="contain"
+          style={{ width: 300, height: 380 }} />
+        {isSpeaking && (
+          <View style={{ flexDirection: "row", gap: 3, marginTop: 6, alignItems: "flex-end", height: 14 }}>
+            {[1, 2, 3].map(j => (
+              <View key={j} style={{ width: 3, height: 4 + j * 3, backgroundColor: "rgba(255,255,255,0.75)", borderRadius: 1.5 }} />
+            ))}
+          </View>
+        )}
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View style={{ alignItems: "center", transform: [{ translateY: bounce }] }}>
@@ -710,10 +733,15 @@ function CharacterArtwork({ name, isSpeaking, isListening }: {
 
 interface SceneBeat { speaker: string; text: string; }
 interface SceneChoice { id: string; label: string; }
+interface SceneCharacter { name: string; sprite_url: string | null; }
 interface SceneDetail {
   id: number; title: string; status: string; setting: string;
   beats: SceneBeat[] | null; choices: SceneChoice[] | null;
   history: any[] | null; turn: number;
+  render_kind?: string | null;
+  theater_id?: string | null;
+  bg_image?: string | null;
+  characters?: SceneCharacter[] | null;
 }
 
 export function ScenePlay({ sceneId, theater, onEnd }: {
@@ -744,6 +772,12 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   const speakers = new Set((scene?.beats ?? []).map(b => b.speaker).filter(s => s && s !== "旁白"));
   const charName = speakers.size > 0 ? Array.from(speakers)[0] : (scene?.title ?? "TA");
+  const isDynamic = scene?.render_kind === "dynamic_image";
+  const bgImageUrl = isDynamic ? absUrl(scene?.bg_image) : null;
+  const spriteUrl = isDynamic ? absUrl(scene?.characters?.[0]?.sprite_url) : null;
+  const spriteCharName = scene?.characters?.[0]?.name;
+  // theater 优先用后端下发的 theater_id，其次 props，最后兜底 dining
+  const effectiveTheater = ((scene?.theater_id as TheaterSceneId | undefined) ?? theater ?? "dining");
   const sceneName = scene?.title ?? "片场";
   const latestBeat = scene?.beats?.[scene.beats.length - 1];
   const isStreaming = phase === "busy" && streamText.length > 0;
@@ -796,8 +830,20 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* 场景背景：theater 低多边形 3D 舞台（随内置场景切换） */}
-      <Scene3D sceneId={theater ?? "dining"} />
+      {/* 场景背景：动态 galgame 用背景图 / 无图兜底渐变，否则预置 3D 舞台 */}
+      {isDynamic && bgImageUrl ? (
+        <>
+          <Image source={{ uri: bgImageUrl }} resizeMode="cover"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          {/* 暗化遮罩：保证字幕/按钮文字可读 */}
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(20,14,10,0.28)" }} />
+        </>
+      ) : isDynamic ? (
+        <LinearGradient colors={["#2A1E14", "#3A2A1C", "#4A3626"]}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+      ) : (
+        <Scene3D sceneId={effectiveTheater} />
+      )}
 
       {/* Top bar */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, zIndex: 10 }}>
@@ -825,7 +871,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
       {/* Character（box-none：空白区手势穿透到底层 Scene3D，可拖动转视角；角色/按钮本身仍可点） */}
       <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: 10 }}>
-        <CharacterArtwork name={charName} isSpeaking={isSpeaking} isListening={false} />
+        <CharacterArtwork name={spriteCharName || charName} isSpeaking={isSpeaking} isListening={false} spriteUrl={spriteUrl} />
       </View>
 
       {/* 字幕 + 控制面板 */}
