@@ -4,6 +4,7 @@
  * Token 使用语义命名；素材色、图片蒙层和特殊场景色不放在这里。
  * 中文与拉丁文字均使用平台系统无衬线字体，因此不设置 fontFamily。
  */
+import { Platform } from "react-native";
 
 export const lightColors = {
   background: "#F7F2E8",
@@ -191,7 +192,7 @@ export const radii = {
   pill: 999,
 } as const;
 
-export const shadows = {
+const nativeShadows = {
   none: {
     shadowColor: "transparent",
     shadowOffset: { width: 0, height: 0 },
@@ -214,6 +215,21 @@ export const shadows = {
     elevation: 8,
   },
 } as const;
+
+const webShadows = {
+  none: {
+    boxShadow: "none",
+  },
+  soft: {
+    boxShadow: "0 4px 12px rgba(64,58,53,0.08)",
+  },
+  floating: {
+    boxShadow: "0 12px 28px rgba(64,58,53,0.14)",
+  },
+} as const;
+
+export const shadows =
+  Platform.OS === "web" ? webShadows : nativeShadows;
 
 export const zIndices = {
   background: -1,

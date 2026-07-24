@@ -3,9 +3,15 @@
  * 桌宠/设置/记忆已接 /api/v1；原型 mock 仅在离线或 dev bypass 时降级。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, SafeAreaView, StatusBar, Text, View } from "react-native";
-import { MistBackground, TabBar, Tab } from "./src/components";
-import { NightCtx, palette } from "./src/theme";
+import { Animated, StatusBar } from "react-native";
+import { MistBackground } from "./src/components";
+import {
+  AppShell,
+  DesignSystemPreview,
+  ToastSurface,
+  type AppTab,
+} from "./src/design-system";
+import { NightCtx } from "./src/theme";
 import {
   OnboardHow, OnboardPermission, OnboardPet, OnboardWelcome,
 } from "./src/screens/Onboarding";
@@ -34,6 +40,7 @@ const SCREEN_IDS = [
   "scene", "scene-play", "scene-end",
   "profile", "pet-change", "pet-handoff",
   "memory-list", "memory-review",
+  "design-system",
 ] as const;
 
 type Screen = (typeof SCREEN_IDS)[number];
@@ -90,7 +97,7 @@ const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_ty
 const FULL_SCREENS: Screen[] = [
   "chat", "voice-call", "sleep-dump", "processing", "receipt",
   "task-detail", "storage-detail", "scene-play", "scene-end",
-  "pet-change", "pet-handoff", "memory-list", "memory-review",
+  "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system",
 ];
 
 const PREFERENCE_DEFAULTS: Preferences = {
@@ -107,7 +114,7 @@ const PREFERENCE_DEFAULTS: Preferences = {
 export default function App() {
   const [screen, setScreen] = useState<Screen>(INITIAL_SCREEN);
   const [tokens, setTokens] = useState<Tokens | null>(DEV_BYPASS ? DEV_TOKENS : null);
-  const [tab, setTab] = useState<Tab>("companion");
+  const [tab, setTab] = useState<AppTab>("companion");
   const [night, setNight] = useState(false);
   const [pet, setPet] = useState<PetInfo>(DEFAULT_PET);
   const [presets, setPresets] = useState<PetInfo[]>([]);
@@ -291,16 +298,22 @@ export default function App() {
     }
   };
 
-  const C = palette(night);
   const isMainApp = !screen.startsWith("onboard");
   const showTabBar = isMainApp && !FULL_SCREENS.includes(screen);
 
   return (
     <NightCtx.Provider value={night}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: night ? "#1C1A20" : "#D8D2CA" }}>
-        <StatusBar barStyle={night ? "light-content" : "dark-content"} />
-        <View style={{ flex: 1, backgroundColor: C.bg, overflow: "hidden" }}>
-          <MistBackground />
+      <StatusBar barStyle={night ? "light-content" : "dark-content"} />
+      <AppShell
+        activeTab={tab}
+        background={<MistBackground />}
+        onTabChange={(nextTab) => {
+          setTab(nextTab);
+          go(nextTab as Screen);
+        }}
+        showNavigation={showTabBar}
+        toast={toast ? <ToastSurface message={toast} /> : undefined}
+      >
           {!tokens ? (
             <AuthScreen
               onAuthed={(t, m) => {
@@ -424,32 +437,15 @@ export default function App() {
             {screen === "memory-review" && (
               <MemoryReviewScreen onBack={() => { go("profile"); setTab("profile"); }} onToast={showToast} />
             )}
+            {screen === "design-system" && <DesignSystemPreview />}
           </Animated.View>
 
           <ModeSheet visible={showMode} onClose={() => setShowMode(false)}
             onSleepDump={() => { setDumpSeedText(""); setShowMode(false); go("sleep-dump"); }}
             onChat={(m) => { setChatSeedText(""); setChatMode(m); setShowMode(false); go("chat"); }} />
-
-          {/* In-frame toast */}
-          {toast && (
-            <View style={{
-              position: "absolute", bottom: 100, alignSelf: "center",
-              paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999,
-              backgroundColor: night ? "rgba(50,46,56,0.94)" : "rgba(255,252,245,0.92)",
-              borderWidth: 1,
-              borderColor: night ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)",
-            }}>
-              <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>{toast}</Text>
-            </View>
-          )}
-
-          {showTabBar && (
-            <TabBar active={tab} onChange={(t) => { setTab(t); go(t as Screen); }} />
-          )}
           </>
           )}
-        </View>
-      </SafeAreaView>
+      </AppShell>
     </NightCtx.Provider>
   );
 }

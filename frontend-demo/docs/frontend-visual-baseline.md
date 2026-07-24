@@ -42,6 +42,7 @@ Web 验收可以使用 `?screen=<screen-id>` 绕过登录并直达合法页面�
 | 伙伴交接 | `?screen=pet-handoff` |
 | 记忆列表 | `?screen=memory-list` |
 | 记忆回顾 | `?screen=memory-review` |
+| 设计系统预览（开发） | `?screen=design-system` |
 
 非法参数回归：
 
