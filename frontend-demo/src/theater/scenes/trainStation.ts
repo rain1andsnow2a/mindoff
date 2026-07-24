@@ -1,4 +1,4 @@
-/** 离开的路上 · 高铁站：白天的站台，白色高铁停靠，顶棚灯带（1:1 移植自 theater/src/scenes/trainStation.js） */
+/** 离开的路上 · 高铁站：白天的站台，白色高铁停靠，顶棚灯带 */
 import * as THREE from "three";
 import { createSkyDome } from "../utils";
 import { createFigure, createLuggage } from "../figure";

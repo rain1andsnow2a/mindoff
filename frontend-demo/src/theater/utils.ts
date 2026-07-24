@@ -1,5 +1,5 @@
 /**
- * theater 共享件（1:1 移植自 theater/src/utils.js，仅补充 TS 类型）：
+ * theater 共享工具件（TS 类型版）：
  * 星空/月亮/远山/树木/地面/木椅等低多边形通用组件，全部程序化建模。
  */
 import * as THREE from "three";

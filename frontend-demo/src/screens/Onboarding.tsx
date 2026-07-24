@@ -1,5 +1,5 @@
 /**
- * Onboarding 四屏（移植自 proto: OnboardWelcome/How/Pet/Permission）。
+ * Onboarding 四屏（Welcome/How/Pet/Permission）。
  */
 import React from "react";
 import { ScrollView, Text, View } from "react-native";

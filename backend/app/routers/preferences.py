@@ -6,6 +6,7 @@ PATCH /api/v1/preferences  部分修改（频率档位/开关/睡前提醒时间
 `proactive_enabled` 同步写入 TrustState（信任门控从那边读，requirements 6.5）。
 """
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -100,3 +101,26 @@ def patch_preferences(
         trust_service.set_proactive_enabled(db, user.id, patch["proactive_enabled"])
 
     return pref
+
+
+class LocationIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    city: str | None = None
+
+
+@router.post("/location")
+def report_location(
+    body: LocationIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """前端上报最近一次模糊位置（供天气/环境上下文）。只存最近一次，不存轨迹。"""
+    pref = _get_or_create(db, user.id)
+    pref.last_lat = body.lat
+    pref.last_lon = body.lon
+    if body.city:
+        pref.last_city = body.city
+    pref.location_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True, "city": pref.last_city}

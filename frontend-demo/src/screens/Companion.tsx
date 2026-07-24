@@ -1,5 +1,5 @@
 /**
- * 陪伴屏（移植自 proto: CompanionIdle / CompanionChat / ModeSheet）。
+ * 陪伴屏（CompanionIdle / CompanionChat / ModeSheet）。
  */
 import React, { useEffect, useRef, useState } from "react";
 import {

@@ -12,7 +12,7 @@
 再激活（api-design.md §2 没有 POST /pets，采用这个更简单的方式）；传整数则必须是
 我已拥有的桌宠。所有接口按登录用户隔离。
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -144,6 +144,17 @@ def activate_pet(
         return ActivateResponse(pet=pet, handoff=latest[0] if latest else None)
 
     store.set_active(user.id, pet)
+
+    # 去重守卫：60 秒内若已有相同 to_pet 的交接信，直接复用，避免并发/快速重复调
+    # LLM（StepFun RPM 低，多实例并发或 double-tap 很容易打爆限额）。
+    recent = HandoffStore(db).list_for_user(user.id, limit=1)
+    if recent:
+        last = recent[0]
+        age = datetime.now(timezone.utc) - (last.created_at.replace(tzinfo=timezone.utc)
+                                            if last.created_at.tzinfo is None else last.created_at)
+        if age < timedelta(seconds=60) and last.to_pet_id == pet.id:
+            return ActivateResponse(pet=pet, handoff=last)
+
     letter = compose_handoff_letter(
         db, user.id,
         from_pet_name=from_pet.name if from_pet else None,

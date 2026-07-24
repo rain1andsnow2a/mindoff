@@ -107,6 +107,33 @@ def _pet_prompt(db: Session, user_id: int, conv) -> str | None:
     return pet.system_prompt if pet else None
 
 
+def _env_context(db: Session, user_id: int) -> str | None:
+    """组装「此刻的环境」：时间段 + 城市 + 天气。best-effort，失败/无位置返回 None，绝不阻断对话。"""
+    try:
+        from datetime import timezone as _tz, timedelta as _td
+        now = datetime.now(_tz(_td(hours=8)))
+        h = now.hour
+        period = "凌晨" if h < 6 else "早上" if h < 11 else "中午" if h < 13 else "下午" if h < 18 else "晚上"
+        parts = [f"现在是 {now.month} 月 {now.day} 日{period} {h} 点左右"]
+        from sqlalchemy import select
+        from app.models.preference import UserPreference
+        pref = db.scalar(select(UserPreference).where(UserPreference.user_id == user_id))
+        if pref and pref.last_city:
+            parts.append(f"用户在{pref.last_city}")
+        if pref and pref.last_lat is not None and pref.last_lon is not None:
+            try:
+                from app.services.weather import weather_service
+                w = weather_service.get_current_weather(pref.last_lat, pref.last_lon)
+                cond, temp = w.get("condition"), w.get("temperature")
+                if cond:
+                    parts.append(f"天气{cond}" + (f"、气温 {temp}°C" if temp is not None else ""))
+            except Exception:  # noqa: BLE001  天气失败不阻断
+                pass
+        return "，".join(parts) + "。"
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ─── 会话 ────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=ConversationOut, status_code=status.HTTP_201_CREATED)
@@ -181,7 +208,8 @@ def send_message(
         history = store.history_as_dicts(conv_id)
         memory_context = _memory_context(db, user.id, body.text)
         pet_prompt = _pet_prompt(db, user.id, conv)
-        reply_text = run_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt)
+        env_context = _env_context(db, user.id)
+        reply_text = run_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt, env_context=env_context)
         reply = store.add_message(conv_id, role="assistant", content=reply_text)
         return {
             "conversation_id": conv_id,
@@ -197,9 +225,10 @@ def send_message(
             history = store.history_as_dicts(conv_id)
             memory_context = _memory_context(db2, user.id, body.text)
             pet_prompt = _pet_prompt(db2, user.id, conv)
+            env_context = _env_context(db2, user.id)
 
             parts: list[str] = []
-            for delta in stream_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt):
+            for delta in stream_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt, env_context=env_context):
                 parts.append(delta)
                 data = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"event: token\ndata: {data}\n\n"

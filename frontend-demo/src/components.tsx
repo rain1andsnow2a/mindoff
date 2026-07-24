@@ -1,5 +1,5 @@
 /**
- * MindOff RN 基础组件（移植自 mindoff-proto App.tsx）：
+ * MindOff RN 基础组件：
  * MistBackground / PetPlaceholder / GlassCard / 按钮组 / 气泡 / BottomSheet /
  * SafeHeader / TabBar / WarmDot / CreamRipple / LiquidGlassShell
  *

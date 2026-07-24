@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     step_tts_model: str = "step-tts-mini"
     step_tts_voice: str = "yuanqishaonv"
 
+    # 彩云天气（Caiyun v2.6，按经纬度查实时天气；key 只在服务端使用，绝不下发前端）
+    caiyun_app_key: str = ""
+    caiyun_app_secret: str = ""
+    caiyun_cache_minutes: int = 30
+
     # 数据库
     database_url: str = "sqlite:///./mindoff.db"
 

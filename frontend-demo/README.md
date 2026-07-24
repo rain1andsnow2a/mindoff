@@ -15,7 +15,7 @@ npm run web        # 浏览器预览
 ## 结构
 
 - `App.tsx` — 屏幕状态机（onboarding → 4 Tab + 全屏页），含 `?screen=xxx` web 直达钩子（验收用）
-- `src/theme.ts` — 白天/夜间双套色板（移植自 proto 的 NK/DAY_VARS）
+- `src/theme.ts` — 白天/夜间双套色板
 - `src/components.tsx` — 基础组件（雾背景/桌宠占位/玻璃卡/按钮/气泡/BottomSheet/TabBar…）
 - `src/screens/`
   - `Onboarding.tsx` — 欢迎/三种方式/选伙伴/授权

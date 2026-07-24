@@ -36,6 +36,7 @@ from app.routers import (
     stt,
     theater_ext,
     treasures,
+    weather,
 )
 
 settings = get_settings()
@@ -159,10 +160,36 @@ async def _weekly_report_scheduler():
             db.close()
 
 
+def _ensure_preference_location_columns() -> None:
+    """开发期轻量迁移：给已存在的 user_preferences 补地点列。
+
+    create_all 不会给「已存在的表」加列；这里用 SQLite ADD COLUMN 幂等补齐，
+    让重启后端即生效、不丢数据、无需手动跑 alembic。
+    """
+    from sqlalchemy import inspect, text
+    try:
+        insp = inspect(engine)
+        if "user_preferences" not in insp.get_table_names():
+            return
+        existing = {c["name"] for c in insp.get_columns("user_preferences")}
+        adds = {
+            "last_lat": "FLOAT", "last_lon": "FLOAT",
+            "last_city": "VARCHAR(60)", "location_updated_at": "DATETIME",
+        }
+        with engine.begin() as conn:
+            for name, typ in adds.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE user_preferences ADD COLUMN {name} {typ}"))
+                    logger.info("[migrate] user_preferences += %s", name)
+    except Exception as e:  # noqa: BLE001
+        logger.error("[migrate] ensure location columns failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时确保表存在（开发期；生产走 Alembic）
     Base.metadata.create_all(bind=engine)
+    _ensure_preference_location_columns()
     # 启动定时调度：做梦（0:00 UTC）+ 晚间来信（21:30 东八区）+ 周报（周日 20:00 东八区）
     dream_task = asyncio.create_task(_dream_scheduler())
     evening_task = asyncio.create_task(_evening_letter_scheduler())
@@ -248,6 +275,9 @@ app.include_router(reminders.router)
 
 # 调试：做梦 Agent 手动触发
 app.include_router(debug.router)
+
+# 业务层：天气（环境上下文，供对话/主动感知）
+app.include_router(weather.router)
 
 
 @app.get("/health")

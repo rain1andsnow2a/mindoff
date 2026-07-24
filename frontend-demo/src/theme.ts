@@ -1,5 +1,5 @@
 /**
- * MindOff RN 主题：白天/夜间双套色板（移植自 mindoff-proto App.tsx 的 NK/DAY_VARS）。
+ * MindOff RN 主题：白天/夜间双套色板。
  * 用法：const night = useNight(); const C = night ? NK : DAY;
  */
 import React, { createContext, useContext } from "react";

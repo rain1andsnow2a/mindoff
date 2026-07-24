@@ -1,5 +1,5 @@
 /**
- * MindOff RN — 主入口（移植自 mindoff-proto App.tsx 的屏幕状态机）。
+ * MindOff RN — 主入口（屏幕状态机）。
  * 桌宠/设置/记忆已接 /api/v1；原型 mock 仅在离线或 dev bypass 时降级。
  */
 import React, { useEffect, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import {
   loadTokens, setActivePet, Tokens, updatePreferences,
 } from "./src/api";
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
+import { reportCurrentLocation } from "./src/location";
 import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
 import { THEATER_SCENE_IDS } from "./src/theater";
@@ -112,6 +113,7 @@ export default function App() {
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [pendingPetId, setPendingPetId] = useState<number | string | null>(null);
   const [pendingPet, setPendingPet] = useState<PetInfo | null>(null);
+  const [changingPet, setChangingPet] = useState(false); // 防 double-tap / 并发切换
   const [handoffContent, setHandoffContent] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<typeof PREFERENCE_DEFAULTS>(PREFERENCE_DEFAULTS);
   const [showMode, setShowMode] = useState(false);
@@ -149,6 +151,7 @@ export default function App() {
     initNotifications().then(() => {
       if (alive) startLetterPolling();
     });
+    reportCurrentLocation();  // 登录后上报一次位置（供天气/环境上下文，best-effort）
     Promise.all([
       getActivePet().catch(() => null),
       getPreferences().catch(() => null),
@@ -226,7 +229,7 @@ export default function App() {
   };
 
   const handleOnboardPetDone = async (selectedId: number | string | null) => {
-    if (!selectedId) return;
+    if (!selectedId || changingPet) return;
     if (!tokens || DEV_BYPASS) {
       const fallback = presets.find((p) => p.id === selectedId) || DEFAULT_PET;
       setPet(fallback);
@@ -234,6 +237,7 @@ export default function App() {
       setTab("companion");
       return;
     }
+    setChangingPet(true);
     try {
       const res = await setActivePet(selectedId);
       const activated = res?.pet;
@@ -246,11 +250,13 @@ export default function App() {
       setTab("companion");
     } catch (e: any) {
       showToast(e?.message || "选宠失败");
+    } finally {
+      setChangingPet(false);
     }
   };
 
   const handlePetChange = async (petId: number | string | null) => {
-    if (petId == null) return;
+    if (petId == null || changingPet) return;
     const target = [...presets, ...ownedPets].find((p) => p.id === petId);
     if (!target) return;
     setPendingPetId(petId);
@@ -260,6 +266,7 @@ export default function App() {
       go("pet-handoff");
       return;
     }
+    setChangingPet(true);
     try {
       // petId 为预设 id（字符串）时后端会复用已拥有实例、没有才新建，避免重复
       const res = await setActivePet(petId);
@@ -275,6 +282,8 @@ export default function App() {
       go("pet-handoff");
     } catch (e: any) {
       showToast(e?.message || "切换失败");
+    } finally {
+      setChangingPet(false);
     }
   };
 

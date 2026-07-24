@@ -1,5 +1,5 @@
 /**
- * 我的模块（移植自 proto: ProfileScreen / PetChange / PetHandoff）。
+ * 我的模块（ProfileScreen / PetChange / PetHandoff）。
  * 设置接 /api/v1/preferences；记忆管理接 /api/v1/memories 与 /api/v1/memory-review。
  */
 import React, { useEffect, useRef, useState } from "react";

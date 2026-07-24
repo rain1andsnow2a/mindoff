@@ -6,7 +6,7 @@
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -36,6 +36,12 @@ class UserPreference(Base):
     font_size: Mapped[str] = mapped_column(String(10), nullable=False, default="标准")
     companion_tone: Mapped[str] = mapped_column(String(20), nullable=False, default="温和")
     reduce_transparency: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # 环境上下文：最近一次上报的模糊位置（供天气查询/环境感知，不存轨迹）
+    last_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_city: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

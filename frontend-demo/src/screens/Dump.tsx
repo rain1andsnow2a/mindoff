@@ -1,5 +1,5 @@
 /**
- * 睡前倾倒三屏（移植自 proto: SleepDump / ProcessingScreen / ReceiptScreen）。
+ * 睡前倾倒三屏（SleepDump / ProcessingScreen / ReceiptScreen）。
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, Text, TextInput, View } from "react-native";

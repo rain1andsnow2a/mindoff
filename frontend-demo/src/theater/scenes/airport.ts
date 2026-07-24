@@ -1,4 +1,4 @@
-/** 离开的路上 · 机场：候机厅，落地窗外是停机坪上的飞机（1:1 移植自 theater/src/scenes/airport.js） */
+/** 离开的路上 · 机场：候机厅，落地窗外是停机坪上的飞机 */
 import * as THREE from "three";
 import { createFigure, createLuggage } from "../figure";
 import type { TheaterScene } from "../types";

@@ -1,8 +1,8 @@
 /**
- * Scene3D：片场的 3D 舞台背景 + 手势轨道相机，挂载移植自 theater 项目的低多边形场景。
+ * Scene3D：片场的 3D 舞台背景 + 手势轨道相机，挂载低多边形场景。
  *
  * 与 theater（three.js + Vite）同一份视觉：
- * - 场景本体是纯 three.js 对象（src/theater/*，1:1 移植），通过 <primitive> 挂进 R3F；
+ * - 场景本体是纯 three.js 对象（src/theater/*），通过 <primitive> 挂进 R3F；
  * - 渲染器参数对齐 theater/src/main.js：PCFSoftShadowMap 阴影、sRGB 输出、
  *   ACESFilmicToneMapping（曝光 1.1）；
  * - 每帧驱动场景的 update(t)（火焰、海浪、热气、航行灯等动画）。

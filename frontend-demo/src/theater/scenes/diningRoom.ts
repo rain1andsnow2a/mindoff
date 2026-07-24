@@ -1,4 +1,4 @@
-/** 家中餐桌：暖光吊灯下，两个人物相对而坐（1:1 移植自 theater/src/scenes/diningRoom.js） */
+/** 家中餐桌：暖光吊灯下，两个人物相对而坐 */
 import * as THREE from "three";
 import { createChair } from "../utils";
 import { createFigure } from "../figure";

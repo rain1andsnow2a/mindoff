@@ -1,4 +1,4 @@
-/** 深夜通话 · 露营地：帐篷、篝火、松林、星空（1:1 移植自 theater/src/scenes/campsite.js） */
+/** 深夜通话 · 露营地：帐篷、篝火、松林、星空 */
 import * as THREE from "three";
 import { createSkyDome, createStars, createMoon, createMountains, createGround, createPineTree } from "../utils";
 import { createFigure } from "../figure";

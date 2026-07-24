@@ -342,6 +342,9 @@ export const clearMemories = () => del("/api/v1/memories");
 export const getMemoryReview = (q = "") => get(`/api/v1/memory-review${q}`);
 export const getPreferences = () => get("/api/v1/preferences");
 export const updatePreferences = (b: any) => patch("/api/v1/preferences", b);
+/** 上报最近一次模糊位置（供后端天气/环境上下文）。 */
+export const reportLocation = (lat: number, lon: number, city?: string) =>
+  post("/api/v1/preferences/location", { lat, lon, city });
 
 // ─── 语音 ────────────────────────────────────────────────────────────────
 /** 上传录音文件到 AI 网关 /ai/stt，返回 { text, usage }。 */

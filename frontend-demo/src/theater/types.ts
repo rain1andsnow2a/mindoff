@@ -1,5 +1,5 @@
 /**
- * theater 场景库公共类型（移植自 D:\bigproject\AdventureX\theater）。
+ * theater 场景库公共类型。
  * 每个场景模块导出 create(): TheaterScene —— 纯 three.js，无 DOM 依赖，
  * 因此可同时跑在 Web 与 expo-gl（@react-three/fiber/native）。
  */

@@ -1,5 +1,5 @@
 /**
- * theater 场景库（移植自 D:\bigproject\AdventureX\theater）。
+ * theater 场景库。
  * 每个场景为纯 three.js 构建：create() → { group, update(t), camera }，
  * 由 Scene3D.tsx 通过 R3F 的 <primitive> 挂载并逐帧驱动 update。
  */

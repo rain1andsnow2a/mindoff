@@ -21,6 +21,7 @@
     "expo-file-system": "~18.1.11",
     "expo-gl": "~15.1.7",
     "expo-linear-gradient": "~14.1.5",
+    "expo-location": "~18.1.6",
     "expo-notifications": "~0.31.0",
     "expo-speech": "~13.1.7",
     "expo-status-bar": "~2.2.3",
