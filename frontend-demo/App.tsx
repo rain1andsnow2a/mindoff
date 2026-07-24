@@ -27,13 +27,20 @@ import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
 import { THEATER_SCENE_IDS } from "./src/theater";
 
-type Screen =
-  | "onboard-1" | "onboard-2" | "onboard-3" | "onboard-4"
-  | "companion" | "chat" | "voice-call" | "sleep-dump" | "processing" | "receipt"
-  | "mailbox" | "task-detail" | "storage-detail"
-  | "scene" | "scene-play" | "scene-end"
-  | "profile" | "pet-change" | "pet-handoff"
-  | "memory-list" | "memory-review";
+const SCREEN_IDS = [
+  "onboard-1", "onboard-2", "onboard-3", "onboard-4",
+  "companion", "chat", "voice-call", "sleep-dump", "processing", "receipt",
+  "mailbox", "task-detail", "storage-detail",
+  "scene", "scene-play", "scene-end",
+  "profile", "pet-change", "pet-handoff",
+  "memory-list", "memory-review",
+] as const;
+
+type Screen = (typeof SCREEN_IDS)[number];
+
+function isScreen(value: string | null): value is Screen {
+  return value !== null && (SCREEN_IDS as readonly string[]).includes(value);
+}
 
 type PetInfo = {
   id: number;
@@ -67,20 +74,17 @@ function petFromOwned(p: any): PetInfo {
   return { id: p.id as number, presetId: presetId || null, name: p.name, emoji, summary };
 }
 
-// 开发/验收钩子：web 下可用 ?screen=xxx 直达某屏（原生无 window，自动跳过）
-const INITIAL_SCREEN: Screen = (() => {
-  if (typeof window !== "undefined" && window.location?.search) {
-    const m = new URLSearchParams(window.location.search).get("screen");
-    if (m) return m as Screen;
-  }
-  return "onboard-1";
+// 开发/验收钩子：web 下可用合法的 ?screen=xxx 直达某屏（原生自动跳过）。
+const DEV_SCREEN: Screen | null = (() => {
+  if (typeof window === "undefined" || !window.location?.search) return null;
+  const value = new URLSearchParams(window.location.search).get("screen");
+  return isScreen(value) ? value : null;
 })();
 
-// web 下带 ?screen= 参数时，跳过登录直达该屏（方便验收其它屏，无需后端）
-const DEV_BYPASS =
-  typeof window !== "undefined" &&
-  !!window.location?.search &&
-  new URLSearchParams(window.location.search).has("screen");
+const INITIAL_SCREEN: Screen = DEV_SCREEN ?? "onboard-1";
+
+// 只有合法页面 ID 才跳过登录，非法参数不能绕过认证。
+const DEV_BYPASS = DEV_SCREEN !== null;
 const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_type: "bearer" };
 
 const FULL_SCREENS: Screen[] = [

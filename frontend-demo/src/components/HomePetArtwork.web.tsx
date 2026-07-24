@@ -60,7 +60,9 @@ export function HomePetArtwork({
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [grooming, setGrooming] = useState(false);
   const frameSize = size * 1.42;
-  const spriteUri = Image.resolveAssetSource(MIRO_GROOM_SPRITE).uri;
+  // React Native Web 不提供 Image.resolveAssetSource；Expo Asset 负责把
+  // Metro 的静态模块 ID 解析为浏览器可加载的 URI。
+  const spriteUri = Asset.fromModule(MIRO_GROOM_SPRITE).uri;
 
   const clearIdleTimer = () => {
     if (idleTimer.current) {
