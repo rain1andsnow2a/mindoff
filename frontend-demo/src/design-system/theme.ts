@@ -1,27 +1,33 @@
 /**
  * MindOff 主题的唯一实现入口。
  *
- * 阶段 0 保持现有色值不变，只建立稳定的新主题 API。
- * 新视觉色板将在后续设计基础阶段通过同一语义接口迁移。
+ * 新代码使用语义化 Theme；旧页面继续通过文件底部的兼容 API 迁移。
  */
-import React, { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
+import {
+  darkColors,
+  lightColors,
+  motion,
+  radii,
+  shadows,
+  spacing,
+  typography,
+  zIndices,
+  type ColorTokens,
+} from "./tokens";
 
 export type ThemeMode = "light" | "dark";
 
 export type Theme = {
   mode: ThemeMode;
   isNight: boolean;
-  colors: {
-    background: string;
-    surface: string;
-    border: string;
-    divider: string;
-    textPrimary: string;
-    textSecondary: string;
-    textMuted: string;
-    placeholder: string;
-    accent: string;
-  };
+  colors: ColorTokens;
+  typography: typeof typography;
+  spacing: typeof spacing;
+  radii: typeof radii;
+  shadows: typeof shadows;
+  motion: typeof motion;
+  zIndices: typeof zIndices;
 };
 
 export const NightCtx = createContext(false);
@@ -119,28 +125,32 @@ export function palette(night: boolean) {
       };
 }
 
+const sharedThemeTokens = {
+  typography,
+  spacing,
+  radii,
+  shadows,
+  motion,
+  zIndices,
+} as const;
+
+export const lightTheme: Theme = {
+  mode: "light",
+  isNight: false,
+  colors: lightColors,
+  ...sharedThemeTokens,
+};
+
+export const darkTheme: Theme = {
+  mode: "dark",
+  isNight: true,
+  colors: darkColors,
+  ...sharedThemeTokens,
+};
+
 /** 新代码使用的唯一主题 Hook。 */
 export function useTheme(): Theme {
-  const isNight = useNight();
-
-  return useMemo(() => {
-    const legacy = palette(isNight);
-    return {
-      mode: isNight ? "dark" : "light",
-      isNight,
-      colors: {
-        background: legacy.bg,
-        surface: legacy.cardBg,
-        border: legacy.glassBorder,
-        divider: legacy.divider,
-        textPrimary: legacy.text,
-        textSecondary: legacy.text2,
-        textMuted: legacy.text3,
-        placeholder: legacy.placeholder,
-        accent: isNight ? NK.gold : GOLD_DEEP,
-      },
-    };
-  }, [isNight]);
+  return useNight() ? darkTheme : lightTheme;
 }
 
 /** 迁移期旧组件常量。 */
