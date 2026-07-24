@@ -648,7 +648,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
           {templates.map((_, i) => (
             <View key={i} style={{
               width: activeIdx === i ? 16 : 6, height: 6, borderRadius: 3,
-              backgroundColor: activeIdx === i ? theme.colors.accent : theme.colors.border,
+              backgroundColor: activeIdx === i ? theme.colors.accentSurface : theme.colors.border,
             }} />
           ))}
         </View>
@@ -977,8 +977,8 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
                     onSubmitEditing={handleCustom} returnKeyType="send"
                     style={{ flex: 1, fontSize: 14, color: "#484145", paddingVertical: 6 }} />
                   <Pressable onPress={handleCustom}
-                    style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent }}>
-                    <Send size={15} color="#FFFFFF" />
+                    style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSurface }}>
+                    <Send size={15} color={theme.colors.textOnAccent} />
                   </Pressable>
                 </View>
               )}

@@ -42,7 +42,7 @@ function NavigationItem({
   const [hovered, setHovered] = useState(false);
   const selectedBackground = theme.isNight
     ? "rgba(232, 211, 139, 0.20)"
-    : "rgba(246, 225, 143, 0.48)";
+    : theme.colors.accentSoft;
   const selectedForeground = theme.isNight ? "#E8D38B" : "#6E5A28";
   const selectedBorder = theme.isNight
     ? "rgba(232, 211, 139, 0.24)"

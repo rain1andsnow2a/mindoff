@@ -278,7 +278,7 @@ export function VoiceCall({ onEnd, petEmoji, petName }: VoiceCallProps) {
             justifyContent: "center",
             alignItems: voiceReply ? "flex-end" : "flex-start",
             backgroundColor: voiceReply
-              ? theme.colors.accent
+              ? theme.colors.accentSurface
               : theme.colors.disabledSurface,
           }}
         >

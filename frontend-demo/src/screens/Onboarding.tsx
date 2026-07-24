@@ -52,7 +52,7 @@ function StepIndicator({ step }: { step: number }) {
               height: 7,
               borderRadius: 4,
               backgroundColor:
-                item <= step ? theme.colors.accent : theme.colors.border,
+                item <= step ? theme.colors.accentSurface : theme.colors.border,
             }}
           />
         ))}
@@ -507,11 +507,11 @@ export function OnboardPet({
                       ? theme.colors.accent
                       : theme.colors.border,
                     backgroundColor: selected
-                      ? theme.colors.accent
+                      ? theme.colors.accentSurface
                       : "transparent",
                   }}
                 >
-                  {selected ? <Check color="#FFFFFF" size={14} /> : null}
+                  {selected ? <Check color={theme.colors.textOnAccent} size={14} /> : null}
                 </View>
               </View>
             </Pressable>

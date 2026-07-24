@@ -276,7 +276,7 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
               <Text style={{ fontSize: 13, marginTop: 2, color: C.text2 }}>{p.summary ?? "陪伴伙伴"}</Text>
             </View>
             {sel === i && (
-              <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent }}>
+              <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSurface }}>
                 <Text style={{ fontSize: 10, color: theme.colors.textOnAccent }}>✓</Text>
               </View>
             )}

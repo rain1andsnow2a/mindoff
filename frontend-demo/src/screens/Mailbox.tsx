@@ -516,8 +516,8 @@ function KeepsakeDetail({ item, onClose, onRemove }: {
             </Pressable>
           )}
           {item.type === "scene" && (
-            <Pressable style={{ paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(243,218,202,0.65)" }}>
-              <Text style={{ fontSize: 14, color: "#484145" }}>再次体验场景</Text>
+            <Pressable style={{ paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,225,143,0.72)" }}>
+              <Text style={{ fontSize: 14, color: "#6E5A28" }}>再次体验场景</Text>
             </Pressable>
           )}
           {item.type === "music" && (
@@ -810,12 +810,12 @@ function SceneInviteCard({ attachment, onEnter, entering }: {
           style={({ pressed }) => [{
             flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
             paddingVertical: 12, borderRadius: 999,
-            backgroundColor: entering ? "rgba(243,218,202,0.4)" : "rgba(243,218,202,0.8)",
+            backgroundColor: entering ? "rgba(246,225,143,0.4)" : "rgba(246,225,143,0.82)",
             borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
             transform: [{ scale: pressed ? 0.97 : 1 }],
           }]}>
-          <Play size={12} color="#4D4249" />
-          <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>
+          <Play size={12} color="#6E5A28" />
+          <Text style={{ fontSize: 14, fontWeight: "500", color: "#6E5A28" }}>
             {entering ? "正在布置场景…" : "进入场景"}
           </Text>
         </Pressable>
@@ -1242,7 +1242,7 @@ export function TaskDetail({ onBack }: { onBack: () => void }) {
           })}>
           <View style={{
             width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center",
-            backgroundColor: done ? theme.colors.accent : "transparent",
+            backgroundColor: done ? theme.colors.accentSurface : "transparent",
             borderWidth: 2, borderColor: done ? theme.colors.accent : theme.colors.border,
           }}>
             {done && <Check size={12} color={theme.colors.textOnAccent} />}

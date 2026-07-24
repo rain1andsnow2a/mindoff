@@ -42,7 +42,7 @@ export function Button({
     if (inactive) return theme.colors.disabledSurface;
     if (variant === "primary") {
       if (hovered) return theme.colors.accentHover;
-      return theme.colors.accent;
+      return theme.colors.accentSurface;
     }
     if (variant === "danger") return theme.colors.error;
     if (variant === "secondary") {
@@ -53,9 +53,11 @@ export function Button({
 
   const foregroundColor = inactive
     ? theme.colors.disabledText
-    : variant === "primary" || variant === "danger"
-      ? theme.colors.textOnAccent
-      : theme.colors.textPrimary;
+    : variant === "danger"
+      ? theme.colors.textOnDanger
+      : variant === "primary"
+        ? theme.colors.textOnAccent
+        : theme.colors.textPrimary;
 
   return (
     <Pressable
