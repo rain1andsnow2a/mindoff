@@ -35,3 +35,9 @@ export {
   ResponsiveOverlay,
   ToastSurface,
 } from "./overlays";
+
+export {
+  CompanionAvatar,
+  MessageBubble,
+  StatusDot,
+} from "./business";

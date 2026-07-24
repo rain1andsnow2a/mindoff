@@ -1,16 +1,28 @@
 /**
- * 实时语音通话页（桌宠·文字回复）。
- *
- * 进屏即接通：麦克风流式转写（服务端 VAD 自动断句），桌宠逐字文字回复。
- * 仅真机 Android 可用；不可用时给出提示并允许退出。
+ * 实时语音通话页（桌宠文字或语音回复）。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Animated,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { PhoneOff } from "lucide-react-native";
+import { PhoneOff, Volume2 } from "lucide-react-native";
 
-import { AgentBubble, PetPlaceholder, UserBubble, WarmDot } from "../components";
-import { palette, useNight } from "../theme";
+import {
+  Card,
+  CompanionAvatar,
+  MessageBubble,
+  PageContainer,
+  StatusDot,
+  useReducedMotion,
+  useResponsive,
+  useTheme,
+} from "../design-system";
 import { useRealtimeCall, type CallStatus } from "../useRealtimeCall";
 
 function statusLabel(status: CallStatus, error: string | null): string {
@@ -31,42 +43,52 @@ function statusLabel(status: CallStatus, error: string | null): string {
   }
 }
 
-export function VoiceCall({ petName, petEmoji, onEnd }: {
-  petName: string; petEmoji: string; onEnd: () => void;
-}) {
-  const night = useNight();
-  const C = palette(night);
+type VoiceCallProps = {
+  onEnd: () => void;
+  petEmoji: string;
+  petName: string;
+};
+
+export function VoiceCall({ onEnd, petEmoji, petName }: VoiceCallProps) {
+  const theme = useTheme();
+  const { isCompact, isExpanded } = useResponsive();
+  const reducedMotion = useReducedMotion();
   const [voiceReply, setVoiceReply] = useState(false);
   const call = useRealtimeCall(voiceReply);
   const scrollRef = useRef<ScrollView>(null);
   const ring = useRef(new Animated.Value(1)).current;
 
-  // 进屏接通、离屏挂断（仅执行一次）
   useEffect(() => {
     call.start();
     return () => call.stop();
+    // 通话对象内部方法会随状态更新；这里只在进屏时接通一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 麦克风音量驱动光环律动
   useEffect(() => {
+    if (reducedMotion) {
+      ring.setValue(1);
+      return;
+    }
     Animated.timing(ring, {
-      toValue: 1 + Math.min(call.level, 1) * 0.55,
       duration: 120,
-      useNativeDriver: true,
+      toValue: 1 + Math.min(call.level, 1) * 0.45,
+      useNativeDriver: Platform.OS !== "web",
     }).start();
-  }, [call.level, ring]);
+  }, [call.level, reducedMotion, ring]);
 
-  // 语音回复开关：本地记忆，下次进入沿用
   useEffect(() => {
-    AsyncStorage.getItem("mindoff.voiceReply").then((v) => {
-      if (v === "1") setVoiceReply(true);
+    AsyncStorage.getItem("mindoff.voiceReply").then((value) => {
+      if (value === "1") setVoiceReply(true);
     });
   }, []);
+
   const toggleVoice = () => {
-    setVoiceReply((prev) => {
-      const next = !prev;
-      AsyncStorage.setItem("mindoff.voiceReply", next ? "1" : "0").catch(() => {});
+    setVoiceReply((previous) => {
+      const next = !previous;
+      AsyncStorage.setItem("mindoff.voiceReply", next ? "1" : "0").catch(
+        () => {},
+      );
       return next;
     });
   };
@@ -76,100 +98,264 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
     onEnd();
   };
 
-  const listening = call.status === "listening";
-
-  return (
-    <View style={{ flex: 1, paddingTop: 56 }}>
-      {/* 顶部：桌宠名 + 通话状态 */}
-      <View style={{ alignItems: "center", paddingHorizontal: 24 }}>
-        <Text style={{ fontSize: 17, fontWeight: "500", color: C.text }}>{petName}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-          {listening && <WarmDot />}
-          <Text style={{ fontSize: 13, color: C.text2 }}>{statusLabel(call.status, call.error)}</Text>
+  const callStage = (
+    <View
+      style={{
+        flex: isExpanded ? undefined : 1.2,
+        width: isExpanded ? 360 : "100%",
+        minHeight: isExpanded ? 560 : undefined,
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: theme.spacing[6],
+      }}
+    >
+      <View style={{ alignItems: "center", maxWidth: 320 }}>
+        <Text
+          style={[
+            theme.typography.textStyles.sectionTitle,
+            { color: theme.colors.textPrimary },
+          ]}
+        >
+          {petName}
+        </Text>
+        <View style={{ marginTop: theme.spacing[1] }}>
+          <StatusDot
+            color={
+              call.status === "error"
+                ? theme.colors.error
+                : call.status === "ended"
+                  ? theme.colors.textMuted
+                  : theme.colors.success
+            }
+            label={statusLabel(call.status, call.error)}
+          />
         </View>
       </View>
 
-      {/* 中部：桌宠 + 音量律动光环 */}
-      <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 24 }}>
+      <View
+        style={{
+          width: isCompact ? 184 : 260,
+          height: isCompact ? 184 : 260,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <Animated.View
           style={{
             position: "absolute",
-            width: 240, height: 240, borderRadius: 120,
-            backgroundColor: "rgba(246,231,168,0.35)",
+            width: isCompact ? 154 : 210,
+            height: isCompact ? 154 : 210,
+            borderRadius: isCompact ? 77 : 105,
+            backgroundColor: theme.colors.accentSoft,
+            opacity: 0.72,
             transform: [{ scale: ring }],
           }}
         />
-        <PetPlaceholder size={180} emoji={petEmoji} />
+        <CompanionAvatar emoji={petEmoji} size={isCompact ? 116 : 158} />
       </View>
 
-      {/* 正在说：未定稿的用户转写 */}
       {call.liveUser ? (
-        <View style={{ alignItems: "center", paddingHorizontal: 32, marginBottom: 4 }}>
-          <Text style={{ fontSize: 14, color: C.muted, fontStyle: "italic" }} numberOfLines={2}>
-            “{call.liveUser}”
-          </Text>
-        </View>
-      ) : null}
-
-      {/* 桌宠语音回复开关（方向 D · 带说明的开关行） */}
-      <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
-        <Pressable
-          onPress={toggleVoice}
-          style={{
-            flexDirection: "row", alignItems: "center", gap: 10,
-            paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16,
-            backgroundColor: "rgba(255,252,245,0.78)",
-            borderWidth: 1, borderColor: "rgba(255,255,255,0.6)",
-          }}
+        <Text
+          numberOfLines={3}
+          style={[
+            theme.typography.textStyles.body,
+            {
+              maxWidth: 320,
+              paddingHorizontal: theme.spacing[4],
+              textAlign: "center",
+              color: theme.colors.textSecondary,
+              fontStyle: "italic",
+            },
+          ]}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, color: C.text }}>桌宠语音回复</Text>
-            <Text style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
-              开启后{petName}会出声，也保留字幕
-            </Text>
-          </View>
-          <View
-            style={{
-              width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center",
-              backgroundColor: voiceReply ? "rgba(196,149,58,0.9)" : "rgba(120,110,100,0.28)",
-              alignItems: voiceReply ? "flex-end" : "flex-start",
-            }}
-          >
-            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#FFF" }} />
-          </View>
-        </Pressable>
-      </View>
+          “{call.liveUser}”
+        </Text>
+      ) : (
+        <Text
+          style={[
+            theme.typography.textStyles.caption,
+            { color: theme.colors.textMuted },
+          ]}
+        >
+          你可以自然地说，我会在停顿时回应
+        </Text>
+      )}
 
-      {/* 对话流：用户整句 + 桌宠回复 */}
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12 }}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-      >
-        {call.turns.map((t) =>
-          t.role === "pet"
-            ? <AgentBubble key={t.id} text={t.text || "…"} emoji={petEmoji} />
-            : <UserBubble key={t.id} text={t.text} />
-        )}
-      </ScrollView>
-
-      {/* 底部：挂断 */}
-      <View style={{ alignItems: "center", paddingBottom: 40, paddingTop: 8 }}>
+      <View style={{ alignItems: "center" }}>
         <Pressable
+          accessibilityLabel="挂断通话"
+          accessibilityRole="button"
           onPress={hangup}
-          style={({ pressed }) => [{
-            width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center",
-            backgroundColor: "rgba(214,90,90,0.92)",
-            transform: [{ scale: pressed ? 0.92 : 1 }],
-          }]}
+          style={({ pressed }) => ({
+            width: isCompact ? 56 : 64,
+            height: isCompact ? 56 : 64,
+            borderRadius: isCompact ? 28 : 32,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.colors.error,
+            opacity: pressed ? 0.85 : 1,
+            transform: [{ scale: pressed ? 0.94 : 1 }],
+            ...theme.shadows.soft,
+          })}
         >
-          <PhoneOff size={26} color="#FFF" />
+          <PhoneOff color="#FFFFFF" size={26} />
         </Pressable>
-        <Text style={{ marginTop: 10, fontSize: 12, color: C.muted }}>
+        <Text
+          style={[
+            theme.typography.textStyles.caption,
+            { marginTop: theme.spacing[2], color: theme.colors.textMuted },
+          ]}
+        >
           {call.available ? "点击挂断" : "实时通话需在真机上使用"}
         </Text>
       </View>
     </View>
+  );
+
+  const conversation = (
+    <Card
+      style={{
+        flex: 1,
+        minHeight: isExpanded ? 560 : isCompact ? 180 : 240,
+        maxHeight: isExpanded ? 680 : isCompact ? 220 : undefined,
+        padding: 0,
+        overflow: "hidden",
+      }}
+    >
+      <Pressable
+        accessibilityLabel={`桌宠语音回复${voiceReply ? "已开启" : "已关闭"}`}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: voiceReply }}
+        onPress={toggleVoice}
+        style={({ pressed }) => ({
+          minHeight: 72,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.spacing[3],
+          paddingHorizontal: theme.spacing[5],
+          paddingVertical: theme.spacing[3],
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.divider,
+          opacity: pressed ? 0.8 : 1,
+        })}
+      >
+        <View
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: theme.radii.control,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.colors.accentSoft,
+          }}
+        >
+          <Volume2 color={theme.colors.accent} size={19} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[
+              theme.typography.textStyles.bodyStrong,
+              { color: theme.colors.textPrimary },
+            ]}
+          >
+            桌宠语音回复
+          </Text>
+          <Text
+            style={[
+              theme.typography.textStyles.caption,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            开启后{petName}会出声，也保留字幕
+          </Text>
+        </View>
+        <View
+          style={{
+            width: 44,
+            height: 26,
+            borderRadius: 13,
+            padding: 3,
+            justifyContent: "center",
+            alignItems: voiceReply ? "flex-end" : "flex-start",
+            backgroundColor: voiceReply
+              ? theme.colors.accent
+              : theme.colors.disabledSurface,
+          }}
+        >
+          <View
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: 10,
+              backgroundColor: theme.colors.surfaceElevated,
+              ...theme.shadows.soft,
+            }}
+          />
+        </View>
+      </Pressable>
+
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: call.turns.length ? "flex-start" : "center",
+          padding: theme.spacing[5],
+        }}
+        onContentSizeChange={() =>
+          scrollRef.current?.scrollToEnd({ animated: true })
+        }
+        ref={scrollRef}
+        style={{ flex: 1 }}
+      >
+        {call.turns.length ? (
+          call.turns.map((turn) => (
+            <MessageBubble
+              emoji={petEmoji}
+              key={turn.id}
+              pending={turn.role === "pet" && !turn.text}
+              text={turn.text || "•••"}
+              variant={turn.role === "pet" ? "agent" : "user"}
+            />
+          ))
+        ) : (
+          <View style={{ alignItems: "center" }}>
+            <Text
+              style={[
+                theme.typography.textStyles.body,
+                {
+                  maxWidth: 320,
+                  textAlign: "center",
+                  color: theme.colors.textMuted,
+                },
+              ]}
+            >
+              对话内容会安静地留在这里，方便你回看。
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </Card>
+  );
+
+  return (
+    <PageContainer
+      maxWidth={1040}
+      style={{
+        flex: 1,
+        paddingBottom: isCompact ? theme.spacing[4] : theme.spacing[8],
+        paddingTop: isCompact ? theme.spacing[2] : theme.spacing[6],
+      }}
+    >
+      <View
+        style={{
+          flex: 1,
+          flexDirection: isExpanded ? "row" : "column",
+          alignItems: "stretch",
+          gap: isExpanded ? theme.spacing[10] : theme.spacing[4],
+        }}
+      >
+        {callStage}
+        {conversation}
+      </View>
+    </PageContainer>
   );
 }
