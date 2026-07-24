@@ -63,7 +63,9 @@ const SESSION_UPDATE = {
           language: "zh",
           enable_itn: true,
         },
-        turn_detection: { type: "server_vad", silence_duration_ms: 800, threshold: 0.5 },
+        // server_vad：threshold 越高越不灵敏（需更清晰人声才触发，抗风声/背景噪音）；
+        // silence_duration_ms 为判定「说完了」所需的静音时长，略放长避免噪音频繁误触发断句。
+        turn_detection: { type: "server_vad", silence_duration_ms: 1000, threshold: 0.72 },
       },
     },
   },
