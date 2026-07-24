@@ -72,4 +72,6 @@ uv run python scripts/test_phase6.py     # 隐私/上下文/审阅（含 HTTP �
 - 不向用户输出心理诊断/人格标签/冰山层名；深层假设一律不确定措辞 + provenance。
 - vulnerable/core 记忆默认 privacy=local，外发（同步/外部 Provider）必须过
   `app/services/privacy.py` 的 `can_send_external`。
+- **检索纯本地、无向量库**（hermes 式架构）：召回 = 结构化分层 + 关键词/实体匹配，
+  做梦聚类 = 纯 entity 交集。私密内容没有任何外发路径。
 - 来信每天 ≤1–2 封；三日寄存到期真删。

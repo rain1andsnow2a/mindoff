@@ -22,6 +22,7 @@ from app.deps import get_current_user
 from app.graphs.companion import run_companion, stream_companion
 from app.models.conversation import ConversationMode
 from app.models.user import User
+from app.services.context_builder import build as build_memory_context
 from app.services.conversation_store import ConversationStore
 from app.services.memory_store import MemoryStore
 
@@ -83,6 +84,15 @@ def _require_conversation(db: Session, user: User, conv_id: int):
     if conv is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "会话不存在")
     return conv
+
+
+def _memory_context(db: Session, user_id: int, query: str) -> str | None:
+    """按当前输入召回记忆上下文（结构化 + 向量语义）。best-effort，无实际记忆则返回 None。"""
+    try:
+        ctx = build_memory_context(db, user_id, mode="full", query=query)
+    except Exception:  # noqa: BLE001  记忆上下文失败绝不阻断对话
+        return None
+    return ctx if "- [" in ctx else None  # 无记忆行时不注入空围栏
 
 
 # ─── 会话 ────────────────────────────────────────────────────────────────────
@@ -157,7 +167,8 @@ def send_message(
         store = ConversationStore(db)
         store.add_message(conv_id, role="user", content=body.text)
         history = store.history_as_dicts(conv_id)
-        reply_text = run_companion(mode, history, fragment_context)
+        memory_context = _memory_context(db, user.id, body.text)
+        reply_text = run_companion(mode, history, fragment_context, memory_context=memory_context)
         reply = store.add_message(conv_id, role="assistant", content=reply_text)
         return {
             "conversation_id": conv_id,
@@ -171,9 +182,10 @@ def send_message(
             store = ConversationStore(db2)
             store.add_message(conv_id, role="user", content=body.text)
             history = store.history_as_dicts(conv_id)
+            memory_context = _memory_context(db2, user.id, body.text)
 
             parts: list[str] = []
-            for delta in stream_companion(mode, history, fragment_context):
+            for delta in stream_companion(mode, history, fragment_context, memory_context=memory_context):
                 parts.append(delta)
                 data = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"event: token\ndata: {data}\n\n"

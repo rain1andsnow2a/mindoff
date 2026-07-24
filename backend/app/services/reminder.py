@@ -91,3 +91,46 @@ def get_reminders(db: Session, user_id: int, *, limit: int = 3) -> list[dict[str
     reminders.sort(key=lambda r: order.get(r["urgency"], 9))
 
     return reminders
+
+
+def _start_of_today() -> datetime:
+    """今天 00:00:00 UTC。"""
+    return _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def get_candidate_reminders(db: Session, user_id: int, *, limit: int = 3) -> list[dict[str, Any]]:
+    """候选片段次日提醒（§4.4：当晚静默入草稿箱，次日提醒确认）。
+
+    只提醒"往日"创建、仍待确认的候选片段（kind=片段、非原始倾倒 root、status 空/pending）。
+    尊重 proactive 开关。返回 [{memory_id, content, surface_text, type, created_at, message}]。
+    """
+    settings = get_settings()
+    if not settings.proactive_enabled:
+        return []
+    ts = get_or_create(db, user_id)
+    if not ts.proactive_enabled:
+        return []
+
+    sot = _start_of_today()
+    stmt = select(MemoryItem).where(
+        MemoryItem.user_id == user_id,
+        MemoryItem.kind == "片段",
+        MemoryItem.raw_ref == None,  # noqa: E711  排除原始倾倒 root
+        MemoryItem.is_latest == True,  # noqa: E712
+        MemoryItem.is_forgotten == False,  # noqa: E712
+        MemoryItem.created_at < sot,  # 次日：往日创建
+    )
+    items = list(db.scalars(stmt).all())
+    pending = [i for i in items if (i.status or "pending") in ("pending", "candidate")][:limit]
+
+    return [
+        {
+            "memory_id": i.id,
+            "content": i.content,
+            "surface_text": i.surface_text,
+            "type": "candidate",
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+            "message": f"前些天你提到的「{i.surface_text[:24]}」，要不要一起在片场回看看？",
+        }
+        for i in pending
+    ]

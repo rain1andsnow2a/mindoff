@@ -5,7 +5,7 @@
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -24,6 +24,12 @@ class RoleProfile(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     relation: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # 结构化设定（前端角色设定页：性格概述/说话方式/冲突反应/口头禅；与 notes 并存）
+    personality_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    speaking_style: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    conflict_response: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    traits: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

@@ -217,3 +217,6 @@
   纯字段更新用 `PATCH`。想统一成 `PATCH status` 可调。
 - 🔵 **对话与倾倒边界（我的默认）**：睡前倾倒是独立 `POST /brain-dumps`，也接受
   `conversationId` 把一段对话喂进来；两者并存不互斥。
+- ✅ **检索 = 纯本地无向量**（对齐 hermes-agent 架构）：已移除 RAG P2（DashScope embedding /
+  qwen3-rerank / Zilliz）。召回靠 context_builder 的结构化分层 + 关键词/实体匹配，
+  做梦聚类走纯 entity 交集——私密内容从此没有任何外发路径。

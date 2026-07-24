@@ -5,7 +5,7 @@
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -28,6 +28,9 @@ class Letter(Base):
     # 关联引用（裸 Integer + 不设 FK，与 handoff/pet 一致的先例）
     pet_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ref_memory_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # 附件卡（"信里夹了一首歌"：{label, title, artist, reason, ...}，可空）
+    attachment: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

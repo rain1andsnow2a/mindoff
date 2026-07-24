@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<!--
+  MindOff · 登录/注册 三方案（配色与 frontend-demo/src/theme.ts 对齐）
+  ────────────────────────────────────────────────────────────
+  取自 Figma 原型的设计系统（theme.ts + components.tsx）：
+    · 白天暖奶油底 #FFFBF3 / 夜间深梅炭 #292630（双色板）
+    · 玻璃拟态 GlassCard（半透明 + 白边 + backdrop blur）+ 漂移雾斑 MistBackground
+    · 主按钮奶黄药丸 rgba(246,231,168,0.92)，文字 #4B463F；金/桃/鼠尾草点缀
+    · 系统字 + 字重 500 + 紧字距（非衬线）；lucide 功能图标；桌宠=暖光占位
+  三个方向（同一套色，差异在气质/交互/布局）：
+    A 晨雾 · 白天玻璃卡（by-the-book，最稳）
+    B 夜语 · 夜间玻璃（睡前深色皮肤，情绪最贴合）
+    C 一句话进门 · 对话式底部玻璃面板（novel，桌宠先说话）
+  demo：仅用户名 + 密码，无验证码。三台可交互：打字/切换密码/登录⇄注册/提交进欢迎态。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MindOff · 登录注册 三方案（配色对齐）</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #ECE6DC;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #4B463F;
+    -webkit-font-smoothing: antialiased;
+  }
+  @keyframes riseIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @keyframes drift1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(14px,-16px); } }
+  @keyframes drift2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-12px,14px); } }
+  @keyframes softIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+  @keyframes sheetUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+  input.mo-in { font-family: inherit; font-size: 16px; border: none; outline: none; background: transparent; width: 100%; letter-spacing: -0.1px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, createContext, useContext } = React;
+
+/* ═══ 色板（对齐 theme.ts）═══════════════════════════════════════════════ */
+const CREAM = 'rgba(246,231,168,0.92)';
+const GOLD_DEEP = '#C4953A';
+const GOLD = '#D8BC76';
+
+const DAY = {
+  night: false,
+  bg: '#FFFBF3',
+  orbs: [
+    { c: '#F6E7A8', x: '6%', y: '-6%', s: 260 },
+    { c: '#F3D8C7', x: '60%', y: '58%', s: 280 },
+    { c: '#DDEDE3', x: '-6%', y: '46%', s: 220 },
+    { c: '#DFE7F5', x: '52%', y: '2%', s: 200 },
+    { c: '#E9E4F3', x: '70%', y: '20%', s: 190 },
+  ],
+  text: '#4B463F', text2: '#847D72', text3: '#C0B5A8', placeholder: '#C0B5A8',
+  glass: 'rgba(255,252,245,0.62)', glassBorder: 'rgba(255,255,255,0.55)',
+  cardBg: 'rgba(255,252,245,0.55)',
+  link: GOLD_DEEP, hint: '#B08A3C',
+  petHalo: 'rgba(246,231,168,0.32)', petInner: 'rgba(255,252,245,0.72)', petBorder: 'rgba(255,255,255,0.6)',
+  statusDark: false,
+};
+const NIGHT = {
+  night: true,
+  bg: '#292630',
+  orbs: [
+    { c: 'rgba(89,70,83,0.85)', x: '6%', y: '-6%', s: 280 },
+    { c: 'rgba(59,51,64,0.9)', x: '60%', y: '58%', s: 300 },
+    { c: 'rgba(50,46,56,0.92)', x: '-6%', y: '46%', s: 240 },
+    { c: 'rgba(69,58,72,0.8)', x: '52%', y: '4%', s: 220 },
+    { c: 'rgba(221,199,143,0.10)', x: '44%', y: '30%', s: 240 },
+  ],
+  text: '#F4EFEA', text2: '#C5BBC1', text3: '#A399A0', placeholder: '#978E95',
+  glass: 'rgba(255,248,244,0.08)', glassBorder: 'rgba(255,255,255,0.14)',
+  cardBg: 'rgba(59,51,64,0.55)',
+  link: GOLD, hint: GOLD,
+  petHalo: 'rgba(221,199,143,0.16)', petInner: 'rgba(59,51,64,0.5)', petBorder: 'rgba(255,255,255,0.12)',
+  statusDark: true,
+};
+
+const ThemeCtx = createContext(DAY);
+const useC = () => useContext(ThemeCtx);
+
+/* ═══ IosFrame（对齐 huashu assets/ios_frame.jsx，含 darkMode）═══════════ */
+const iosF = {
+  wrapper: { display: 'inline-block', padding: 12, background: '#000', borderRadius: 60, boxShadow: '0 0 0 2px #2a2320, 0 26px 66px rgba(70,50,35,0.24)', position: 'relative' },
+  screen: { position: 'relative', borderRadius: 48, overflow: 'hidden' },
+  statusBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', fontSize: 16, fontWeight: 600, zIndex: 20, pointerEvents: 'none' },
+  island: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', width: 124, height: 36, background: '#000', borderRadius: 999, zIndex: 30 },
+  icons: { display: 'flex', alignItems: 'center', gap: 6 },
+  sig: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 12 },
+  bar: { width: 3, background: 'currentColor', borderRadius: 1 },
+  batt: { width: 26, height: 12, border: '1.5px solid currentColor', borderRadius: 3, padding: 1, position: 'relative', opacity: 0.85 },
+  battCap: { position: 'absolute', top: 3, right: -3, width: 2, height: 6, background: 'currentColor', borderRadius: '0 1px 1px 0' },
+  content: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  home: { position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', width: 140, height: 5, borderRadius: 999, zIndex: 40 },
+};
+function IosFrame({ children, dark = false, screenBg = '#fff', time = '22:47', battery = 68 }) {
+  const tc = dark ? '#fff' : '#000';
+  return (
+    <div style={iosF.wrapper}>
+      <div style={{ ...iosF.screen, width: 393, height: 852, background: screenBg }}>
+        <div style={{ ...iosF.statusBar, color: tc }}>
+          <span>{time}</span>
+          <div style={iosF.icons}>
+            <div style={iosF.sig}>
+              <div style={{ ...iosF.bar, height: 4 }} /><div style={{ ...iosF.bar, height: 6 }} />
+              <div style={{ ...iosF.bar, height: 9 }} /><div style={{ ...iosF.bar, height: 11 }} />
+            </div>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" style={{ color: tc }}>
+              <path d="M8 11.5a1 1 0 100-2 1 1 0 000 2z" fill="currentColor" />
+              <path d="M3 7.5a7 7 0 0110 0" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+              <path d="M1 4.5a11 11 0 0114 0" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" opacity="0.7" />
+            </svg>
+            <div style={iosF.batt}><div style={{ width: `${battery}%`, height: '100%', background: 'currentColor', borderRadius: 1, opacity: 0.9 }} /><div style={iosF.battCap} /></div>
+          </div>
+        </div>
+        <div style={iosF.island} />
+        <div style={iosF.content}>{children}</div>
+        <div style={{ ...iosF.home, background: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.26)' }} />
+      </div>
+    </div>
+  );
+}
+
+/* ═══ lucide 图标 ════════════════════════════════════════════════════════ */
+const ICONS = {
+  user: ['M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', 'M12 7 m -4 0 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0'],
+  lock: ['M7 11V7a5 5 0 0 1 10 0v4', 'M5 11 h14 a2 2 0 0 1 2 2 v6 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 v-6 a2 2 0 0 1 2 -2 z'],
+  eye: ['M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z', 'M12 12 m -3 0 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0'],
+  eyeOff: ['M9.88 9.88a3 3 0 1 0 4.24 4.24', 'M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68', 'M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61', 'M2 2 20 20'],
+  arrow: ['M5 12h14', 'm12 5 7 7-7 7'],
+  moon: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
+  sun: ['M12 8 m -4 0 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0', 'M12 1v2', 'M12 21v2', 'M4.2 4.2l1.4 1.4', 'M18.4 18.4l1.4 1.4', 'M1 12h2', 'M21 12h2', 'M4.2 19.8l1.4-1.4', 'M18.4 5.6l1.4-1.4'],
+};
+function Icon({ name, size = 20, color = 'currentColor', sw = 1.75, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={style}>
+      {(ICONS[name] || []).map((p, i) => <path key={i} d={p} />)}
+    </svg>
+  );
+}
+
+/* ═══ 雾感背景 ═══════════════════════════════════════════════════════════ */
+function Mist() {
+  const C = useC();
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      {C.orbs.map((o, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: o.x, top: o.y, width: o.s, height: o.s, borderRadius: '50%',
+          background: o.c, filter: 'blur(48px)', opacity: C.night ? 0.9 : 0.65,
+          animation: `${i % 2 ? 'drift2' : 'drift1'} ${9 + i}s ease-in-out infinite`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+/* ═══ 桌宠暖光占位（对齐 PetPlaceholder，无 emoji）═══════════════════════ */
+function Pet({ size = 84, label = true }) {
+  const C = useC();
+  return (
+    <div style={{ position: 'relative', width: size * 1.5, height: size * 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'floaty 5.6s ease-in-out infinite' }}>
+      <div style={{ position: 'absolute', width: size * 1.5, height: size * 1.5, borderRadius: '50%', background: C.petHalo, filter: 'blur(6px)' }} />
+      <div style={{
+        width: size, height: size, borderRadius: '50%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', position: 'relative',
+        background: `radial-gradient(circle at 36% 32%, ${C.night ? 'rgba(221,199,143,0.35)' : 'rgba(255,255,255,0.9)'} 0%, ${C.petInner} 62%)`,
+        border: `1.5px solid ${C.petBorder}`,
+        boxShadow: C.night ? 'inset 3px 4px 12px rgba(255,255,255,0.06)' : 'inset 4px 5px 12px rgba(255,255,255,0.6), 0 8px 22px rgba(196,149,58,0.14)',
+      }}>
+        <div style={{ width: size * 0.2, height: size * 0.2, borderRadius: '50%', background: C.night ? 'rgba(216,188,118,0.6)' : 'rgba(196,149,58,0.55)', filter: 'blur(1px)' }} />
+        {label && <div style={{ fontSize: size * 0.1, color: C.text3, marginTop: size * 0.06, letterSpacing: '0.08em' }}>小栖</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ 玻璃输入行 ═════════════════════════════════════════════════════════ */
+function Field({ icon, label, value, onChange, placeholder, type = 'text', trailing, focused, onFocus, onBlur, flat }) {
+  const C = useC();
+  return (
+    <label style={{ display: 'block' }}>
+      {label && <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 7, letterSpacing: '0.02em' }}>{label}</div>}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 11,
+        background: C.glass, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+        border: `1.5px solid ${focused ? (C.night ? GOLD : GOLD_DEEP) : C.glassBorder}`,
+        boxShadow: focused ? `0 0 0 4px ${C.night ? 'rgba(216,188,118,0.16)' : 'rgba(196,149,58,0.14)'}` : 'none',
+        borderRadius: flat ? 16 : 18, padding: '14px 15px', transition: 'all .22s ease',
+      }}>
+        <Icon name={icon} size={18} color={focused ? (C.night ? GOLD : GOLD_DEEP) : C.text3} />
+        <input className="mo-in" style={{ color: C.text }} type={type} value={value} placeholder={placeholder}
+          onChange={e => onChange(e.target.value)} onFocus={onFocus} onBlur={onBlur} autoComplete="off" spellCheck={false} />
+        {trailing}
+      </div>
+    </label>
+  );
+}
+
+/* ═══ 奶黄药丸主按钮 ═════════════════════════════════════════════════════ */
+function PrimaryBtn({ children, onClick }) {
+  const [press, setPress] = useState(false);
+  return (
+    <button onClick={onClick} onMouseDown={() => setPress(true)} onMouseUp={() => setPress(false)} onMouseLeave={() => setPress(false)}
+      style={{
+        width: '100%', border: '1px solid rgba(255,255,255,0.5)', cursor: 'pointer',
+        background: CREAM, color: '#4B463F', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 500, letterSpacing: '0.02em',
+        padding: '15px', borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+        boxShadow: press ? '0 2px 8px rgba(196,149,58,0.22)' : '0 10px 24px rgba(196,149,58,0.22)',
+        transform: press ? 'translateY(1px)' : 'none', opacity: press ? 0.92 : 1, transition: 'all .16s ease',
+      }}>
+      {children}
+      <Icon name="arrow" size={17} color="#4B463F" sw={2} />
+    </button>
+  );
+}
+
+/* ═══ 表单内核（登录/注册共用）═══════════════════════════════════════════ */
+function useAuthForm(mode, onSubmit) {
+  const [username, setU] = useState('');
+  const [password, setP] = useState('');
+  const [showPw, setShow] = useState(false);
+  const [hint, setHint] = useState('');
+  const [focus, setFocus] = useState(null);
+  useEffect(() => { setU(''); setP(''); setHint(''); setShow(false); setFocus(null); }, [mode]);
+  const submit = () => {
+    if (!username.trim()) return setHint('先告诉我你的名字吧');
+    if (!password.trim()) return setHint('还差一句只有你知道的悄悄话');
+    setHint(''); onSubmit();
+  };
+  return { username, setU, password, setP, showPw, setShow, hint, setHint, focus, setFocus, submit };
+}
+
+function EyeBtn({ show, onToggle }) {
+  const C = useC();
+  return (
+    <button onClick={onToggle} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'flex' }} aria-label={show ? '隐藏密码' : '显示密码'}>
+      <Icon name={show ? 'eyeOff' : 'eye'} size={18} color={C.text3} />
+    </button>
+  );
+}
+
+/* ═══ 方案 A / B：玻璃卡（day / night 同结构，换皮）═══════════════════════ */
+function GlassAuth({ mode, onSwitch, onSubmit }) {
+  const C = useC();
+  const isLogin = mode === 'login';
+  const f = useAuthForm(mode, onSubmit);
+  return (
+    <div style={{ position: 'relative', height: '100%' }}>
+      <Mist />
+      <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', padding: '70px 26px 34px' }}>
+        {/* 品牌 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 26 }}>
+          <Pet size={54} label={false} />
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-0.4px', color: C.text }}>MindOff</div>
+            <div style={{ fontSize: 12, color: C.text3, marginTop: 4, letterSpacing: '0.04em' }}>陪你把心里的事，轻轻放下</div>
+          </div>
+          <div style={{ marginLeft: 'auto', opacity: 0.7 }}>
+            <Icon name={C.night ? 'moon' : 'sun'} size={17} color={C.text3} />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 27, fontWeight: 500, letterSpacing: '-0.6px', color: C.text, lineHeight: 1.25 }}>
+          {isLogin ? (C.night ? '晚上好，欢迎回来' : '欢迎回来') : '第一次见面'}
+        </div>
+        <div style={{ fontSize: 14, color: C.text2, marginTop: 9, lineHeight: 1.6 }}>
+          {isLogin ? '它一直在这儿，等你回来说说话。' : '给自己起个名字，我们慢慢认识。'}
+        </div>
+
+        {/* 玻璃卡 */}
+        <div style={{
+          marginTop: 22, padding: 18, borderRadius: 24,
+          background: C.cardBg, backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+          border: `1px solid ${C.glassBorder}`,
+          display: 'flex', flexDirection: 'column', gap: 14,
+        }}>
+          <Field icon="user" label="用户名" value={f.username} onChange={f.setU}
+            placeholder={isLogin ? '你的名字' : '想让我怎么称呼你'}
+            focused={f.focus === 'u'} onFocus={() => { f.setFocus('u'); f.setHint(''); }} onBlur={() => f.setFocus(null)} />
+          <Field icon="lock" label="密码" value={f.password} onChange={f.setP} placeholder="悄悄话，只有你知道"
+            type={f.showPw ? 'text' : 'password'}
+            focused={f.focus === 'p'} onFocus={() => { f.setFocus('p'); f.setHint(''); }} onBlur={() => f.setFocus(null)}
+            trailing={<EyeBtn show={f.showPw} onToggle={() => f.setShow(s => !s)} />} />
+        </div>
+
+        <div style={{ minHeight: 20, marginTop: 11, fontSize: 12.5, color: C.hint, opacity: f.hint ? 1 : 0, transition: 'opacity .2s' }}>{f.hint || '　'}</div>
+
+        <div style={{ flex: 1 }} />
+
+        <PrimaryBtn onClick={f.submit}>{isLogin ? '进来坐坐' : '开始吧'}</PrimaryBtn>
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: C.text2 }}>
+          {isLogin ? '还没有账号？' : '已经有账号了？'}
+          <span onClick={onSwitch} style={{ color: C.link, cursor: 'pointer', marginLeft: 6, fontWeight: 500 }}>{isLogin ? '创建一个' : '回来登录'}</span>
+        </div>
+        {!isLogin && <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: C.text3 }}>demo 版只需用户名与密码，无需验证码</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ 方案 C：对话式 · 底部玻璃面板 ═════════════════════════════════════ */
+function TalkAuth({ mode, onSwitch, onSubmit }) {
+  const C = useC();
+  const isLogin = mode === 'login';
+  const f = useAuthForm(mode, onSubmit);
+  const greet = isLogin ? '你回来啦。先跟我报个名字，好吗？' : '很高兴认识你。想让我怎么称呼你？';
+  return (
+    <div style={{ position: 'relative', height: '100%' }}>
+      <Mist />
+      <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* 上：桌宠 + 对话气泡 */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 28px 8px', gap: 18 }}>
+          <Pet size={104} />
+          <div style={{
+            maxWidth: 250, padding: '13px 17px', borderRadius: 20, borderBottomLeftRadius: 7,
+            background: 'rgba(255,252,245,0.78)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.5)', color: '#484145', fontSize: 15, lineHeight: 1.55, textAlign: 'center',
+          }}>{greet}</div>
+        </div>
+
+        {/* 下：玻璃面板（BottomSheet 意象）*/}
+        <div style={{
+          borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: '24px 26px 30px',
+          background: 'rgba(255,252,245,0.72)', backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
+          border: '1px solid rgba(255,255,255,0.55)', borderBottom: 'none',
+          boxShadow: '0 -12px 40px rgba(120,90,50,0.10)', animation: 'sheetUp .5s ease both',
+        }}>
+          <div style={{ width: 38, height: 4, borderRadius: 2, background: 'rgba(91,79,62,0.16)', margin: '0 auto 18px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field icon="user" flat value={f.username} onChange={f.setU}
+              placeholder={isLogin ? '你的名字' : '想让我怎么称呼你'}
+              focused={f.focus === 'u'} onFocus={() => { f.setFocus('u'); f.setHint(''); }} onBlur={() => f.setFocus(null)} />
+            <Field icon="lock" flat value={f.password} onChange={f.setP} placeholder="悄悄话，只有你知道"
+              type={f.showPw ? 'text' : 'password'}
+              focused={f.focus === 'p'} onFocus={() => { f.setFocus('p'); f.setHint(''); }} onBlur={() => f.setFocus(null)}
+              trailing={<EyeBtn show={f.showPw} onToggle={() => f.setShow(s => !s)} />} />
+          </div>
+          <div style={{ minHeight: 18, marginTop: 10, fontSize: 12.5, color: C.hint, opacity: f.hint ? 1 : 0, transition: 'opacity .2s', textAlign: 'center' }}>{f.hint || '　'}</div>
+          <div style={{ marginTop: 6 }}><PrimaryBtn onClick={f.submit}>{isLogin ? '进来坐坐' : '开始吧'}</PrimaryBtn></div>
+          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: C.text2 }}>
+            {isLogin ? '还没有账号？' : '已经有账号了？'}
+            <span onClick={onSwitch} style={{ color: C.link, cursor: 'pointer', marginLeft: 6, fontWeight: 500 }}>{isLogin ? '创建一个' : '回来登录'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ 欢迎态（各方案共用，随主题换皮）═══════════════════════════════════ */
+function Welcome({ fromRegister, onExit }) {
+  const C = useC();
+  return (
+    <div style={{ position: 'relative', height: '100%' }}>
+      <Mist />
+      <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '78px 28px 34px', textAlign: 'center', animation: 'softIn .5s ease both' }}>
+        <div style={{ marginTop: 20 }}><Pet size={120} /></div>
+        <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-0.5px', color: C.text, marginTop: 26 }}>
+          {fromRegister ? '很高兴认识你' : '你回来啦'}
+        </div>
+        <div style={{ fontSize: 14, color: C.text2, marginTop: 11, lineHeight: 1.7, maxWidth: 250, whiteSpace: 'pre-line' }}>
+          {fromRegister ? '往后的夜里，我都在。\n今晚，想先跟我说点什么吗？' : '今晚过得还好吗？\n有什么放不下的，都可以慢慢讲。'}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 11 }}>
+          <PrimaryBtn onClick={onExit}>进入睡前整理</PrimaryBtn>
+          <button onClick={onExit} style={{ border: 'none', background: 'transparent', color: C.text3, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: 6 }}>先四处看看</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ 单台 iPhone ════════════════════════════════════════════════════════ */
+function AppPhone({ theme, layout }) {
+  const [screen, setScreen] = useState('login');
+  const [cameFrom, setCameFrom] = useState('login');
+  const AuthComp = layout === 'talk' ? TalkAuth : GlassAuth;
+  return (
+    <ThemeCtx.Provider value={theme}>
+      <IosFrame dark={theme.night} screenBg={theme.bg}>
+        <div style={{ height: '100%', background: theme.bg }}>
+          {screen === 'welcome'
+            ? <Welcome fromRegister={cameFrom === 'register'} onExit={() => setScreen('login')} />
+            : <AuthComp mode={screen}
+                onSwitch={() => setScreen(screen === 'login' ? 'register' : 'login')}
+                onSubmit={() => { setCameFrom(screen); setScreen('welcome'); }} />}
+        </div>
+      </IosFrame>
+    </ThemeCtx.Provider>
+  );
+}
+
+/* ═══ 页面：三方案并排 ═══════════════════════════════════════════════════ */
+const PLANS = [
+  { theme: DAY, layout: 'card', tag: '方案 A · 晨雾', desc: '白天玻璃卡 · 最稳妥的日常皮肤' },
+  { theme: NIGHT, layout: 'card', tag: '方案 B · 夜语', desc: '夜间深色玻璃 · 睡前最贴合的情绪' },
+  { theme: DAY, layout: 'talk', tag: '方案 C · 一句话进门', desc: '对话式 · 桌宠先开口，底部玻璃面板' },
+];
+
+function Page() {
+  return (
+    <div style={{ padding: '54px 40px 80px' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: GOLD_DEEP, fontSize: 12.5, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+          <Icon name="moon" size={15} color={GOLD_DEEP} /> MindOff · 登录 / 注册 · 三方案
+        </div>
+        <h1 style={{ fontSize: 38, fontWeight: 500, letterSpacing: '-1px', margin: '13px 0 0' }}>三个方向，同一套配色</h1>
+        <p style={{ fontSize: 14.5, color: '#847D72', lineHeight: 1.75, maxWidth: 600, marginTop: 12 }}>
+          配色与交互语言严格对齐 Figma 原型（<code style={{ background: 'rgba(196,149,58,0.12)', padding: '1px 6px', borderRadius: 5 }}>theme.ts</code>）：暖奶油/深梅双色板、玻璃拟态、漂移雾斑、奶黄药丸按钮、金/桃/鼠尾草点缀、系统字紧字距。
+          三台均可交互：打字、切换密码、登录⇄注册互跳、提交进欢迎态。
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 44, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', marginTop: 40 }}>
+        {PLANS.map((p, i) => (
+          <div key={i} style={{ animation: 'riseIn .7s cubic-bezier(.2,.7,.2,1) both', animationDelay: `${i * 0.12}s` }}>
+            <div style={{ textAlign: 'center', marginBottom: 13, maxWidth: 393 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#4B463F', letterSpacing: '-0.2px' }}>{p.tag}</div>
+              <div style={{ fontSize: 12, color: '#847D72', marginTop: 3, fontStyle: 'italic' }}>{p.desc}</div>
+            </div>
+            <AppPhone theme={p.theme} layout={p.layout} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Page />);
+</script>
+</body>
+</html>

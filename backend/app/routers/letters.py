@@ -28,6 +28,7 @@ class LetterOut(BaseModel):
     body: str
     pet_id: int | None
     ref_memory_id: int | None
+    attachment: dict | None
     is_read: bool
     created_at: datetime
 

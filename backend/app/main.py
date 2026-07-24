@@ -15,7 +15,9 @@ from app.db import Base, engine
 from app.routers import (
     auth,
     brain_dumps,
+    candidates,
     chat,
+    companion,
     conversations,
     debug,
     ephemeral,
@@ -25,10 +27,13 @@ from app.routers import (
     memory,
     memory_review,
     pets,
+    preferences,
     realtime,
     reminders,
+    scenes,
     stores,
     stt,
+    theater_ext,
     treasures,
 )
 
@@ -99,6 +104,7 @@ app.include_router(handoffs.router)
 
 # 业务层：桌宠（PUT /pets/active 切换时触发交接信生成）
 app.include_router(pets.router)
+app.include_router(companion.router)
 
 # 业务层：记忆系统
 app.include_router(memory.router)
@@ -114,10 +120,21 @@ app.include_router(stores.summaries_router)
 app.include_router(stores.ideas_router)
 app.include_router(stores.emotions_router)
 
+# 业务层：片场候选片段（待确认候选的读/确认/忽略）
+app.include_router(candidates.router)
+
+# 业务层：片场扩展（模板/细节补充/角色校准）——先注册，让 /scenes/templates 优先于 /scenes/{id}
+app.include_router(theater_ext.router)
+# 业务层：片场场景（候选确认后生成，互动体验/结算）
+app.include_router(scenes.router)
+
 # 业务层：信箱扩展（来信/三日寄存/长久珍藏）
 app.include_router(letters.router)
 app.include_router(ephemeral.router)
 app.include_router(treasures.router)
+
+# 业务层：偏好设置
+app.include_router(preferences.router)
 
 # 业务层：记忆审阅控制面（我的·记忆）
 app.include_router(memory_review.router)

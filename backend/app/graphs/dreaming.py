@@ -84,6 +84,7 @@ def recall(state: DreamState, db: Session) -> dict[str, Any]:
             "layer": m.layer,
             "kind": m.kind,
             "depth": m.depth,
+            "privacy": m.privacy,
             "content": m.content,
             "confidence": m.confidence,
             "entities": m.entities or [],
@@ -117,7 +118,7 @@ def cluster(state: DreamState) -> dict[str, Any]:
 
     clusters = []
     for kind, items in by_kind.items():
-        # 第二级：按 entities 交集做连通分量
+        # 第二级：entities 交集连通分量（纯本地，无外部 embedding）
         sub_groups = _entity_connected_components(items)
         for group in sub_groups:
             if len(group) >= DESCENT_THRESHOLD:
@@ -137,11 +138,7 @@ def cluster(state: DreamState) -> dict[str, Any]:
 
 
 def _entity_connected_components(items: list[dict]) -> list[list[dict]]:
-    """按 entities 交集做 Union-Find 连通分量。
-
-    两条记忆共享至少一个 entity 则归为同组。
-    无 entities 的记忆各自独立（后续不够阈值则不触发下沉）。
-    """
+    """连通分量：entities 有交集（共享至少一个）则归为同组。纯本地，无外部 embedding。"""
     n = len(items)
     parent = list(range(n))
 
@@ -156,14 +153,12 @@ def _entity_connected_components(items: list[dict]) -> list[list[dict]]:
         if ra != rb:
             parent[ra] = rb
 
-    # 两两比较 entities 交集
+    # 两两比较：entities 交集
     for i in range(n):
         ents_i = set(items[i].get("entities") or [])
-        if not ents_i:
-            continue
         for j in range(i + 1, n):
             ents_j = set(items[j].get("entities") or [])
-            if ents_i & ents_j:
+            if ents_i and (ents_i & ents_j):
                 union(i, j)
 
     # 收集连通分量

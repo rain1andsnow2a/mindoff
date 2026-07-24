@@ -110,7 +110,7 @@ def build(
         except Exception as e:  # noqa: BLE001
             logger.warning("context state section failed: %s", e)
 
-    # query 段：按输入召回 episodic
+    # query 段：按输入召回 episodic（关键词/实体匹配，纯本地）
     if mode in ("query", "full") and query:
         try:
             episodic = store.list_by_layer(user_id, "episodic")

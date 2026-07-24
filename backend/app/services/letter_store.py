@@ -30,6 +30,7 @@ class LetterStore:
         body: str,
         pet_id: int | None = None,
         ref_memory_id: int | None = None,
+        attachment: dict | None = None,
     ) -> Letter:
         if type not in LETTER_TYPES:
             raise ValueError(f"未知来信类型: {type}")
@@ -40,6 +41,7 @@ class LetterStore:
             body=body,
             pet_id=pet_id,
             ref_memory_id=ref_memory_id,
+            attachment=attachment,
         )
         self._db.add(letter)
         self._db.commit()
