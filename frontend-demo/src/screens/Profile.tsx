@@ -123,10 +123,10 @@ export function ProfileScreen({
 }
 
 export function PetChange({ pets, activePetId, onBack, onHandoff }: {
-  pets: { id: number; name: string; emoji: string; summary?: string }[];
-  activePetId: number | null;
+  pets: { id: number | string; name: string; emoji: string; summary?: string }[];
+  activePetId: number | string | null;
   onBack: () => void;
-  onHandoff: (petId: number) => void;
+  onHandoff: (petId: number | string) => void;
 }) {
   const night = useNight();
   const C = palette(night);

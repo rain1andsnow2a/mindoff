@@ -37,7 +37,8 @@ class SceneCreate(BaseModel):
 
 
 class ChoiceIn(BaseModel):
-    choice_id: str
+    choice_id: str | None = None
+    custom_text: str | None = None  # 「自己说」：用户自由输入的回应，优先于 choice_id
 
 
 class SettlementIn(BaseModel):
@@ -341,24 +342,29 @@ def choose(
     s = _get_owned(db, user.id, scene_id)
     if s.status == "settled":
         raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
-    chosen = next((c for c in (s.choices or []) if str(c.get("id")) == body.choice_id), None)
-    if chosen is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
+
+    # 「自己说」：自由输入优先；否则按预设选项 id 校验。
+    if body.custom_text and body.custom_text.strip():
+        label = body.custom_text.strip()[:200]
+    else:
+        chosen = next((c for c in (s.choices or []) if str(c.get("id")) == body.choice_id), None)
+        if chosen is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
+        label = chosen["label"]
 
     if not stream:
         res = theater.advance(
             {"setting": s.setting, "beats": s.beats, "history": s.history, "turn": s.turn},
-            chosen["label"],
+            label,
         )
         s.turn = s.turn + 1
         s.beats = res["beats"]
         s.choices = res["choices"]
-        s.history = (s.history or []) + [{"turn": s.turn, "choice": chosen["label"]}]
+        s.history = (s.history or []) + [{"turn": s.turn, "choice": label}]
         db.commit()
         db.refresh(s)
         return SceneOut.model_validate(s)
 
-    label = chosen["label"]
     turn = s.turn + 1
     final = turn >= theater.MAX_TURNS
 

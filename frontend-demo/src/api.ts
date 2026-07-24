@@ -280,6 +280,19 @@ export async function streamSceneChoice(
     { headers: sseHeaders() }
   );
 }
+/** 「自己说」：提交自由输入的回应并逐字推进剧情。 */
+export async function streamSceneCustom(
+  sceneId: number,
+  customText: string,
+  onEvent: (e: SSEEvent) => void
+): Promise<void> {
+  await streamSSE(
+    sseUrl(`/api/v1/scenes/${sceneId}/choices?stream=true`),
+    { custom_text: customText },
+    onEvent,
+    { headers: sseHeaders() }
+  );
+}
 export const calibrateScene = (id: number, roleName: string, adjustment: string) =>
   post(`/api/v1/scenes/${id}/calibrate`, { role_name: roleName, adjustment });
 export const settleScene = (id: number, b: any) => post(`/api/v1/scenes/${id}/settlement`, b);

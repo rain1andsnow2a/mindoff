@@ -109,6 +109,7 @@ export default function App() {
   const [presets, setPresets] = useState<PetInfo[]>([]);
   const [ownedPets, setOwnedPets] = useState<PetInfo[]>([]);
   const [activePetId, setActivePetId] = useState<number | null>(null);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [pendingPetId, setPendingPetId] = useState<number | string | null>(null);
   const [pendingPet, setPendingPet] = useState<PetInfo | null>(null);
   const [handoffContent, setHandoffContent] = useState<string | null>(null);
@@ -185,14 +186,20 @@ export default function App() {
     });
   };
 
-  // 进入换宠屏时，拉取我的桌宠列表与当前主宠。
+  // 进入换宠屏时：拉取预设（换宠候选＝两位固定伙伴 米露/波比）与当前主宠。
+  // 候选用预设而非「我拥有的桌宠」，避免因历史重复实例化导致列表里堆一排同名桌宠。
   useEffect(() => {
     if (screen !== "pet-change" || !tokens || DEV_BYPASS) return;
-    Promise.all([listPets().catch(() => []), getActivePet().catch(() => null)])
-      .then(([pets, active]) => {
-        setOwnedPets((pets as any[]).map(petFromOwned));
-        if (active) setActivePetId((active as any).id);
-      });
+    Promise.all([
+      listPetPresets().catch(() => []),
+      getActivePet().catch(() => null),
+    ]).then(([data, active]) => {
+      setPresets((data as any[]).map(petFromPreset));
+      if (active) {
+        setActivePetId((active as any).id);
+        setActivePresetId((active as any).preset_id ?? null);
+      }
+    });
   }, [screen, tokens]);
 
   // 进入选宠引导时，拉取后端预设。
@@ -242,9 +249,9 @@ export default function App() {
     }
   };
 
-  const handlePetChange = async (petId: number | null) => {
+  const handlePetChange = async (petId: number | string | null) => {
     if (petId == null) return;
-    const target = ownedPets.find((p) => p.id === petId);
+    const target = [...presets, ...ownedPets].find((p) => p.id === petId);
     if (!target) return;
     setPendingPetId(petId);
     setPendingPet(target);
@@ -254,11 +261,13 @@ export default function App() {
       return;
     }
     try {
+      // petId 为预设 id（字符串）时后端会复用已拥有实例、没有才新建，避免重复
       const res = await setActivePet(petId);
       if (res?.pet) {
         const p = petFromOwned(res.pet);
         setPet(p);
         setActivePetId(p.id);
+        setActivePresetId((res.pet as any).preset_id ?? null);
       }
       // 优先用本次切换返回的交接信，否则读最新一封。
       const summary = res?.handoff?.summary || (await latestHandoffSummary());
@@ -395,7 +404,7 @@ export default function App() {
                 onSetPreference={handleSetPreference} />
             )}
             {screen === "pet-change" && (
-              <PetChange pets={ownedPets} activePetId={activePetId}
+              <PetChange pets={presets} activePetId={activePresetId}
                 onBack={() => { go("profile"); setTab("profile"); }}
                 onHandoff={handlePetChange} />
             )}
