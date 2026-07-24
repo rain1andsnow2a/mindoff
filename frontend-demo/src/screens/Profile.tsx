@@ -7,9 +7,47 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Archive, Bell, ChevronRight, Clock, Layers, Moon, Shield, Trash2, Type,
 } from "lucide-react-native";
-import { GlassCard, PrimaryBtn, SafeHeader } from "../components";
-import { palette, useNight } from "../theme";
+import {
+  Button,
+  Card,
+  Chip,
+  Divider,
+  EmptyState,
+  IconButton,
+  ListItem,
+  LoadingState,
+  PageContainer,
+  PageHeader,
+  useResponsive,
+  useTheme,
+} from "../design-system";
 import { clearMemories, deleteMemory, getMemoryReview, listMemories } from "../api";
+
+function useProfileSurface() {
+  const theme = useTheme();
+  return {
+    theme,
+    night: theme.isNight,
+    C: {
+      text: theme.colors.textPrimary,
+      text2: theme.colors.textSecondary,
+      muted: theme.colors.textMuted,
+      chevron: theme.colors.textMuted,
+      rowDivider: theme.colors.divider,
+    },
+  };
+}
+
+function ProfileHeader({ onBack, title, action }: { onBack: () => void; title: string; action?: React.ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={{ minHeight: 68, paddingHorizontal: theme.spacing[5], flexDirection: "row", alignItems: "center", gap: theme.spacing[3] }}>
+      <IconButton accessibilityLabel="返回" icon={<ChevronRight color={theme.colors.textSecondary} size={20} style={{ transform: [{ rotate: "180deg" }] }} />} onPress={onBack} />
+      <Text style={[theme.typography.textStyles.sectionTitle, { flex: 1, color: theme.colors.textPrimary }]}>{title}</Text>
+      {action}
+    </View>
+  );
+}
 
 export type Preferences = {
   proactive_enabled: boolean;
@@ -116,7 +154,8 @@ export function ProfileScreen({
   preferences: Preferences;
   onSetPreference: (patch: Partial<Preferences>) => void;
 }) {
-  const C = palette(night);
+  const { theme, C } = useProfileSurface();
+  const { isExpanded } = useResponsive();
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   const cycleFrequency = () => {
@@ -149,14 +188,14 @@ export function ProfileScreen({
   ];
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 12 }}>
-        <Text style={{ fontSize: 26, fontWeight: "500", letterSpacing: -0.5, color: C.text }}>我的</Text>
-      </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
-        <GlassCard style={{ padding: 20, marginBottom: 20, flexDirection: "row", alignItems: "center", gap: 16 }} onClick={onChangePet}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <PageContainer maxWidth={1100}>
+        <PageHeader eyebrow="个人空间" title="我的" description="管理陪伴方式、记忆边界与阅读体验。" />
+        <View style={{ flexDirection: isExpanded ? "row" : "column", alignItems: "flex-start", gap: theme.spacing[6] }}>
+        <Card style={{ width: isExpanded ? 320 : "100%", flexDirection: "row", alignItems: "center", gap: theme.spacing[4] }} onPress={onChangePet}>
           <View style={{
             width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-            backgroundColor: "rgba(246,231,168,0.62)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+            backgroundColor: theme.colors.accentSoft, borderWidth: 1, borderColor: theme.colors.border,
           }}>
             <Text style={{ fontSize: 24 }}>{petEmoji}</Text>
           </View>
@@ -164,38 +203,30 @@ export function ProfileScreen({
             <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>{petName}</Text>
             <Text style={{ fontSize: 13, marginTop: 2, color: C.text2 }}>{petSummary ?? "你的陪伴伙伴"}</Text>
           </View>
-          <View style={{
-            paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-            backgroundColor: "rgba(255,252,245,0.82)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",
-          }}>
-            <Text style={{ fontSize: 13, color: "#655D61" }}>更换伙伴</Text>
-          </View>
-        </GlassCard>
-
+          <ChevronRight size={16} color={theme.colors.textMuted} />
+        </Card>
+        <View style={{ flex: 1, width: "100%" }}>
         {sections.map((sec, si) => (
           <View key={si} style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 13, fontWeight: "500", marginBottom: 8, paddingHorizontal: 4, color: C.text2 }}>{sec.title}</Text>
-            <GlassCard>
+            <Text style={[theme.typography.textStyles.label, { marginBottom: theme.spacing[2], paddingHorizontal: theme.spacing[1], color: C.text2 }]}>{sec.title}</Text>
+            <Card style={{ padding: theme.spacing[1] }}>
               {sec.rows.map((row, ri) => (
                 <View key={ri}>
-                  <Pressable onPress={row.act}
-                    style={({ pressed }) => [{
-                      flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 16,
-                      opacity: pressed ? 0.65 : 1,
-                    }]}>
-                    {row.icon}
-                    <Text style={{ flex: 1, fontSize: 15, color: C.text }}>{row.label}</Text>
-                    <Text style={{ fontSize: 13, color: C.muted }}>{row.val}</Text>
-                    <ChevronRight size={13} color={C.chevron} />
-                  </Pressable>
-                  {ri < sec.rows.length - 1 && (
-                    <View style={{ marginHorizontal: 20, height: 1, backgroundColor: C.rowDivider }} />
-                  )}
+                  <ListItem
+                    leading={row.icon}
+                    title={row.label}
+                    trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing[2] }}><Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>{row.val}</Text><ChevronRight size={14} color={C.chevron} /></View>}
+                    onPress={row.act}
+                  />
+                  {ri < sec.rows.length - 1 ? <Divider /> : null}
                 </View>
               ))}
-            </GlassCard>
+            </Card>
           </View>
         ))}
+        </View>
+        </View>
+        </PageContainer>
       </ScrollView>
 
       <TimePickerSheet
@@ -215,25 +246,29 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
   onBack: () => void;
   onHandoff: (petId: number | string) => void;
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, C } = useProfileSurface();
   const [sel, setSel] = useState<number | null>(null);
   const opts = pets.filter((p) => p.id !== activePetId);
   const currentName = pets.find((p) => p.id === activePetId)?.name ?? "当前伙伴";
   return (
-    <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} title="更换伙伴" />
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 16 }}>
-        <Text style={{ fontSize: 14, color: C.text2 }}>{currentName}会把粗粒度近况告诉新伙伴，不会复述细节</Text>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+      <PageContainer maxWidth={760}>
+        <PageHeader
+          action={<IconButton accessibilityLabel="返回个人设置" icon={<ChevronRight color={theme.colors.textSecondary} size={20} style={{ transform: [{ rotate: "180deg" }] }} />} onPress={onBack} />}
+          eyebrow="陪伴伙伴"
+          title="更换伙伴"
+          description={`${currentName}会把粗粒度近况告诉新伙伴，不会复述细节。`}
+        />
+        <View style={{ gap: theme.spacing[3] }}>
         {opts.map((p, i) => (
-          <GlassCard key={i} onClick={() => setSel(i)}
+          <Card key={i} onPress={() => setSel(i)}
             style={{
               padding: 20, flexDirection: "row", alignItems: "center", gap: 16,
               borderWidth: sel === i ? 1.5 : 1,
-              borderColor: sel === i ? "rgba(196,149,58,0.5)" : "rgba(255,255,255,0.45)",
-              backgroundColor: sel === i ? "rgba(246,231,168,0.42)" : undefined,
+              borderColor: sel === i ? theme.colors.accent : theme.colors.border,
+              backgroundColor: sel === i ? theme.colors.accentSoft : theme.colors.surface,
             }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,252,245,0.85)" }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceElevated }}>
               <Text style={{ fontSize: 24 }}>{p.emoji}</Text>
             </View>
             <View style={{ flex: 1 }}>
@@ -241,17 +276,18 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
               <Text style={{ fontSize: 13, marginTop: 2, color: C.text2 }}>{p.summary ?? "陪伴伙伴"}</Text>
             </View>
             {sel === i && (
-              <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(196,149,58,0.8)" }}>
-                <Text style={{ fontSize: 10, color: "#fff" }}>✓</Text>
+              <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent }}>
+                <Text style={{ fontSize: 10, color: theme.colors.textOnAccent }}>✓</Text>
               </View>
             )}
-          </GlassCard>
+          </Card>
         ))}
-        <View style={{ marginTop: "auto" }}>
-          <PrimaryBtn onClick={() => opts[sel ?? -1] && onHandoff(opts[sel!].id)} full disabled={sel === null}>确认更换</PrimaryBtn>
+        <View style={{ marginTop: theme.spacing[5] }}>
+          <Button onPress={() => opts[sel ?? -1] && onHandoff(opts[sel!].id)} fullWidth disabled={sel === null}>确认更换</Button>
         </View>
-      </View>
-    </View>
+        </View>
+      </PageContainer>
+    </ScrollView>
   );
 }
 
@@ -261,30 +297,33 @@ export function PetHandoff({ onBack, onDone, oldPet, newPet, handoffContent }: {
   newPet?: { name: string; emoji: string };
   handoffContent?: string | null;
 }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, C } = useProfileSurface();
   const oldName = oldPet?.name ?? "前任伙伴";
   const newEmoji = newPet?.emoji ?? "☀️";
   const bodyText = handoffContent && handoffContent.trim()
     ? handoffContent
     : "嗨。\n\n这位朋友最近在处理一些需要时间消化的事情，心情整体还不错，偶尔会有点累。\n\n喜欢睡前说说话。有几件事放在信箱里还没处理完。\n\n好好陪着她。";
   return (
-    <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} />
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 100, gap: 20, alignItems: "center", justifyContent: "center" }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+      <PageContainer maxWidth={720} style={{ flex: 1, justifyContent: "center" }}>
+      <View style={{ gap: theme.spacing[5], alignItems: "center" }}>
+        <View style={{ alignSelf: "flex-start" }}>
+          <IconButton accessibilityLabel="返回选择伙伴" icon={<ChevronRight color={theme.colors.textSecondary} size={20} style={{ transform: [{ rotate: "180deg" }] }} />} onPress={onBack} />
+        </View>
         <Text style={{ fontSize: 56 }}>{newEmoji}</Text>
         <View style={{ alignItems: "center" }}>
           <Text style={{ fontSize: 22, fontWeight: "500", marginBottom: 4, color: C.text }}>来自{oldName}的交接信</Text>
           <Text style={{ fontSize: 14, color: C.text2 }}>给新来的伙伴看的</Text>
         </View>
-        <GlassCard style={{ padding: 24, alignSelf: "stretch", backgroundColor: "rgba(246,231,168,0.35)" }}>
-          <Text style={{ fontSize: 15, lineHeight: 26, color: C.text }}>{bodyText}</Text>
-        </GlassCard>
+        <Card emphasized style={{ alignSelf: "stretch" }}>
+          <Text style={[theme.typography.textStyles.body, { color: C.text }]}>{bodyText}</Text>
+        </Card>
         <View style={{ alignSelf: "stretch" }}>
-          <PrimaryBtn onClick={onDone} full>认识新伙伴</PrimaryBtn>
+          <Button onPress={onDone} fullWidth>认识新伙伴</Button>
         </View>
       </View>
-    </View>
+      </PageContainer>
+    </ScrollView>
   );
 }
 
@@ -305,8 +344,7 @@ function SensitivityBadge({ label, night }: { label: string; night: boolean }) {
 }
 
 export function MemoryScreen({ onBack, onToast }: { onBack: () => void; onToast: (msg: string) => void }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, C } = useProfileSurface();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -346,22 +384,21 @@ export function MemoryScreen({ onBack, onToast }: { onBack: () => void; onToast:
 
   return (
     <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} title="记忆管理" rightEl={
+      <ProfileHeader onBack={onBack} title="记忆管理" action={
         items.length > 0 ? (
-          <Pressable onPress={clearAll} style={{ padding: 6 }}>
-            <Trash2 size={18} color={C.text2} />
-          </Pressable>
+          <IconButton accessibilityLabel="清空全部记忆" icon={<Trash2 size={18} color={C.text2} />} onPress={clearAll} />
         ) : null
       } />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: 8 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <PageContainer maxWidth={860} style={{ paddingTop: theme.spacing[2] }}>
         {loading ? (
-          <Text style={{ textAlign: "center", marginTop: 40, color: C.text2 }}>加载中…</Text>
+          <LoadingState label="正在读取记忆…" />
         ) : items.length === 0 ? (
-          <Text style={{ textAlign: "center", marginTop: 40, color: C.text2 }}>还没有需要管理的记忆</Text>
+          <EmptyState icon={<Archive color={C.muted} size={24} />} title="还没有需要管理的记忆" description="需要长期保留的内容会出现在这里。" />
         ) : (
           <View style={{ gap: 12 }}>
             {items.map((item) => (
-              <GlassCard key={item.id} style={{ padding: 16 }}>
+              <Card key={item.id}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <Text style={{ fontSize: 12, color: C.muted }}>{item.kind}</Text>
                   <Text style={{ fontSize: 12, color: C.muted }}>·</Text>
@@ -369,20 +406,20 @@ export function MemoryScreen({ onBack, onToast }: { onBack: () => void; onToast:
                 </View>
                 <Text style={{ fontSize: 15, lineHeight: 22, color: C.text }}>{item.surface_text || item.content}</Text>
                 <Pressable onPress={() => remove(item.id)} style={{ alignSelf: "flex-end", marginTop: 10, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(201,139,139,0.18)" }}>
-                  <Text style={{ fontSize: 12, color: "#8B5A5A" }}>删除</Text>
+                  <Text style={{ fontSize: 12, color: theme.colors.error }}>删除</Text>
                 </Pressable>
-              </GlassCard>
+              </Card>
             ))}
           </View>
         )}
+        </PageContainer>
       </ScrollView>
     </View>
   );
 }
 
 export function MemoryReviewScreen({ onBack, onToast }: { onBack: () => void; onToast: (msg: string) => void }) {
-  const night = useNight();
-  const C = palette(night);
+  const { theme, night, C } = useProfileSurface();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -395,28 +432,30 @@ export function MemoryReviewScreen({ onBack, onToast }: { onBack: () => void; on
 
   return (
     <View style={{ flex: 1 }}>
-      <SafeHeader onBack={onBack} title="记忆审阅" />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: 8 }}>
-        <Text style={{ fontSize: 14, lineHeight: 20, color: C.text2, marginBottom: 12 }}>
+      <ProfileHeader onBack={onBack} title="记忆审阅" />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <PageContainer maxWidth={860} style={{ paddingTop: theme.spacing[2] }}>
+        <Text style={[theme.typography.textStyles.body, { color: C.text2, marginBottom: theme.spacing[4] }]}>
           这里只显示日常/个人/较私密/很私密软标签，不暴露诊断或轴名。
         </Text>
         {loading ? (
-          <Text style={{ textAlign: "center", marginTop: 40, color: C.text2 }}>加载中…</Text>
+          <LoadingState label="正在准备审阅内容…" />
         ) : items.length === 0 ? (
-          <Text style={{ textAlign: "center", marginTop: 40, color: C.text2 }}>暂无可审阅的记忆</Text>
+          <EmptyState icon={<Shield color={C.muted} size={24} />} title="暂无可审阅的记忆" description="这里会显示记忆的隐私标签，方便你随时检查。" />
         ) : (
           <View style={{ gap: 12 }}>
             {items.map((item) => (
-              <GlassCard key={item.id} style={{ padding: 16 }}>
+              <Card key={item.id}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                   <Text style={{ fontSize: 12, color: C.muted }}>{item.kind}</Text>
                   <SensitivityBadge label={item.sensitivity} night={night} />
                 </View>
                 <Text style={{ fontSize: 15, lineHeight: 22, color: C.text }}>{item.surface_text}</Text>
-              </GlassCard>
+              </Card>
             ))}
           </View>
         )}
+        </PageContainer>
       </ScrollView>
     </View>
   );
