@@ -188,6 +188,64 @@ def analyze_for_user(db: Session, user_id: int) -> dict[str, Any] | None:
     return rec
 
 
+# ─── 通话中·单句实时意图识别（方案B-1 / DAY-211）────────────────────────────
+
+# 少于该字数的输入直接判 None，不调用 LLM（省钱、防抖）
+MIN_INTENT_CHARS = 6
+
+INTENT_SYSTEM_PROMPT = """\
+你是 MindOff 的场景导演。下面是用户在语音通话中刚说的一句话（或最近几句）。
+你要判断：用户是否**明确表达了想「重演 / 走进 / 再经历一次 / 预演」一个具体场景**的意愿。
+
+只有满足下面全部条件才算 worth=true：
+- 用户在表达一种「想进入 / 重回 / 再体验 / 想演一遍」某个具体情境的愿望（而非单纯陈述或闲聊）；
+- 这个情境有可辨认的人物 / 地点 / 事件之一，能提炼成一个可演出的场景。
+
+以下一律 worth=false：普通闲聊寒暄、只是提到某人某事却没有想进入的意愿、
+情绪宣泄但无具体场景、对桌宠的提问或指令。宁可漏判也不要误判（通话中会据此弹窗，误判很打扰）。
+
+预置舞台列表（id: 描述）：
+{theaters}
+
+只输出 JSON，不要额外解释：
+{{
+  "worth": true/false,
+  "title": "场景标题（10字内）",
+  "people": ["涉及人物"],
+  "place": "发生地点",
+  "plot": "一句话剧情概要",
+  "intent": "用户想在场景里获得什么",
+  "theater_id": "最匹配的预置舞台id，都不匹配填 null",
+  "confidence": 0.0
+}}
+"""
+
+
+def detect_scene_intent(text: str) -> dict[str, Any] | None:
+    """通话中·单句实时场景意图识别（低延迟、无副作用）。
+
+    - 空串 / 过短 → 直接 None，不调用 LLM。
+    - 仅当用户明确表达想进入/重演一个具体场景时 worth=true。
+    返回 {render_kind, theater_id, confidence, seed{...}}；否则 None。
+    """
+    clean = (text or "").strip()
+    if len(clean) < MIN_INTENT_CHARS:
+        return None
+
+    theaters_text = "\n".join(f"- {tid}: {desc}" for tid, desc in PRESET_THEATERS.items())
+    try:
+        llm = get_chat_model()
+        resp = llm.invoke([
+            {"role": "system", "content": INTENT_SYSTEM_PROMPT.format(theaters=theaters_text)},
+            {"role": "user", "content": f"用户刚说：\n{clean}"},
+        ])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[scene-intent] LLM call failed: %s", e)
+        return None
+
+    return _parse_recommend(resp.content)
+
+
 def run_scene_recommend_all(db: Session) -> list[dict[str, Any]]:
     """对所有活跃用户跑一遍场景推荐（定时任务入口，随夜间做梦触发）。
 

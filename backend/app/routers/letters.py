@@ -46,49 +46,8 @@ def _require_letter(db: Session, user: User, letter_id: int):
     return letter
 
 
-def _gen_scene_images(
-    *, title=None, people=None, place=None, plot=None, intent=None, setting=None,
-) -> tuple[str | None, list | None]:
-    """动态 galgame：并发生成背景图 + 角色立绘并转存本地。
-
-    生图失败（风控/网络/密钥缺失）不阻断接受流程：整体降级为无图
-    （返回 (None, None) 或立绘缺失时只留背景），前端用兜底渐变背景。
-    """
-    import asyncio
-    import logging
-
-    from app.graphs import theater
-    from app.stepfun.image import generate_and_store
-
-    log = logging.getLogger(__name__)
-    prompts = theater.generate_image_prompts(
-        title=title, people=people, place=place, plot=plot, intent=intent, setting=setting,
-    )
-
-    async def _both():
-        return await asyncio.gather(
-            generate_and_store(prompts["bg"], kind="bg"),
-            generate_and_store(prompts["sprite"], kind="sprite"),
-            return_exceptions=True,
-        )
-
-    try:
-        bg_res, sprite_res = asyncio.run(_both())
-    except Exception as e:  # noqa: BLE001
-        log.warning("[letters] scene image gen failed wholesale: %s", e)
-        return None, None
-
-    bg_image = bg_res if isinstance(bg_res, str) else None
-    if not isinstance(bg_res, str):
-        log.warning("[letters] bg image gen failed: %s", bg_res)
-
-    characters: list | None = None
-    if isinstance(sprite_res, str):
-        characters = [{"name": prompts["character_name"], "sprite_url": sprite_res}]
-    else:
-        log.warning("[letters] sprite image gen failed: %s", sprite_res)
-
-    return bg_image, characters
+# 动态 galgame 配图生成已抽离到公共服务，letters/scenes 共用（DAY-215）。
+from app.services.scene_images import gen_scene_images as _gen_scene_images
 
 
 @router.get("", response_model=list[LetterOut])

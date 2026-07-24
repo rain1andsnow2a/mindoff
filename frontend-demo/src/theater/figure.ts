@@ -1,7 +1,10 @@
 /**
- * 风格化人物/行李箱（1:1 移植自 theater/src/figure.js，仅补充 TS 类型）。
- * 低多边形、非写实——"假"恰恰给人安全感。
- * pose: 'standing' | 'sitting' | 'phone'（深夜通话：手举到耳边）
+ * 风格化人物/行李箱。低多边形、非写实——"假"恰恰给人安全感。
+ * pose: 'standing' | 'sitting' | 'phone'（深夜通话：右手持机贴耳、头微倾向手机）
+ *
+ * 2026-07 细化：手臂改为「肩 → 上臂 → 肘 → 前臂 → 手」两段式骨架。
+ * 打电话时上臂贴身下垂、肘部弯曲、前臂收向耳侧——旧版整根手臂上举，
+ * 视觉上像举臂欢呼；并补了手球与站姿脚部。
  */
 import * as THREE from "three";
 
@@ -31,56 +34,74 @@ export function createFigure({
   torso.position.y = sitting ? 0.62 : 0.95;
   g.add(torso);
 
-  // 头
+  // 头组（头 + 头发；打电话时整体微倾向手机，像夹着话筒听）
+  const headGroup = new THREE.Group();
+  headGroup.position.y = sitting ? 1.12 : 1.52;
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), skin);
-  head.position.y = sitting ? 1.12 : 1.52;
-  g.add(head);
-
-  // 头发（半球罩）
   const hairCap = new THREE.Mesh(
     new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
     hair
   );
-  hairCap.position.copy(head.position).add(new THREE.Vector3(0, 0.03, -0.01));
-  g.add(hairCap);
+  hairCap.position.set(0, 0.03, -0.01);
+  headGroup.add(head, hairCap);
+  if (onPhone) headGroup.rotation.set(0.06, 0, -0.14); // 低头 + 向右肩微倾
+  g.add(headGroup);
 
-  // 手臂（胶囊中心下沉到肩下，让手臂自然垂落）
-  const armGeo = new THREE.CapsuleGeometry(0.06, 0.4, 3, 8);
-  const armL = new THREE.Mesh(armGeo, cloth);
-  const armR = new THREE.Mesh(armGeo, cloth);
+  // 手臂：肩(shoulder) → 上臂 → 肘(elbow) → 前臂 → 手球
   const shoulderY = sitting ? 0.85 : 1.18;
-  armL.position.set(-0.3, shoulderY - 0.18, 0);
-  armR.position.set(0.3, shoulderY - 0.18, 0);
+  const mkArm = (side: 1 | -1) => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(0.24 * side, shoulderY, 0);
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.2, 3, 8), cloth);
+    upper.position.y = -0.13;
+    shoulder.add(upper);
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.26;
+    shoulder.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.18, 3, 8), cloth);
+    fore.position.y = -0.11;
+    elbow.add(fore);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 6), skin);
+    hand.position.y = -0.25;
+    elbow.add(hand);
+    return { shoulder, elbow };
+  };
+  const armL = mkArm(-1);
+  const armR = mkArm(1);
 
   if (onPhone) {
-    // 右手抬到耳边 —— 打电话（小角度内收，避免读成"举手"）
-    armR.rotation.z = 0.55;
-    armR.rotation.x = -0.2;
-    armR.position.set(0.26, shoulderY + 0.16, 0.04);
-    // 手机微光
+    // 右臂打电话：上臂贴身略前收，肘弯，前臂竖向耳侧；手机挂在前臂末端随手走
+    armR.shoulder.rotation.set(-0.75, 0, 0.12);
+    armR.elbow.rotation.set(-2.85, 0, -0.45);
     const phone = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.12, 0.02),
+      new THREE.BoxGeometry(0.05, 0.13, 0.02),
       new THREE.MeshStandardMaterial({
         color: 0x111111, roughness: 0.4,
         emissive: 0x88aaff, emissiveIntensity: 0.35,
       })
     );
-    phone.position.set(0.14, head.position.y, 0.1);
-    g.add(phone);
-    armL.rotation.z = 0.25;
+    phone.position.set(0.01, -0.27, 0.05);
+    phone.rotation.set(0.25, 0, -0.12);
+    armR.elbow.add(phone);
+    // 左臂自然垂落
+    armL.shoulder.rotation.z = -0.1;
+    armL.elbow.rotation.x = -0.18;
   } else {
-    armL.rotation.z = 0.18;
-    armR.rotation.z = -0.18;
+    // 自然站姿：双臂微外张，前臂略前摆
+    armL.shoulder.rotation.z = -0.08;
+    armR.shoulder.rotation.z = 0.08;
+    armL.elbow.rotation.x = -0.15;
+    armR.elbow.rotation.x = -0.15;
   }
-  if (sitting) { // 手朝膝盖方向前伸
-    armL.rotation.x = 0.5;
-    armL.position.z += 0.06;
+  if (sitting) { // 手臂朝膝头：上臂略前，前臂前伸
+    armL.shoulder.rotation.x = -0.35;
+    armL.elbow.rotation.x = -0.75;
     if (!onPhone) {
-      armR.rotation.x = 0.5;
-      armR.position.z += 0.06;
+      armR.shoulder.rotation.x = -0.35;
+      armR.elbow.rotation.x = -0.75;
     }
   }
-  g.add(armL, armR);
+  g.add(armL.shoulder, armR.shoulder);
 
   // 腿
   const legGeo = new THREE.CapsuleGeometry(0.075, 0.42, 3, 8);
@@ -95,6 +116,13 @@ export function createFigure({
   } else {
     legL.position.set(-0.11, 0.28, 0);
     legR.position.set(0.11, 0.28, 0);
+    // 站姿脚部（小盒子，朝前）
+    const footGeo = new THREE.BoxGeometry(0.1, 0.06, 0.18);
+    const footL = new THREE.Mesh(footGeo, cloth);
+    footL.position.set(-0.11, 0.03, 0.04);
+    const footR = new THREE.Mesh(footGeo, cloth);
+    footR.position.set(0.11, 0.03, 0.04);
+    g.add(footL, footR);
   }
   g.add(legL, legR);
 

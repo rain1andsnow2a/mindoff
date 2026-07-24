@@ -18,7 +18,8 @@ import {
 } from "mindoff-companion";
 import type { EventSubscription } from "expo-modules-core";
 
-import { createConversation, getActivePet, streamChatReply, wsUrl } from "./api";
+import { createConversation, detectSceneIntent, getActivePet, streamChatReply, wsUrl } from "./api";
+import type { IntentSeed } from "./api";
 import { speakReply, stopSpeaking } from "./speak";
 
 export type CallStatus =
@@ -35,6 +36,14 @@ export interface CallTurn {
   text: string;
 }
 
+/** 通话中识别到的场景意图建议：够触发「进入片场」提示条。 */
+export interface SceneSuggestion {
+  seed: IntentSeed | null;
+  theater_id: string | null;
+  render_kind: string | null;
+  confidence: number | null;
+}
+
 export interface RealtimeCall {
   available: boolean;
   status: CallStatus;
@@ -45,6 +54,10 @@ export interface RealtimeCall {
   /** 麦克风音量 0~1，用于律动 UI。 */
   level: number;
   error: string | null;
+  /** 通话中识别到的场景意图（未命中为 null）；供 UI 弹出「进入片场」提示条。 */
+  sceneSuggestion: SceneSuggestion | null;
+  /** 忽略当前场景建议（用户点了「不了」/进入后）。 */
+  dismissSuggestion: () => void;
   start: () => Promise<void>;
   stop: () => void;
 }
@@ -77,12 +90,15 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const [turns, setTurns] = useState<CallTurn[]>([]);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [sceneSuggestion, setSceneSuggestion] = useState<SceneSuggestion | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const subRef = useRef<EventSubscription | null>(null);
   const convIdRef = useRef<number | null>(null);
   const closedRef = useRef(false);
   const turnIdRef = useRef(0);
+  // 场景意图识别的序号：只认最新一句的结果，避免慢返回覆盖新意图。
+  const intentSeqRef = useRef(0);
   // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
   const voiceReplyRef = useRef(voiceReply);
   voiceReplyRef.current = voiceReply;
@@ -111,8 +127,11 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const stop = useCallback(() => {
     closedRef.current = true;
     cleanup();
+    setSceneSuggestion(null);
     setStatus("ended");
   }, [cleanup]);
+
+  const dismissSuggestion = useCallback(() => setSceneSuggestion(null), []);
 
   // 用户整句定稿 → 走带记忆的 chat，桌宠逐字回复
   const handleUtterance = useCallback(
@@ -122,6 +141,27 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       if (!clean || convId == null) return;
       setLiveUser("");
       addTurn("user", clean);
+
+      // 方案B：不阻塞主聊天/TTS，异步逐句识别场景意图；带序号防竞态，失败静默忽略。
+      const seq = ++intentSeqRef.current;
+      detectSceneIntent(clean)
+        .then((r) => {
+          if (closedRef.current || seq !== intentSeqRef.current || !r?.worth) return;
+          const next: SceneSuggestion = {
+            seed: r.seed ?? null,
+            theater_id: r.theater_id ?? null,
+            render_kind: r.render_kind ?? null,
+            confidence: r.confidence ?? null,
+          };
+          // 已有未处理建议时，仅当新意图置信度更高才替换，避免频繁抖动。
+          setSceneSuggestion((prev) =>
+            prev && (prev.confidence ?? 0) >= (next.confidence ?? 0) ? prev : next
+          );
+        })
+        .catch(() => {
+          /* 意图识别失败不影响聊天与语音回复 */
+        });
+
       const petId = addTurn("pet", "");
       setStatus("thinking");
       let full = "";
@@ -159,6 +199,7 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     setError(null);
     setTurns([]);
     setLiveUser("");
+    setSceneSuggestion(null);
     closedRef.current = false;
     setStatus("connecting");
 
@@ -255,6 +296,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     turns,
     level,
     error,
+    sceneSuggestion,
+    dismissSuggestion,
     start,
     stop,
   };

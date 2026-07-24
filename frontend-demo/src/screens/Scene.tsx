@@ -14,11 +14,12 @@ import { CreamRipple, PrimaryBtn, SafeHeader } from "../components";
 import { GOLD_DEEP, palette, useNight } from "../theme";
 import { Scene3D } from "./Scene3D";
 import {
-  listSceneTemplates, listScenes, streamCreateScene,
+  listSceneTemplates, listScenes, createScene,
   listCandidates, dismissCandidate, streamConfirmCandidate,
   getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, absUrl,
 } from "../api";
 import type { SSEEvent } from "../api";
+import { useVoiceInput } from "../useVoiceInput";
 import type { TheaterSceneId } from "../theater";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -176,8 +177,10 @@ function SceneNarrationCapture({ onBack, onConfirm }: {
   const night = useNight();
   const C = palette(night);
   const [text, setText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
+  // 真实 STT：按住麦克录音，松手转写后追加到描述框（复用 useVoiceInput，真机走原生 PCM）
+  const voice = useVoiceInput((t) => setText((prev) => (prev ? `${prev}${t}` : t)));
   const placeholder = "我想回到上周和朋友吵架之后。地点在学校门口，她准备打车离开。她平时比较敏感，生气后会假装不在意，但其实很希望我先道歉。我想试着把她叫住。";
+  const micHint = voice.transcribing ? "正在转写…" : voice.isRecording ? "松开结束录音" : "按住说话";
   return (
     <View style={{ flex: 1 }}>
       <SafeHeader onBack={onBack} title="描述你的场景" />
@@ -200,15 +203,18 @@ function SceneNarrationCapture({ onBack, onConfirm }: {
         />
         <View style={{ alignItems: "center", gap: 12 }}>
           <Pressable
-            onPressIn={() => setIsRecording(true)} onPressOut={() => setIsRecording(false)}
+            onPressIn={() => { voice.start(); }} onPressOut={() => { voice.stop(); }}
+            disabled={voice.transcribing}
             style={{
               width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center",
-              backgroundColor: isRecording ? "rgba(243,216,199,0.88)" : "rgba(246,231,168,0.72)",
-              borderWidth: 2, borderColor: isRecording ? "rgba(196,149,58,0.55)" : "rgba(255,255,255,0.55)",
+              backgroundColor: voice.isRecording ? "rgba(243,216,199,0.88)" : "rgba(246,231,168,0.72)",
+              borderWidth: 2, borderColor: voice.isRecording ? "rgba(196,149,58,0.55)" : "rgba(255,255,255,0.55)",
+              opacity: voice.transcribing ? 0.6 : 1,
             }}>
             <Mic size={22} color={GOLD_DEEP} />
           </Pressable>
-          <Text style={{ fontSize: 12, color: C.muted }}>{isRecording ? "松开结束录音" : "按住说话"}</Text>
+          <Text style={{ fontSize: 12, color: C.muted }}>{micHint}</Text>
+          {voice.error ? <Text style={{ fontSize: 12, color: "#C4553A" }}>{voice.error}</Text> : null}
         </View>
         <PrimaryBtn onClick={() => onConfirm(text || placeholder)} full>我说完了</PrimaryBtn>
       </ScrollView>
@@ -530,7 +536,9 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
     else setSubState("browsing");
   };
 
-  // 角色设定完成 → 真实生成开场（SSE），拿到 scene_id 进入演练
+  // 角色设定完成 → 真实生成开场，拿到 scene_id 进入演练
+  // 手动路径走 galgame：非流式 createScene(render_kind=dynamic_image)，后端并发生成背景图+立绘，
+  // 进入 ScenePlay 后按 render_kind 渲染动态图场景（DAY-217）。
   const handleCharReady = (char: { name: string; relation: string; desc: string; adjusted: string }) => {
     if (generating) return;
     setGenerating(true);
@@ -541,16 +549,18 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
       place: selectedScene?.title ?? "",
       plot: [narration, char.desc].filter(Boolean).join("。"),
       intent: char.adjusted || char.desc || "试着说出没说的话",
+      render_kind: "dynamic_image",
     };
-    streamCreateScene(fields, (e) => {
-      if (e.event === "done" && e.data?.scene_id) {
+    createScene(fields)
+      .then((scene) => {
         setGenerating(false);
-        onPlay(e.data.scene_id, selectedScene?.theater);
-      }
-    }).catch((err) => {
-      setGenerating(false);
-      setGenError(err?.message ?? "生成失败，再试一次");
-    });
+        // galgame 场景按 render_kind 渲染，theater 参数被忽略，沿用原选择即可
+        onPlay(scene.id, selectedScene?.theater);
+      })
+      .catch((err) => {
+        setGenerating(false);
+        setGenError(err?.message ?? "生成失败，再试一次");
+      });
   };
 
   if (generating) {

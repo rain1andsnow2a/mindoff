@@ -88,7 +88,7 @@ export function create() {
   group.add(nightView);
 
   // 月光洒入（从窗口斜射的光柱感：平行光 + 地面光斑）
-  const moonBeam = new THREE.SpotLight(0xa8c0e8, 1.6, 14, Math.PI / 5, 0.5, 1.2);
+  const moonBeam = new THREE.SpotLight(0xa8c0e8, 2.4, 14, Math.PI / 5, 0.5, 1.2);
   moonBeam.position.set(winX + 0.8, winY + winH - 0.2, -3.6);
   moonBeam.target.position.set(-1.5, 0, 1.5);
   moonBeam.castShadow = true;
@@ -113,7 +113,12 @@ export function create() {
   const blanket = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 1.5),
     new THREE.MeshStandardMaterial({ color: 0x4a3a52, roughness: 1, flatShading: true }));
   blanket.position.set(-3.1, 0.53, -2.2);
-  group.add(bed, pillow, blanket);
+  // 床头板
+  const headboard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 0.15),
+    new THREE.MeshStandardMaterial({ color: 0x3a3230, roughness: 0.9 }));
+  headboard.position.set(-3.4, 0.65, -2.95);
+  headboard.castShadow = true;
+  group.add(bed, pillow, blanket, headboard);
 
   // 床头柜 + 熄着的台灯（轮廓）
   const nightstand = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5),
@@ -124,14 +129,84 @@ export function create() {
   lampShade.position.set(-4.5, 0.75, -3.3);
   group.add(nightstand, lampShade);
 
+  // 地毯
+  const rug = new THREE.Mesh(
+    new THREE.CircleGeometry(1.6, 24),
+    new THREE.MeshStandardMaterial({ color: 0x5a4a5e, roughness: 1 })
+  );
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(-0.5, 0.005, 0.5);
+  rug.receiveShadow = true;
+  group.add(rug);
+
+  // 窗帘（两侧）
+  const curtainMat = new THREE.MeshStandardMaterial({ color: 0x3a4260, roughness: 1, side: THREE.DoubleSide });
+  const curtainL = new THREE.Mesh(new THREE.PlaneGeometry(0.6, winH + 0.4), curtainMat);
+  curtainL.position.set(winX - winW / 2 - 0.35, winY + winH / 2, -3.9);
+  const curtainR = curtainL.clone();
+  curtainR.position.x = winX + winW / 2 + 0.35;
+  group.add(curtainL, curtainR);
+
+  // 衣柜（左侧）
+  const wardrobe = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 2.2, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x4a3f35, roughness: 0.9 })
+  );
+  wardrobe.position.set(-4.3, 1.1, -1.0);
+  wardrobe.castShadow = true;
+  group.add(wardrobe);
+
+  // 书桌 + 椅子（右侧）
+  const desk = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.75, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.8 })
+  );
+  desk.position.set(3.8, 0.375, -2.5);
+  desk.castShadow = true;
+  group.add(desk);
+  const deskChair = new THREE.Mesh(
+    new THREE.BoxGeometry(0.45, 0.9, 0.45),
+    new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: 0.9 })
+  );
+  deskChair.position.set(3.8, 0.45, -1.6);
+  deskChair.castShadow = true;
+  group.add(deskChair);
+
+  // 床头挂画
+  const art = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x6a7a9a, roughness: 0.9 })
+  );
+  art.position.set(-3.4, 2.0, -3.9);
+  group.add(art);
+
+  // 门（右侧墙）
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 2.1, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x4a3f35, roughness: 0.9 })
+  );
+  door.position.set(4.9, 1.05, 1.0);
+  group.add(door);
+
   // 人物：坐在窗台上打电话，腿垂下来
   const me = createFigure({ bodyColor: 0x6a7590, pose: 'phone' });
   me.position.set(winX, winY - 0.35, -3.75);
   me.rotation.y = Math.PI * 0.15;
   group.add(me);
 
-  // 极暗环境光，突出夜
-  group.add(new THREE.AmbientLight(0x2a3450, 0.55));
+  // 环境光 + 半球补光：夜晚但不至于看不清
+  group.add(new THREE.AmbientLight(0x3a4a68, 1.0));
+  group.add(new THREE.HemisphereLight(0x4a5a78, 0x2a2a3a, 0.5));
+
+  // 手机屏幕微光（点光，照亮人物侧脸和窗台）
+  const phoneGlow = new THREE.PointLight(0x88aaff, 0.9, 2.5, 2);
+  phoneGlow.position.set(winX + 0.15, winY - 0.1, -3.55);
+  group.add(phoneGlow);
+
+  // 床头小夜灯暖光（让左侧床铺区域有层次）
+  const nightLight = new THREE.PointLight(0xffb87a, 0.6, 4, 2);
+  nightLight.position.set(-4.5, 0.9, -3.3);
+  group.add(nightLight);
 
   function update(t) {
     nightMat.uniforms.time.value = t;
@@ -140,6 +215,6 @@ export function create() {
   return {
     group,
     update,
-    camera: { pos: [-1.2, 1.6, 2.8], look: [winX * 0.6, 1.3, -3.5] },
+    camera: { pos: [-1.8, 1.9, 3.8], look: [0, 1.2, -2.5] },
   };
 }

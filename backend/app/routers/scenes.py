@@ -18,6 +18,8 @@ from app.graphs import theater
 from app.models.scene import Scene
 from app.models.user import User
 from app.services import stage
+from app.services.scene_images import gen_scene_images
+from app.services.scene_recommend import PRESET_THEATERS, detect_scene_intent
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 
@@ -34,6 +36,9 @@ class SceneCreate(BaseModel):
     place: str | None = None
     plot: str | None = None
     intent: str | None = None
+    # 方案B-2：即时建场景可指定预置 3D 剧场；合法则落 preset_3d + theater_id
+    theater_id: str | None = None
+    render_kind: str | None = None
 
 
 class ChoiceIn(BaseModel):
@@ -48,6 +53,10 @@ class SettlementIn(BaseModel):
     role_id: int | None = None
     keep: bool = True
     card_text: str | None = None
+
+
+class SceneIntentIn(BaseModel):
+    text: str  # 用户在通话中刚说的一句（或最近几句）转写
 
 
 class SceneOut(BaseModel):
@@ -80,7 +89,32 @@ def _get_owned(db: Session, user_id: int, scene_id: int) -> Scene:
     return s
 
 
-def _persist_opening(db: Session, user_id: int, opening: dict, fragment_id: int | None) -> Scene:
+def _resolve_theater(theater_id: str | None) -> tuple[str, str | None]:
+    """把入参 theater_id 归一化为 (render_kind, theater_id)。
+
+    合法预置舞台 → ("preset_3d", tid)；否则退回默认 ("preset_3d", None)，绝不报错。
+    """
+    if theater_id and theater_id in PRESET_THEATERS:
+        return "preset_3d", theater_id
+    return "preset_3d", None
+
+
+def _persist_opening(
+    db: Session,
+    user_id: int,
+    opening: dict,
+    fragment_id: int | None,
+    theater_id: str | None = None,
+    render_kind: str | None = None,
+    bg_image: str | None = None,
+    characters: list | None = None,
+) -> Scene:
+    # render_kind="dynamic_image" 时走 galgame（背景图+立绘），不绑定预置 3D 舞台；
+    # 否则按预置舞台归一化为 preset_3d。
+    if render_kind == "dynamic_image":
+        rk, tid = "dynamic_image", None
+    else:
+        rk, tid = _resolve_theater(theater_id)
     s = Scene(
         user_id=user_id,
         title=opening["title"],
@@ -91,6 +125,10 @@ def _persist_opening(db: Session, user_id: int, opening: dict, fragment_id: int 
         choices=opening["choices"],
         history=[],
         turn=0,
+        render_kind=rk,
+        theater_id=tid,
+        bg_image=bg_image,
+        characters=characters,
     )
     db.add(s)
     db.commit()
@@ -184,6 +222,29 @@ def list_scenes(user: User = Depends(get_current_user), db: Session = Depends(ge
     ).all())
 
 
+@router.post("/detect-intent", response_model=None)
+def scene_detect_intent(
+    body: SceneIntentIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """通话中·单句实时场景意图识别（方案B-1）。
+
+    纯判定：不写库、不发信。命中时返回 {worth:true, seed, render_kind, theater_id, confidence}，
+    否则 {worth:false}。供前端在语音通话里逐句调用，触发「场景邀请提示条」。
+    """
+    rec = detect_scene_intent(body.text)
+    if rec is None:
+        return {"worth": False}
+    return {
+        "worth": True,
+        "seed": rec.get("seed"),
+        "render_kind": rec.get("render_kind"),
+        "theater_id": rec.get("theater_id"),
+        "confidence": rec.get("confidence"),
+    }
+
+
 @router.post("", response_model=None, status_code=status.HTTP_201_CREATED)
 def create_scene(
     body: SceneCreate,
@@ -196,11 +257,26 @@ def create_scene(
         title=body.title, people=body.people, place=body.place, plot=body.plot, intent=body.intent
     )
     if not stream:
-        return _persist_opening(db, user.id, theater.generate_manual(
-            title=body.title, people=body.people, place=body.place, plot=body.plot, intent=body.intent), None)
+        opening = theater.generate_manual(
+            title=body.title, people=body.people, place=body.place, plot=body.plot, intent=body.intent)
+        # 手动路径也支持 galgame：render_kind=dynamic_image 时并发生成背景图+立绘
+        # （失败降级为无图，前端兜底渐变背景，绝不阻断建场景）。
+        bg_image: str | None = None
+        characters: list | None = None
+        if body.render_kind == "dynamic_image":
+            bg_image, characters = gen_scene_images(
+                title=body.title, people=body.people, place=body.place,
+                plot=body.plot, intent=body.intent, setting=opening.get("setting"),
+            )
+        return _persist_opening(
+            db, user.id, opening, None,
+            theater_id=body.theater_id, render_kind=body.render_kind,
+            bg_image=bg_image, characters=characters,
+        )
 
     uid = user.id
     title = body.title or "重演片刻"
+    render_kind, tid = _resolve_theater(body.theater_id)
 
     def gen():
         db2 = SessionLocal()
@@ -215,7 +291,8 @@ def create_scene(
                     yield _sse("choices", {"choices": val})
             scene = Scene(user_id=uid, title=title, status="active", source_fragment_id=None,
                           setting="", beats=[{"speaker": "旁白", "text": narrative.strip()}],
-                          choices=choices, history=[], turn=0)
+                          choices=choices, history=[], turn=0,
+                          render_kind=render_kind, theater_id=tid)
             db2.add(scene)
             db2.commit()
             db2.refresh(scene)

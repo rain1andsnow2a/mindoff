@@ -254,6 +254,20 @@ export const deleteTreasure = (id: number) => del(`/api/v1/treasures/${id}`);
 export const listSceneTemplates = () => get("/api/v1/scenes/templates");
 export const listScenes = () => get("/api/v1/scenes");
 export const getScene = (id: number) => get(`/api/v1/scenes/${id}`);
+/** 非流即时建场景（方案B 一键进入用）：可带 theater_id，返回含 scene_id/theater_id 的 SceneOut。 */
+export const createScene = (fields: {
+  title?: string;
+  people?: string;
+  place?: string;
+  plot?: string;
+  intent?: string;
+  theater_id?: string | null;
+  render_kind?: string | null;
+}) =>
+  post<{ id: number; theater_id: string | null; render_kind: string; [k: string]: any }>(
+    "/api/v1/scenes",
+    fields
+  );
 export const updateScene = (id: number, b: any) => patch(`/api/v1/scenes/${id}`, b);
 export const listCandidates = () => get("/api/v1/candidates");
 export const dismissCandidate = (id: number) => del(`/api/v1/candidates/${id}`);
@@ -261,6 +275,23 @@ export const dismissCandidate = (id: number) => del(`/api/v1/candidates/${id}`);
 export async function streamCreateScene(fields: any, onEvent: (e: SSEEvent) => void): Promise<void> {
   await streamSSE(sseUrl("/api/v1/scenes?stream=true"), fields, onEvent, { headers: sseHeaders() });
 }
+/** 通话中·单句实时场景意图识别（方案B）。命中返回 worth:true + seed/theater_id/confidence，否则 worth:false。 */
+export interface IntentSeed {
+  title?: string;
+  people?: string;
+  place?: string;
+  plot?: string;
+  intent?: string;
+}
+export interface DetectIntentResult {
+  worth: boolean;
+  seed?: IntentSeed | null;
+  render_kind?: string | null;
+  theater_id?: string | null;
+  confidence?: number | null;
+}
+export const detectSceneIntent = (text: string) =>
+  post<DetectIntentResult>("/api/v1/scenes/detect-intent", { text });
 /** 确认候选并逐字揭幕开场。 */
 export async function streamConfirmCandidate(id: number, onEvent: (e: SSEEvent) => void): Promise<void> {
   await streamSSE(sseUrl(`/api/v1/candidates/${id}/confirm?stream=true`), null, onEvent, {

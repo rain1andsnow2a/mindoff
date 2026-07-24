@@ -1,4 +1,4 @@
-/** 深夜通话 · 海边：月下海面、沙滩、坐在岸边的人（1:1 移植自 theater/src/scenes/seaside.js） */
+/** 深夜通话 · 海边：月下海面、沙滩、坐在岸边的人（已丰富：潮线湿沙、漂流木、贝壳、渔火、薄云、手机微光） */
 import * as THREE from "three";
 import { createSkyDome, createStars, createMoon } from "../utils";
 import { createFigure } from "../figure";
@@ -60,6 +60,16 @@ export function create(): TheaterScene {
   sand.receiveShadow = true;
   group.add(sand);
 
+  // 潮线湿沙带（近水的深色沙滩，增加岸边层次）
+  const wetSand = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3d352c, roughness: 0.9 })
+  );
+  wetSand.rotation.x = -Math.PI / 2;
+  wetSand.position.set(0, 0.004, 6);
+  wetSand.receiveShadow = true;
+  group.add(wetSand);
+
   // 海浪沫线（贴岸边的亮线，缓慢推移）
   const foamMat = new THREE.MeshBasicMaterial({ color: 0xc8d8e8, transparent: true, opacity: 0.25 });
   const foam = new THREE.Mesh(new THREE.PlaneGeometry(160, 0.8), foamMat);
@@ -77,20 +87,82 @@ export function create(): TheaterScene {
     group.add(rock);
   });
 
-  // 人物：坐在沙滩上打电话，面向海
+  // 漂流木（躺倒的枯木 + 断枝）
+  const driftMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 1, flatShading: true });
+  const drift = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.7, 7), driftMat);
+  trunk.rotation.z = Math.PI / 2;
+  trunk.position.y = 0.11;
+  const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.06, 0.6, 6), driftMat);
+  branch.position.set(0.4, 0.28, 0);
+  branch.rotation.z = -0.7;
+  drift.add(trunk, branch);
+  drift.position.set(3.2, 0, 9.5);
+  drift.rotation.y = 0.4;
+  drift.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+  group.add(drift);
+
+  // 散落的贝壳（小半球，浅色）
+  const shellColors = [0xb8a894, 0xc8b8a8, 0xa89888, 0xc0a898];
+  ([[-3.5, 10.2], [1.8, 11.6], [5.2, 8.8], [-0.6, 12.6]] as const).forEach(([x, z], i) => {
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: shellColors[i % shellColors.length], roughness: 0.8 })
+    );
+    shell.position.set(x, 0.015, z);
+    shell.rotation.y = Math.random() * Math.PI;
+    group.add(shell);
+  });
+
+  // 远处渔火（海平线上的暖光点，缓慢闪烁）
+  const boatLightMat = new THREE.MeshBasicMaterial({ color: 0xffc873, transparent: true, opacity: 0.8 });
+  const boatLights: THREE.Mesh[] = [];
+  ([[-25, -55], [12, -70], [32, -48]] as const).forEach(([x, z]) => {
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 5), boatLightMat.clone());
+    light.position.set(x, 0.4, z);
+    boatLights.push(light);
+    group.add(light);
+  });
+
+  // 低空薄云（几团扁球叠出的云，半透明，缓慢漂移）
+  const mkCloud = (x: number, y: number, z: number, s: number) => {
+    const cg = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0x1a2740, transparent: true, opacity: 0.32, depthWrite: false });
+    ([[0, 0, 1], [0.9, 0.15, 0.75], [-0.95, 0.1, 0.7], [0.3, 0.35, 0.55]] as const).forEach(([dx, dy, k]) => {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(1.6 * s * k, 8, 6), mat);
+      puff.position.set(dx * s * 1.6, dy * s, 0);
+      puff.scale.y = 0.32;
+      cg.add(puff);
+    });
+    cg.position.set(x, y, z);
+    return cg;
+  };
+  const clouds: { mesh: THREE.Group; baseX: number; speed: number }[] = [];
+  ([[-14, 27, -75, 1.6], [18, 30, -82, 2.0]] as const).forEach(([x, y, z, s], i) => {
+    const cloud = mkCloud(x, y, z, s);
+    clouds.push({ mesh: cloud, baseX: x, speed: 0.5 + i * 0.3 });
+    group.add(cloud);
+  });
+
+  // 人物：站在沙滩上打电话，面向海
   const me = createFigure({ bodyColor: 0x8a7a9a, pose: "phone" });
   me.position.set(-1.2, 0, 6);
   me.rotation.y = Math.PI; // 背对镜头朝海
   group.add(me);
 
+  // 手机屏幕微光（照亮人物握机的手与肩头）
+  const phoneGlow = new THREE.PointLight(0x88aaff, 1.1, 2.6, 2);
+  phoneGlow.position.set(-1.38, 1.3, 5.75);
+  group.add(phoneGlow);
+
   // 远处椰子树剪影（一丛）
   const palmMat = new THREE.MeshStandardMaterial({ color: 0x0e1a16, roughness: 1, flatShading: true });
   const mkPalm = (x: number, z: number, s: number, lean: number) => {
     const p = new THREE.Group();
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.2 * s, 4.5 * s, 6), palmMat);
-    trunk.position.y = 2.25 * s;
-    trunk.rotation.z = lean;
-    p.add(trunk);
+    const palmTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.2 * s, 4.5 * s, 6), palmMat);
+    palmTrunk.position.y = 2.25 * s;
+    palmTrunk.rotation.z = lean;
+    p.add(palmTrunk);
     for (let i = 0; i < 6; i++) {
       const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.25 * s, 2.4 * s, 4), palmMat);
       const a = (i / 6) * Math.PI * 2;
@@ -104,12 +176,17 @@ export function create(): TheaterScene {
   };
   group.add(mkPalm(-16, 10, 1.2, 0.15), mkPalm(-18.5, 12, 0.9, -0.1));
 
-  // 光：月光为主
-  group.add(new THREE.AmbientLight(0x2c3a55, 0.6));
-  const moonLight = new THREE.DirectionalLight(0xa8bce0, 0.9);
+  // 光：月光为主 + 半球补光（沙滩与人物有层次）
+  group.add(new THREE.AmbientLight(0x2c3a55, 2.0));
+  group.add(new THREE.HemisphereLight(0x35486a, 0x2a2620, 1.2));
+  const moonLight = new THREE.DirectionalLight(0xa8bce0, 1.15);
   moonLight.position.set(0, 30, -60);
   moonLight.castShadow = true;
   group.add(moonLight);
+  // 岸侧弱补光：让背对镜头的人物与沙滩细节有轮廓
+  const shoreFill = new THREE.DirectionalLight(0x4a5a78, 1.2);
+  shoreFill.position.set(0, 8, 30);
+  group.add(shoreFill);
 
   function update(t: number) {
     stars.userData.update(t);
@@ -119,11 +196,20 @@ export function create(): TheaterScene {
     foam.position.z = 8.5 + push * 1.2;
     foamMat.opacity = 0.1 + push * 0.22;
     foam.scale.x = 1 + push * 0.05;
+    // 渔火明灭
+    boatLights.forEach((light, i) => {
+      (light.material as THREE.MeshBasicMaterial).opacity =
+        0.45 + 0.35 * Math.sin(t * 0.8 + i * 2.1);
+    });
+    // 薄云缓移
+    clouds.forEach(({ mesh, baseX, speed }) => {
+      mesh.position.x = baseX + Math.sin(t * 0.04 * speed) * 4;
+    });
   }
 
   return {
     group,
     update,
-    camera: { pos: [-0.5, 1.8, 11.5], look: [0, 2.5, -20] },
+    camera: { pos: [-0.8, 1.7, 10.8], look: [0, 2.3, -18] },
   };
 }

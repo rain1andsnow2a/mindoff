@@ -349,7 +349,18 @@ export default function App() {
             )}
             {screen === "voice-call" && (
               <VoiceCall petName={pet.name} petEmoji={pet.emoji}
-                onEnd={() => { go("companion"); setTab("companion"); }} />
+                onEnd={() => { go("companion"); setTab("companion"); }}
+                onToast={showToast}
+                onEnterScene={(sceneId, theaterId) => {
+                  setSceneId(sceneId);
+                  setSceneTheater(
+                    THEATER_SCENE_IDS.includes((theaterId ?? "") as TheaterSceneId)
+                      ? (theaterId as TheaterSceneId)
+                      : "dining" // 无/非法 theater_id 时用默认剧场兜底
+                  );
+                  go("scene-play");
+                  setTab("scene");
+                }} />
             )}
             {screen === "sleep-dump" && (
               <SleepDump initialText={dumpSeedText}

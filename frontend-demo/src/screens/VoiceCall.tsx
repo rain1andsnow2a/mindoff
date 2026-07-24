@@ -12,6 +12,7 @@ import { PhoneOff } from "lucide-react-native";
 import { AgentBubble, PetPlaceholder, UserBubble, WarmDot } from "../components";
 import { palette, useNight } from "../theme";
 import { useRealtimeCall, type CallStatus } from "../useRealtimeCall";
+import { createScene } from "../api";
 
 function statusLabel(status: CallStatus, error: string | null): string {
   if (error) return error;
@@ -31,12 +32,15 @@ function statusLabel(status: CallStatus, error: string | null): string {
   }
 }
 
-export function VoiceCall({ petName, petEmoji, onEnd }: {
+export function VoiceCall({ petName, petEmoji, onEnd, onEnterScene, onToast }: {
   petName: string; petEmoji: string; onEnd: () => void;
+  onEnterScene: (sceneId: number, theaterId?: string) => void;
+  onToast?: (msg: string) => void;
 }) {
   const night = useNight();
   const C = palette(night);
   const [voiceReply, setVoiceReply] = useState(false);
+  const [building, setBuilding] = useState(false);
   const call = useRealtimeCall(voiceReply);
   const scrollRef = useRef<ScrollView>(null);
   const ring = useRef(new Animated.Value(1)).current;
@@ -74,6 +78,30 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
   const hangup = () => {
     call.stop();
     onEnd();
+  };
+
+  // 一键即时建场景并进入片场：用意图种子（含 theater_id）建场景 → 挂断 → 跳 ScenePlay
+  const enterScene = async () => {
+    const sug = call.sceneSuggestion;
+    if (!sug || building) return;
+    setBuilding(true);
+    try {
+      const seed = sug.seed ?? {};
+      const scene = await createScene({
+        title: seed.title ?? undefined,
+        people: seed.people ?? undefined,
+        place: seed.place ?? undefined,
+        plot: seed.plot ?? undefined,
+        intent: seed.intent ?? undefined,
+        theater_id: sug.theater_id,
+      });
+      call.dismissSuggestion();
+      call.stop();
+      onEnterScene(scene.id, scene.theater_id ?? sug.theater_id ?? undefined);
+    } catch {
+      setBuilding(false);
+      onToast?.("场景没搭起来，待会儿再试试");
+    }
   };
 
   const listening = call.status === "listening";
@@ -139,6 +167,46 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
           </View>
         </Pressable>
       </View>
+
+      {/* 场景邀请提示条（方案B）：通话中听出场景意图时浮现，一键即时建场景并进入 */}
+      {call.sceneSuggestion ? (
+        <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
+          <View style={{
+            borderRadius: 16, padding: 14,
+            backgroundColor: "rgba(246,231,168,0.5)",
+            borderWidth: 1, borderColor: "rgba(196,149,58,0.4)",
+          }}>
+            <Text style={{ fontSize: 13, color: C.text, marginBottom: 10 }}>
+              要现在就走进《{call.sceneSuggestion.seed?.title || "这一幕"}》吗？
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={enterScene}
+                disabled={building}
+                style={{
+                  flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center",
+                  backgroundColor: building ? "rgba(196,149,58,0.5)" : "rgba(196,149,58,0.95)",
+                }}
+              >
+                <Text style={{ fontSize: 14, color: "#FFF", fontWeight: "500" }}>
+                  {building ? "在搭场景…" : "进入"}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={call.dismissSuggestion}
+                disabled={building}
+                style={{
+                  paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: "center",
+                  backgroundColor: "rgba(255,252,245,0.8)",
+                  borderWidth: 1, borderColor: "rgba(255,255,255,0.6)",
+                }}
+              >
+                <Text style={{ fontSize: 14, color: C.text2 }}>以后再说</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {/* 对话流：用户整句 + 桌宠回复 */}
       <ScrollView
