@@ -4,8 +4,9 @@
  * 进屏即接通：麦克风流式转写（服务端 VAD 自动断句），桌宠逐字文字回复。
  * 仅真机 Android 可用；不可用时给出提示并允许退出。
  */
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PhoneOff } from "lucide-react-native";
 
 import { AgentBubble, PetPlaceholder, UserBubble, WarmDot } from "../components";
@@ -35,7 +36,8 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
 }) {
   const night = useNight();
   const C = palette(night);
-  const call = useRealtimeCall();
+  const [voiceReply, setVoiceReply] = useState(false);
+  const call = useRealtimeCall(voiceReply);
   const scrollRef = useRef<ScrollView>(null);
   const ring = useRef(new Animated.Value(1)).current;
 
@@ -54,6 +56,20 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
       useNativeDriver: true,
     }).start();
   }, [call.level, ring]);
+
+  // 语音回复开关：本地记忆，下次进入沿用
+  useEffect(() => {
+    AsyncStorage.getItem("mindoff.voiceReply").then((v) => {
+      if (v === "1") setVoiceReply(true);
+    });
+  }, []);
+  const toggleVoice = () => {
+    setVoiceReply((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem("mindoff.voiceReply", next ? "1" : "0").catch(() => {});
+      return next;
+    });
+  };
 
   const hangup = () => {
     call.stop();
@@ -94,6 +110,35 @@ export function VoiceCall({ petName, petEmoji, onEnd }: {
           </Text>
         </View>
       ) : null}
+
+      {/* 桌宠语音回复开关（方向 D · 带说明的开关行） */}
+      <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
+        <Pressable
+          onPress={toggleVoice}
+          style={{
+            flexDirection: "row", alignItems: "center", gap: 10,
+            paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16,
+            backgroundColor: "rgba(255,252,245,0.78)",
+            borderWidth: 1, borderColor: "rgba(255,255,255,0.6)",
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, color: C.text }}>桌宠语音回复</Text>
+            <Text style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
+              开启后{petName}会出声，也保留字幕
+            </Text>
+          </View>
+          <View
+            style={{
+              width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center",
+              backgroundColor: voiceReply ? "rgba(196,149,58,0.9)" : "rgba(120,110,100,0.28)",
+              alignItems: voiceReply ? "flex-end" : "flex-start",
+            }}
+          >
+            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#FFF" }} />
+          </View>
+        </Pressable>
+      </View>
 
       {/* 对话流：用户整句 + 桌宠回复 */}
       <ScrollView

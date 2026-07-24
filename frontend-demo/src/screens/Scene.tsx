@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
+  Animated, Dimensions, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronLeft, Mic, Play, Send, Edit3 } from "lucide-react-native";
@@ -61,14 +61,23 @@ type SceneSubState = "browsing" | "capturing" | "reviewing" | "setup";
 
 // ─── Scene Portal ────────────────────────────────────────────────────────────
 
-function ScenePortal({ scene, isActive, onEnter }: {
-  scene: BuiltInScene; isActive: boolean; onEnter: () => void;
+const CAROUSEL_CARD_W = 310;
+const CAROUSEL_GAP = 16;
+const CAROUSEL_SNAP = CAROUSEL_CARD_W + CAROUSEL_GAP;   // 每次吸附一张的间距
+const CAROUSEL_SIDE = Math.max(16, (Dimensions.get("window").width - CAROUSEL_CARD_W) / 2); // 两端留白，让首尾卡片也能居中
+
+function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
+  scene: BuiltInScene; index: number; scrollX: Animated.Value; isActive: boolean; onEnter: () => void;
 }) {
+  // 跟手连续缩放/淡入：当前卡片 1.0，相邻卡片缩到 0.9 且变淡，随滑动平滑过渡。
+  const inputRange = [(index - 1) * CAROUSEL_SNAP, index * CAROUSEL_SNAP, (index + 1) * CAROUSEL_SNAP];
+  const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: "clamp" });
+  const opacity = scrollX.interpolate({ inputRange, outputRange: [0.55, 1, 0.55], extrapolate: "clamp" });
   return (
+    <Animated.View style={{ transform: [{ scale }], opacity }}>
     <Pressable onPress={isActive ? onEnter : undefined}
       style={{
-        width: 310, height: 390, borderRadius: 30, overflow: "hidden",
-        opacity: isActive ? 1 : 0.72, transform: [{ scale: isActive ? 1 : 0.93 }],
+        width: CAROUSEL_CARD_W, height: 390, borderRadius: 30, overflow: "hidden",
       }}>
       <LinearGradient colors={scene.colors} style={{ flex: 1 }}>
         {/* 环境光斑近似 */}
@@ -108,6 +117,7 @@ function ScenePortal({ scene, isActive, onEnter }: {
         </LinearGradient>
       </LinearGradient>
     </Pressable>
+    </Animated.View>
   );
 }
 
@@ -457,6 +467,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   const night = useNight();
   const C = palette(night);
   const [activeIdx, setActiveIdx] = useState(0);
+  const scrollX = useRef(new Animated.Value(0)).current;
   const [subState, setSubState] = useState<SceneSubState>("browsing");
   const [selectedScene, setSelectedScene] = useState<BuiltInScene | null>(null);
   const [templates, setTemplates] = useState<BuiltInScene[]>(BUILT_IN_SCENES);
@@ -571,20 +582,27 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
 
       {/* Carousel */}
       <View style={{ height: 420 }}>
-        <ScrollView
+        <Animated.ScrollView
           horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 16, paddingHorizontal: 24, alignItems: "center" }}
-          onScroll={e => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / 326);
-            setActiveIdx(Math.max(0, Math.min(idx, templates.length - 1)));
-          }}
+          snapToInterval={CAROUSEL_SNAP} snapToAlignment="start" decelerationRate="fast" disableIntervalMomentum
+          contentContainerStyle={{ gap: CAROUSEL_GAP, paddingHorizontal: CAROUSEL_SIDE, alignItems: "center" }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            {
+              useNativeDriver: true,
+              listener: (e: any) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_SNAP);
+                setActiveIdx(Math.max(0, Math.min(idx, templates.length - 1)));
+              },
+            }
+          )}
           scrollEventThrottle={16}
         >
           {templates.map((scene, i) => (
-            <ScenePortal key={scene.id} scene={scene} isActive={activeIdx === i}
+            <ScenePortal key={scene.id} scene={scene} index={i} scrollX={scrollX} isActive={activeIdx === i}
               onEnter={() => { setSelectedScene(scene); setSubState("setup"); }} />
           ))}
-        </ScrollView>
+        </Animated.ScrollView>
         <View style={{ position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
           {templates.map((_, i) => (
             <View key={i} style={{

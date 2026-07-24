@@ -19,6 +19,7 @@ import {
 import type { EventSubscription } from "expo-modules-core";
 
 import { createConversation, getActivePet, streamChatReply, wsUrl } from "./api";
+import { speakReply, stopSpeaking } from "./speak";
 
 export type CallStatus =
   | "idle"
@@ -68,7 +69,7 @@ const SESSION_UPDATE = {
   },
 };
 
-export function useRealtimeCall(): RealtimeCall {
+export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const [status, setStatus] = useState<CallStatus>("idle");
   const [liveUser, setLiveUser] = useState("");
   const [turns, setTurns] = useState<CallTurn[]>([]);
@@ -80,6 +81,9 @@ export function useRealtimeCall(): RealtimeCall {
   const convIdRef = useRef<number | null>(null);
   const closedRef = useRef(false);
   const turnIdRef = useRef(0);
+  // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
+  const voiceReplyRef = useRef(voiceReply);
+  voiceReplyRef.current = voiceReply;
 
   const addTurn = useCallback((role: "user" | "pet", text: string): number => {
     const id = ++turnIdRef.current;
@@ -98,6 +102,7 @@ export function useRealtimeCall(): RealtimeCall {
     } catch {
       /* ignore */
     }
+    stopSpeaking();
     setLevel(0);
   }, []);
 
@@ -117,7 +122,9 @@ export function useRealtimeCall(): RealtimeCall {
       addTurn("user", clean);
       const petId = addTurn("pet", "");
       setStatus("thinking");
+      let full = "";
       streamChatReply(convId, clean, (delta) => {
+        full += delta;
         setTurns((prev) =>
           prev.map((t) => (t.id === petId ? { ...t, text: t.text + delta } : t))
         );
@@ -132,7 +139,10 @@ export function useRealtimeCall(): RealtimeCall {
           );
         })
         .finally(() => {
-          if (!closedRef.current) setStatus("listening");
+          if (!closedRef.current) {
+            setStatus("listening");
+            if (voiceReplyRef.current) speakReply(full);
+          }
         });
     },
     [addTurn]
