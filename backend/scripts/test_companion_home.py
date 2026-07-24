@@ -63,6 +63,6 @@ assert r.json()["invitation"]["type"] == "todo" and r.json()["invitation"]["coun
 # 越权：无 token
 r = httpx.get(f"{B}/companion/home", timeout=60)
 assert r.status_code in (401, 403)
-print("AUTH: 无 token 被拒 ✓")
+print("AUTH: 无 token 被拒 OK")
 
 print("\n=== Companion Home (DAY-168) ALL PASS ===")

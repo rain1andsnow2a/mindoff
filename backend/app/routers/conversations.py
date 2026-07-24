@@ -25,6 +25,7 @@ from app.models.user import User
 from app.services.context_builder import build as build_memory_context
 from app.services.conversation_store import ConversationStore
 from app.services.memory_store import MemoryStore
+from app.services.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
@@ -93,6 +94,17 @@ def _memory_context(db: Session, user_id: int, query: str) -> str | None:
     except Exception:  # noqa: BLE001  记忆上下文失败绝不阻断对话
         return None
     return ctx if "- [" in ctx else None  # 无记忆行时不注入空围栏
+
+
+def _pet_prompt(db: Session, user_id: int, conv) -> str | None:
+    """取对话关联桌宠（或当前主桌宠）的系统提示词作为人格层。"""
+    pet_id = conv.pet_id
+    pet = None
+    if pet_id is not None:
+        pet = PetStore(db).get(user_id, pet_id)
+    if pet is None:
+        pet = PetStore(db).get_active(user_id)
+    return pet.system_prompt if pet else None
 
 
 # ─── 会话 ────────────────────────────────────────────────────────────────────
@@ -168,7 +180,8 @@ def send_message(
         store.add_message(conv_id, role="user", content=body.text)
         history = store.history_as_dicts(conv_id)
         memory_context = _memory_context(db, user.id, body.text)
-        reply_text = run_companion(mode, history, fragment_context, memory_context=memory_context)
+        pet_prompt = _pet_prompt(db, user.id, conv)
+        reply_text = run_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt)
         reply = store.add_message(conv_id, role="assistant", content=reply_text)
         return {
             "conversation_id": conv_id,
@@ -183,9 +196,10 @@ def send_message(
             store.add_message(conv_id, role="user", content=body.text)
             history = store.history_as_dicts(conv_id)
             memory_context = _memory_context(db2, user.id, body.text)
+            pet_prompt = _pet_prompt(db2, user.id, conv)
 
             parts: list[str] = []
-            for delta in stream_companion(mode, history, fragment_context, memory_context=memory_context):
+            for delta in stream_companion(mode, history, fragment_context, memory_context=memory_context, pet_prompt=pet_prompt):
                 parts.append(delta)
                 data = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"event: token\ndata: {data}\n\n"

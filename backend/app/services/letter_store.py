@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.letter import Letter
 
-LETTER_TYPES = {"music", "movie", "book", "greeting", "relationship", "scene_invite"}
+LETTER_TYPES = {"music", "movie", "book", "greeting", "relationship", "scene_invite", "weekly", "reminder"}
 
 
 class LetterStore:

@@ -8,7 +8,7 @@ is_active 标记当前主桌宠，同一用户同时只有一只（由 PetStore.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -31,6 +31,9 @@ class Pet(Base):
     personality: Mapped[str] = mapped_column(String(300), nullable=False, default="")
     tone: Mapped[str] = mapped_column(String(300), nullable=False, default="")
     actions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # 动作组合（字符串列表）
+
+    # 每宠系统提示词（人格层）；最外层 BASE_PERSONA 红线不可覆盖
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

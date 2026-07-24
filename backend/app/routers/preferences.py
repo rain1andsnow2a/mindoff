@@ -39,6 +39,10 @@ class PreferenceOut(BaseModel):
     proactive_frequency: str
     sleep_reminder_time: str
     keep_raw_dump: bool
+    ephemeral_ttl_days: int
+    font_size: str
+    companion_tone: str
+    reduce_transparency: bool
 
     model_config = {"from_attributes": True}
 
@@ -48,6 +52,10 @@ class PreferencePatch(BaseModel):
     proactive_frequency: str | None = Field(default=None)
     sleep_reminder_time: str | None = None
     keep_raw_dump: bool | None = None
+    ephemeral_ttl_days: int | None = None
+    font_size: str | None = None
+    companion_tone: str | None = None
+    reduce_transparency: bool | None = None
 
 
 @router.get("", response_model=PreferenceOut)
@@ -75,6 +83,12 @@ def patch_preferences(
     if "sleep_reminder_time" in patch:
         if not _TIME_RE.match(patch["sleep_reminder_time"]):
             raise HTTPException(422, "时间格式须为 HH:MM")
+    if "ephemeral_ttl_days" in patch:
+        if not 1 <= patch["ephemeral_ttl_days"] <= 30:
+            raise HTTPException(422, "寄存天数须在 1–30 天之间")
+    if "font_size" in patch:
+        if patch["font_size"] not in ("小", "标准", "大"):
+            raise HTTPException(422, "字体须为 小/标准/大")
 
     for k, v in patch.items():
         setattr(pref, k, v)

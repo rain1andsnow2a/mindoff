@@ -48,7 +48,7 @@ def _require_letter(db: Session, user: User, letter_id: int):
 
 @router.get("", response_model=list[LetterOut])
 def list_letters(
-    type: str | None = Query(None, description="music|movie|book|greeting|relationship|scene_invite"),
+    type: str | None = Query(None, description="music|movie|book|greeting|relationship|scene_invite|weekly|reminder"),
     unread: bool = Query(False),
     limit: int = Query(50, ge=1, le=100),
     cursor: int | None = Query(None, description="上一页最小 id，用于向更早翻页"),
@@ -92,3 +92,54 @@ def delete_letter(
     letter = _require_letter(db, user, letter_id)
     LetterStore(db).delete(letter)
     return None
+
+
+class ReplyIn(BaseModel):
+    text: str
+
+
+@router.post("/{letter_id}/reply", status_code=status.HTTP_201_CREATED)
+def reply_letter(
+    letter_id: int,
+    body: ReplyIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """对一封来信回信：以信件内容为上下文开一段对话，持久化用户回信，
+    并生成桌宠的第一句续写（非流式；前端之后可继续 streamChatReply）。"""
+    from app.graphs.companion import run_companion
+    from app.services.conversation_store import ConversationStore
+
+    letter = _require_letter(db, user, letter_id)
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "回信内容不能为空")
+
+    store = ConversationStore(db)
+    conv = store.create(user_id=user.id, mode="free_chat", pet_id=letter.pet_id,
+                        title=f"回信：{letter.title[:20]}")
+    # 上下文种子：信本身（assistant）→ 用户回信（user）
+    store.add_message(conv.id, role="assistant",
+                      content=f"（我写给你的信）{letter.title}\n{letter.body}")
+    store.add_message(conv.id, role="user", content=text)
+
+    # 取来信关联桌宠或当前主桌宠的人设
+    from app.services.pet_store import PetStore
+    pet = None
+    if letter.pet_id is not None:
+        pet = PetStore(db).get(user.id, letter.pet_id)
+    if pet is None:
+        pet = PetStore(db).get_active(user.id)
+    pet_prompt = pet.system_prompt if pet else None
+
+    history = store.history_as_dicts(conv.id)
+    reply_text = run_companion("free_chat", history, None, pet_prompt=pet_prompt)
+    reply = store.add_message(conv.id, role="assistant", content=reply_text)
+
+    # 回信后顺手标记已读
+    LetterStore(db).mark_read(letter, True)
+
+    return {
+        "conversation_id": conv.id,
+        "reply": {"id": reply.id, "role": reply.role, "content": reply.content},
+    }

@@ -11,20 +11,32 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-three/fiber": "^9.6.1",
     "expo": "~53.0.0",
+    "expo-asset": "~11.1.7",
+    "expo-audio": "~0.4.9",
     "expo-blur": "~14.1.5",
+    "expo-build-properties": "~0.14.8",
+    "expo-file-system": "~18.1.11",
+    "expo-gl": "~15.1.7",
     "expo-linear-gradient": "~14.1.5",
+    "expo-notifications": "~0.31.0",
     "expo-status-bar": "~2.2.3",
     "lucide-react-native": "^0.544.0",
+    "mindoff-companion": "file:./modules/mindoff-companion",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.5",
     "react-native-svg": "15.11.2",
-    "react-native-web": "^0.20.0"
+    "react-native-web": "^0.20.0",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
-    "typescript": "~5.8.3",
-    "@types/react": "~19.0.10"
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
+    "@types/react": "~19.0.10",
+    "@types/three": "^0.185.1",
+    "typescript": "~5.8.3"
   }
 }

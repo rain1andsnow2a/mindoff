@@ -5,22 +5,42 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
-import { ChevronRight, Mic, Moon, Plus, Send, Sun } from "lucide-react-native";
+import { ChevronRight, Mic, Moon, Plus, Send, Square, Sun } from "lucide-react-native";
 import {
   AgentBubble, BottomSheet, GlassCard, LiquidGlassShell, PetPlaceholder,
   UserBubble, WarmDot,
 } from "../components";
-import { CREAM, palette, useNight } from "../theme";
+import { CREAM, GOLD_DEEP, palette, useNight } from "../theme";
+import {
+  createConversation, getActivePet, getCompanionHome, streamChatReply,
+} from "../api";
+import { useVoiceInput } from "../useVoiceInput";
 
 // ─── Idle ────────────────────────────────────────────────────────────────────
 
-export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petName, petEmoji }: {
-  onChat: () => void; onModeSheet: () => void; onNightToggle: () => void;
+export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, onNightToggle, night, petName, petEmoji }: {
+  onChat: () => void; onVoiceChat: (text: string) => void; onVoiceCall: () => void; onModeSheet: () => void; onNightToggle: () => void;
   night: boolean; petName: string; petEmoji: string;
 }) {
   const C = palette(night);
   const [bubbleVisible, setBubbleVisible] = useState(true);
+  const [statusText, setStatusText] = useState("在等你");
+  const [bubbleText, setBubbleText] = useState("今天怎么样？✨");
+  const [homePetName, setHomePetName] = useState<string | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
+  const voice = useVoiceInput(onVoiceChat);
+
+  // 首页聚合：桌宠状态/轻量邀请（失败静默降级为默认文案）
+  useEffect(() => {
+    getCompanionHome()
+      .then((home) => {
+        if (home?.status_text) setStatusText(home.status_text);
+        if (home?.pet?.name) setHomePetName(home.pet.name);
+        if (home?.invitation?.text) setBubbleText(home.invitation.text);
+        else if (home?.behavior) setBubbleText(`它正在${home.behavior}，去陪陪它？`);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
@@ -35,10 +55,10 @@ export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petNa
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 52, paddingBottom: 8 }}>
         <View>
-          <Text style={{ fontSize: 17, fontWeight: "500", color: C.text }}>{petName}</Text>
+          <Text style={{ fontSize: 17, fontWeight: "500", color: C.text }}>{homePetName ?? petName}</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
             <WarmDot />
-            <Text style={{ fontSize: 12, color: C.text2 }}>在等你</Text>
+            <Text style={{ fontSize: 12, color: C.text2 }}>{statusText}</Text>
           </View>
         </View>
         <Pressable onPress={onNightToggle}
@@ -50,7 +70,7 @@ export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petNa
         </Pressable>
       </View>
 
-      <Pressable style={{ flex: 1, alignItems: "center", justifyContent: "center" }} onPress={onChat}>
+      <Pressable style={{ flex: 1, alignItems: "center", justifyContent: "center" }} onPress={onVoiceCall}>
         {bubbleVisible && (
           <Animated.View style={{
             position: "absolute", top: "8%", opacity: fade,
@@ -58,11 +78,11 @@ export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petNa
             paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, borderBottomLeftRadius: 6,
             backgroundColor: "rgba(255,252,245,0.85)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
           }}>
-            <Text style={{ fontSize: 15, color: "#484145" }}>今天怎么样？✨</Text>
+            <Text style={{ fontSize: 15, color: "#484145" }}>{bubbleText}</Text>
           </Animated.View>
         )}
         <PetPlaceholder size={215} emoji={petEmoji} />
-        <Text style={{ marginTop: 20, fontSize: 13, color: C.muted }}>轻触打招呼</Text>
+        <Text style={{ marginTop: 20, fontSize: 13, color: C.muted }}>轻触和它说话</Text>
       </Pressable>
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 110 }}>
@@ -70,7 +90,19 @@ export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petNa
           <LiquidGlassShell onClick={onChat}
             style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}>
             <Text style={{ fontSize: 15, flex: 1, color: C.muted }}>说点什么…</Text>
-            <Mic size={17} color={C.muted} />
+            <Pressable
+              onPressIn={voice.start}
+              onPressOut={voice.stop}
+              disabled={voice.transcribing}
+              style={({ pressed }) => [{
+                width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
+                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.18)" : "transparent",
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              }]}>
+              {voice.isRecording
+                ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
+                : <Mic size={17} color={voice.transcribing ? C.placeholder : C.muted} />}
+            </Pressable>
           </LiquidGlassShell>
           <Pressable onPress={onModeSheet}
             style={({ pressed }) => [{
@@ -88,28 +120,59 @@ export function CompanionIdle({ onChat, onModeSheet, onNightToggle, night, petNa
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
-export function CompanionChat({ onBack, petName, petEmoji }: {
+export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", seedConversationId = null, initialText = "" }: {
   onBack: () => void; petName: string; petEmoji: string;
+  mode?: string; seedConversationId?: number | null; initialText?: string;
 }) {
   const night = useNight();
   const C = palette(night);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialText);
   const [messages, setMessages] = useState([
     { role: "agent", text: "嗯，我在。今天有什么想聊的吗？" },
   ]);
   const [thinking, setThinking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // 首次发送时才创建会话（避免进屏就产生空会话）；回信场景直接复用已有会话
+  const convIdRef = useRef<number | null>(seedConversationId);
+  const voice = useVoiceInput((text) => setInput((prev) => prev ? `${prev} ${text}` : text));
 
-  const send = () => {
-    if (!input.trim()) return;
+  const send = async () => {
+    if (!input.trim() || thinking) return;
     const text = input.trim();
     setInput("");
     setMessages(m => [...m, { role: "user", text }]);
     setThinking(true);
-    setTimeout(() => {
-      setMessages(m => [...m, { role: "agent", text: "我听到了。能多说一点吗？" }]);
+    // 追加一条空 assistant 泡，逐 token 填充
+    setMessages(m => [...m, { role: "agent", text: "" }]);
+    try {
+      if (convIdRef.current == null) {
+        let petId: number | null = null;
+        try {
+          const pet = await getActivePet();
+          petId = pet?.id ?? null;
+        } catch { /* 无主桌宠也能聊 */ }
+        const conv = await createConversation(petId, mode);
+        convIdRef.current = conv.id;
+      }
+      const convId = convIdRef.current;
+      if (convId == null) throw new Error("会话创建失败");
+      await streamChatReply(convId, text, (delta) => {
+        setMessages(m => {
+          const next = [...m];
+          const last = next[next.length - 1];
+          next[next.length - 1] = { ...last, text: last.text + delta };
+          return next;
+        });
+      });
+    } catch (e: any) {
+      setMessages(m => {
+        const next = [...m];
+        next[next.length - 1] = { role: "agent", text: e?.message || "刚刚走神了，能再说一次吗？" };
+        return next;
+      });
+    } finally {
       setThinking(false);
-    }, 1300);
+    }
   };
 
   return (
@@ -166,14 +229,30 @@ export function CompanionChat({ onBack, petName, petEmoji }: {
             multiline style={{ flex: 1, fontSize: 15, lineHeight: 21, color: C.text, maxHeight: 80 }}
             onSubmitEditing={send}
           />
-          <Pressable onPress={send}
-            style={({ pressed }) => [{
-              width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
-              backgroundColor: input.trim() ? CREAM : "rgba(91,79,62,0.07)",
-              transform: [{ scale: pressed ? 0.9 : 1 }],
-            }]}>
-            <Send size={13} color={input.trim() ? "#4B463F" : C.muted} />
-          </Pressable>
+          {input.trim() ? (
+            <Pressable onPress={send}
+              style={({ pressed }) => [{
+                width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
+                backgroundColor: CREAM,
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              }]}>
+              <Send size={13} color="#4B463F" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPressIn={voice.start}
+              onPressOut={voice.stop}
+              disabled={voice.transcribing}
+              style={({ pressed }) => [{
+                width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
+                backgroundColor: voice.isRecording ? "rgba(196,149,58,0.18)" : "rgba(91,79,62,0.07)",
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              }]}>
+              {voice.isRecording
+                ? <Square size={13} fill={GOLD_DEEP} color={GOLD_DEEP} />
+                : <Mic size={15} color={voice.transcribing ? C.placeholder : C.muted} />}
+            </Pressable>
+          )}
         </LiquidGlassShell>
       </View>
     </KeyboardAvoidingView>
@@ -183,21 +262,21 @@ export function CompanionChat({ onBack, petName, petEmoji }: {
 // ─── Mode Sheet ──────────────────────────────────────────────────────────────
 
 export function ModeSheet({ visible, onClose, onSleepDump, onChat }: {
-  visible: boolean; onClose: () => void; onSleepDump: () => void; onChat: () => void;
+  visible: boolean; onClose: () => void; onSleepDump: () => void; onChat: (mode: string) => void;
 }) {
   const night = useNight();
   const C = palette(night);
   const modes = [
-    { icon: "☁️", label: "自由聊聊", desc: "随便聊点什么，没有主题", act: onChat },
-    { icon: "🌊", label: "一股脑倒出来", desc: "把今天的念头一次全说出来", act: onSleepDump },
-    { icon: "🪨", label: "说件放不下的事", desc: "有什么在心里反复出现", act: onChat },
-    { icon: "📽️", label: "回看一个片段", desc: "回到某段记忆里看看", act: onChat },
+    { icon: "☁️", label: "自由聊聊", desc: "随便聊点什么，没有主题", mode: "free_chat" },
+    { icon: "🌊", label: "一股脑倒出来", desc: "把今天的念头一次全说出来", mode: "_dump" },
+    { icon: "🪨", label: "说件放不下的事", desc: "有什么在心里反复出现", mode: "hard_thing" },
+    { icon: "📽️", label: "回看一个片段", desc: "回到某段记忆里看看", mode: "review_fragment" },
   ];
   return (
     <BottomSheet visible={visible} onClose={onClose} title="想怎么聊？">
       <View style={{ paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8, gap: 8 }}>
         {modes.map((m, i) => (
-          <Pressable key={i} onPress={m.act}
+          <Pressable key={i} onPress={() => (m.mode === "_dump" ? onSleepDump() : onChat(m.mode))}
             style={({ pressed }) => [{
               flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderRadius: 20,
               backgroundColor: "rgba(255,252,245,0.5)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",

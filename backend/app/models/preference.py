@@ -30,6 +30,13 @@ class UserPreference(Base):
     # 隐私：是否保留原始倾诉（关闭则 raw_ref 即焚）
     keep_raw_dump: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # 三日寄存 TTL 天数（影响到期清理，默认 7 天对齐现行为）
+    ephemeral_ttl_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+    # 界面与陪伴偏好
+    font_size: Mapped[str] = mapped_column(String(10), nullable=False, default="标准")
+    companion_tone: Mapped[str] = mapped_column(String(20), nullable=False, default="温和")
+    reduce_transparency: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

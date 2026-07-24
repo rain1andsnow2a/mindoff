@@ -12,6 +12,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ChevronLeft, Mic, Play } from "lucide-react-native";
 import { CreamRipple, PrimaryBtn, SafeHeader } from "../components";
 import { GOLD_DEEP, palette, useNight } from "../theme";
+import { Scene3D } from "./Scene3D";
+import {
+  listSceneTemplates, listScenes, streamCreateScene,
+  listCandidates, dismissCandidate, streamConfirmCandidate,
+  getScene, streamSceneChoice, calibrateScene, settleScene,
+} from "../api";
+import type { TheaterSceneId } from "../theater";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +26,8 @@ interface BuiltInScene {
   id: string; title: string; desc: string;
   relationships: string[]; colors: [string, string, ...string[]];
   ambientColor: string; ambientColor2: string;
+  /** 进入演练时，ScenePlay 背景挂载的 theater 3D 场景。 */
+  theater: TheaterSceneId;
 }
 
 const BUILT_IN_SCENES: BuiltInScene[] = [
@@ -28,6 +37,7 @@ const BUILT_IN_SCENES: BuiltInScene[] = [
     relationships: ["恋人", "朋友", "异地家人"],
     colors: ["#261A10", "#3A2618", "#4D3828", "#5C4838"],
     ambientColor: "rgba(255,148,48,0.18)", ambientColor2: "rgba(255,200,100,0.10)",
+    theater: "bedroom",
   },
   {
     id: "dinner-table", title: "家中餐桌",
@@ -35,6 +45,7 @@ const BUILT_IN_SCENES: BuiltInScene[] = [
     relationships: ["父母", "家庭", "伴侣"],
     colors: ["#F5ECD8", "#EDD9BE", "#E2C9A0"],
     ambientColor: "rgba(255,195,60,0.38)", ambientColor2: "rgba(255,230,140,0.22)",
+    theater: "dining",
   },
   {
     id: "leaving-road", title: "离开的路上",
@@ -42,6 +53,7 @@ const BUILT_IN_SCENES: BuiltInScene[] = [
     relationships: ["恋人", "朋友", "同学", "同事"],
     colors: ["#E8D5C0", "#D9C09E", "#C8A882", "#B89878"],
     ambientColor: "rgba(255,175,70,0.32)", ambientColor2: "rgba(240,200,130,0.18)",
+    theater: "station",
   },
 ];
 
@@ -243,7 +255,8 @@ function SceneSummaryPreview({ onBack, onConfirm }: {
 // ─── Character Setup（三步）───────────────────────────────────────────────────
 
 function CharacterSetupSheet({ scene, onBack, onReady }: {
-  scene: BuiltInScene | null; onBack: () => void; onReady: () => void;
+  scene: BuiltInScene | null; onBack: () => void;
+  onReady: (char: { name: string; relation: string; desc: string; adjusted: string }) => void;
 }) {
   const night = useNight();
   const C = palette(night);
@@ -402,7 +415,10 @@ function CharacterSetupSheet({ scene, onBack, onReady }: {
                   <CreamRipple active={entryRipple} />
                   <PrimaryBtn onClick={() => {
                     setEntryRipple(true);
-                    setTimeout(() => { setEntryRipple(false); onReady(); }, 380);
+                    setTimeout(() => {
+                      setEntryRipple(false);
+                      onReady({ name: name || "TA", relation: rel, desc, adjusted });
+                    }, 380);
                   }} full>就是这样的，进入场景</PrimaryBtn>
                 </View>
                 <Pressable onPress={() => setStep(1)} style={{ paddingVertical: 12, alignItems: "center" }}>
@@ -419,12 +435,81 @@ function CharacterSetupSheet({ scene, onBack, onReady }: {
 
 // ─── Scene Screen ────────────────────────────────────────────────────────────
 
-export function SceneScreen({ onPlay }: { onPlay: () => void }) {
+// 后端模板没有环境光字段，按 id 补默认值（本地卡片渲染用）
+const _AMBIENT: Record<string, { ambientColor: string; ambientColor2: string }> = {
+  "night-call": { ambientColor: "rgba(255,148,48,0.18)", ambientColor2: "rgba(255,200,100,0.10)" },
+  "dinner-table": { ambientColor: "rgba(255,195,60,0.38)", ambientColor2: "rgba(255,230,140,0.22)" },
+  "leaving-road": { ambientColor: "rgba(255,175,70,0.32)", ambientColor2: "rgba(240,200,130,0.18)" },
+};
+const _AMBIENT_DEFAULT = { ambientColor: "rgba(255,195,60,0.25)", ambientColor2: "rgba(255,230,140,0.15)" };
+
+/** 后端 SceneOut（我的场景） */
+interface MyScene {
+  id: number; title: string; status: string; setting: string; turn: number;
+}
+
+/** 后端 CandidateOut（待确认片段） */
+interface Candidate {
+  id: number; content: string; surface_text: string; status: string | null; created_at: string;
+}
+
+export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: TheaterSceneId) => void }) {
   const night = useNight();
   const C = palette(night);
   const [activeIdx, setActiveIdx] = useState(0);
   const [subState, setSubState] = useState<SceneSubState>("browsing");
   const [selectedScene, setSelectedScene] = useState<BuiltInScene | null>(null);
+  const [templates, setTemplates] = useState<BuiltInScene[]>(BUILT_IN_SCENES);
+  const [myScenes, setMyScenes] = useState<MyScene[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [narration, setNarration] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+
+  const refreshCandidates = () =>
+    listCandidates()
+      .then((list) => setCandidates(Array.isArray(list) ? list : []))
+      .catch(() => {});
+
+  useEffect(() => {
+    listSceneTemplates()
+      .then((list) => {
+        if (Array.isArray(list) && list.length) {
+          setTemplates(list.map((t: any) => ({
+            id: t.id, title: t.title, desc: t.desc,
+            relationships: t.relationships ?? [],
+            colors: (t.colors?.length ? t.colors : ["#F5ECD8", "#E2C9A0"]) as BuiltInScene["colors"],
+            theater: (BUILT_IN_SCENES.find(b => b.id === t.id)?.theater ?? "bedroom") as TheaterSceneId,
+            ...(_AMBIENT[t.id] ?? _AMBIENT_DEFAULT),
+          })));
+        }
+      })
+      .catch(() => { /* 离线用本地内置模板 */ });
+    listScenes()
+      .then((list) => setMyScenes(Array.isArray(list) ? list : []))
+      .catch(() => {});
+    refreshCandidates();
+  }, []);
+
+  const handleConfirmCandidate = (c: Candidate) => {
+    if (generating) return;
+    setGenerating(true);
+    setGenError("");
+    streamConfirmCandidate(c.id, (e) => {
+      if (e.event === "done" && e.data?.scene_id) {
+        setGenerating(false);
+        onPlay(e.data.scene_id);
+      }
+    })
+      .catch((err) => {
+        setGenerating(false);
+        setGenError(err?.message ?? "确认失败，再试一次");
+      });
+  };
+
+  const handleDismissCandidate = (id: number) => {
+    dismissCandidate(id).then(refreshCandidates).catch(() => {});
+  };
 
   const handleBack = () => {
     if (subState === "capturing") setSubState("browsing");
@@ -433,14 +518,48 @@ export function SceneScreen({ onPlay }: { onPlay: () => void }) {
     else setSubState("browsing");
   };
 
+  // 角色设定完成 → 真实生成开场（SSE），拿到 scene_id 进入演练
+  const handleCharReady = (char: { name: string; relation: string; desc: string; adjusted: string }) => {
+    if (generating) return;
+    setGenerating(true);
+    setGenError("");
+    const fields = {
+      title: selectedScene?.title ?? (char.name ? `和${char.name}的那一刻` : "那一刻"),
+      people: char.name + (char.relation ? `（${char.relation}）` : ""),
+      place: selectedScene?.title ?? "",
+      plot: [narration, char.desc].filter(Boolean).join("。"),
+      intent: char.adjusted || char.desc || "试着说出没说的话",
+    };
+    streamCreateScene(fields, (e) => {
+      if (e.event === "done" && e.data?.scene_id) {
+        setGenerating(false);
+        onPlay(e.data.scene_id, selectedScene?.theater);
+      }
+    }).catch((err) => {
+      setGenerating(false);
+      setGenError(err?.message ?? "生成失败，再试一次");
+    });
+  };
+
+  if (generating) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <CreamRipple active />
+        <Text style={{ fontSize: 15, color: C.text2 }}>正在替你搭片场…</Text>
+        <Text style={{ fontSize: 12, color: C.muted }}>把场景和 TA 安排好，马上就好</Text>
+      </View>
+    );
+  }
+
   if (subState === "capturing") {
-    return <SceneNarrationCapture onBack={handleBack} onConfirm={() => setSubState("reviewing")} />;
+    return <SceneNarrationCapture onBack={handleBack}
+      onConfirm={(text) => { setNarration(text); setSubState("reviewing"); }} />;
   }
   if (subState === "reviewing") {
     return <SceneSummaryPreview onBack={handleBack} onConfirm={() => setSubState("setup")} />;
   }
   if (subState === "setup") {
-    return <CharacterSetupSheet scene={selectedScene} onBack={handleBack} onReady={onPlay} />;
+    return <CharacterSetupSheet scene={selectedScene} onBack={handleBack} onReady={handleCharReady} />;
   }
 
   return (
@@ -457,17 +576,17 @@ export function SceneScreen({ onPlay }: { onPlay: () => void }) {
           contentContainerStyle={{ gap: 16, paddingHorizontal: 24, alignItems: "center" }}
           onScroll={e => {
             const idx = Math.round(e.nativeEvent.contentOffset.x / 326);
-            setActiveIdx(Math.max(0, Math.min(idx, BUILT_IN_SCENES.length - 1)));
+            setActiveIdx(Math.max(0, Math.min(idx, templates.length - 1)));
           }}
           scrollEventThrottle={16}
         >
-          {BUILT_IN_SCENES.map((scene, i) => (
+          {templates.map((scene, i) => (
             <ScenePortal key={scene.id} scene={scene} isActive={activeIdx === i}
               onEnter={() => { setSelectedScene(scene); setSubState("setup"); }} />
           ))}
         </ScrollView>
         <View style={{ position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
-          {BUILT_IN_SCENES.map((_, i) => (
+          {templates.map((_, i) => (
             <View key={i} style={{
               width: activeIdx === i ? 16 : 6, height: 6, borderRadius: 3,
               backgroundColor: activeIdx === i ? "rgba(196,149,58,0.7)" : "rgba(196,149,58,0.25)",
@@ -477,6 +596,64 @@ export function SceneScreen({ onPlay }: { onPlay: () => void }) {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
+        {/* 我的场景（后端） */}
+        {myScenes.length > 0 && (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontSize: 13, fontWeight: "500", marginBottom: 8, color: C.text2 }}>我的场景</Text>
+            {myScenes.map(s => (
+              <Pressable key={s.id} onPress={() => onPlay(s.id)}
+                style={({ pressed }) => [{
+                  padding: 16, borderRadius: 20, marginBottom: 8, flexDirection: "row", alignItems: "center",
+                  backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "500", color: C.text }}>{s.title}</Text>
+                  <Text style={{ fontSize: 12, marginTop: 2, color: C.muted }}>
+                    {s.status === "settled" ? "已结算" : `进行中 · 第 ${s.turn} 轮`}
+                  </Text>
+                </View>
+                <ChevronLeft size={15} color={C.muted} style={{ transform: [{ rotate: "180deg" }] }} />
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {/* 候选片段（后端） */}
+        {candidates.length > 0 && (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontSize: 13, fontWeight: "500", marginBottom: 8, color: C.text2 }}>待确认片段</Text>
+            {candidates.map(c => (
+              <View key={c.id} style={{
+                padding: 16, borderRadius: 20, marginBottom: 8,
+                backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
+              }}>
+                <Text style={{ fontSize: 14, lineHeight: 20, color: C.text }}>
+                  {(c.surface_text || c.content).slice(0, 120)}
+                  {(c.surface_text || c.content).length > 120 ? "…" : ""}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                  <Pressable onPress={() => handleConfirmCandidate(c)}
+                    style={{
+                      flex: 1, paddingVertical: 10, borderRadius: 999, alignItems: "center",
+                      backgroundColor: "rgba(246,231,168,0.82)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
+                    }}>
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: "#4D4249" }}>进入场景</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDismissCandidate(c.id)}
+                    style={{
+                      flex: 1, paddingVertical: 10, borderRadius: 999, alignItems: "center",
+                      backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
+                    }}>
+                    <Text style={{ fontSize: 13, color: "#655D61" }}>忽略</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+        {!!genError && (
+          <Text style={{ fontSize: 12, textAlign: "center", marginBottom: 8, color: "#A26458" }}>{genError}</Text>
+        )}
         <View style={{ height: 1, marginVertical: 24, backgroundColor: "rgba(91,79,62,0.08)" }} />
         <CreateSceneEntry onStart={() => setSubState("capturing")} />
       </ScrollView>
@@ -531,49 +708,101 @@ function CharacterArtwork({ name, isSpeaking, isListening }: {
 
 // ─── Scene Play ──────────────────────────────────────────────────────────────
 
-export function ScenePlay({ onEnd }: { onEnd: () => void }) {
-  const [phase, setPhase] = useState<"intro" | "playing" | "paused">("intro");
-  const [dlgIdx, setDlgIdx] = useState(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+interface SceneBeat { speaker: string; text: string; }
+interface SceneChoice { id: string; label: string; }
+interface SceneDetail {
+  id: number; title: string; status: string; setting: string;
+  beats: SceneBeat[] | null; choices: SceneChoice[] | null;
+  history: any[] | null; turn: number;
+}
+
+export function ScenePlay({ sceneId, theater, onEnd }: {
+  sceneId?: number | null;
+  /** 背景 theater 3D 场景，默认家中餐桌 */
+  theater?: TheaterSceneId;
+  onEnd: () => void;
+}) {
+  const [phase, setPhase] = useState<"intro" | "playing" | "paused" | "busy">("intro");
+  const [scene, setScene] = useState<SceneDetail | null>(null);
+  const [error, setError] = useState("");
+  const [streamText, setStreamText] = useState("");
   const [adjustInput, setAdjustInput] = useState("");
   const [showAdjust, setShowAdjust] = useState(false);
 
-  const charName = "妈妈";
-  const sceneName = "家中餐桌";
-
-  const dialogs = [
-    { from: "char", text: "你最近怎么了？感觉你一直很忙，也不怎么联系家里…" },
-    { from: "user-prompt", text: "你想说什么？" },
-    { from: "char", text: "我就是担心你。你一个人在外面，遇到事情了也不跟我说。" },
-  ];
-  const curr = dlgIdx < dialogs.length ? dialogs[dlgIdx] : dialogs[dialogs.length - 1];
-
-  const handleUserSpeak = () => {
-    setIsListening(v => !v);
-    if (isListening) {
-      setTimeout(() => {
-        setIsListening(false);
-        setIsSpeaking(true);
-        setDlgIdx(i => Math.min(i + 1, dialogs.length - 1));
-        setTimeout(() => setIsSpeaking(false), 2800);
-      }, 800);
+  const loadScene = async () => {
+    if (!sceneId) return;
+    try {
+      const s = await getScene(sceneId);
+      setScene(s);
+      setError("");
+    } catch (err) {
+      setError((err as any)?.message ?? "加载场景失败");
     }
   };
 
+  useEffect(() => { loadScene(); }, [sceneId]);
+
+  const speakers = new Set((scene?.beats ?? []).map(b => b.speaker).filter(s => s && s !== "旁白"));
+  const charName = speakers.size > 0 ? Array.from(speakers)[0] : (scene?.title ?? "TA");
+  const sceneName = scene?.title ?? "片场";
+  const latestBeat = scene?.beats?.[scene.beats.length - 1];
+  const isStreaming = phase === "busy" && streamText.length > 0;
+  const isSpeaking = isStreaming || (phase === "playing" && latestBeat?.speaker === "旁白");
+
+  const handleChoice = (choice: SceneChoice) => {
+    if (!sceneId || phase === "busy") return;
+    setPhase("busy");
+    setStreamText("");
+    streamSceneChoice(sceneId, choice.id, (e) => {
+      if (e.event === "token" && e.data?.delta) setStreamText(t => t + e.data.delta);
+      if (e.event === "done") {
+        setTimeout(() => {
+          loadScene().then(() => {
+            setStreamText("");
+            if (e.data?.ended) {
+              onEnd();
+            } else {
+              setPhase("playing");
+            }
+          });
+        }, e.data?.ended ? 1400 : 100);
+      }
+    }).catch((err) => {
+      setPhase("playing");
+      setError((err as any)?.message ?? "推进失败，请重试");
+    });
+  };
+
+  const handleCalibrate = async () => {
+    if (!sceneId || !adjustInput.trim()) return;
+    try {
+      await calibrateScene(sceneId, charName, adjustInput.trim());
+      setAdjustInput("");
+      setShowAdjust(false);
+      setPhase("playing");
+      await loadScene();
+    } catch (err) {
+      setError((err as any)?.message ?? "校准失败");
+    }
+  };
+
+  if (!scene) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ fontSize: 15, color: "#847D72" }}>正在进入场景…</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
-      {/* 场景背景：餐桌暖色渐变 + 灯光 */}
-      <LinearGradient colors={["#EDD9BE", "#E2C9A0", "#D8BA8A"]} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
-        <View style={{
-          position: "absolute", width: 280, height: 280, top: 60, left: "50%", marginLeft: -140,
-          borderRadius: 140, backgroundColor: "rgba(255,195,60,0.25)",
-        }} />
-      </LinearGradient>
+      {/* 场景背景：theater 低多边形 3D 舞台（随内置场景切换） */}
+      <Scene3D sceneId={theater ?? "dining"} />
 
       {/* Top bar */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, zIndex: 10 }}>
-        <Pressable onPress={() => setPhase(phase === "paused" ? "playing" : "paused")}
+        <Pressable onPress={() => phase !== "busy" && setPhase(phase === "paused" ? "playing" : "paused")}
+          disabled={phase === "busy"}
           style={{
             flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
             backgroundColor: "rgba(255,252,245,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.38)",
@@ -596,7 +825,7 @@ export function ScenePlay({ onEnd }: { onEnd: () => void }) {
 
       {/* Character */}
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 16, zIndex: 10 }}>
-        <CharacterArtwork name={charName} isSpeaking={isSpeaking} isListening={isListening} />
+        <CharacterArtwork name={charName} isSpeaking={isSpeaking} isListening={false} />
       </View>
 
       {/* 字幕 + 控制面板 */}
@@ -613,67 +842,66 @@ export function ScenePlay({ onEnd }: { onEnd: () => void }) {
             <Text style={{ fontSize: 14, lineHeight: 22, marginBottom: 16, color: "#484145" }}>
               场景准备好了。你可以随时离开，这里没有对错。
             </Text>
-            <Pressable onPress={() => { setPhase("playing"); setIsSpeaking(true); setTimeout(() => setIsSpeaking(false), 2400); }}
+            <Pressable onPress={() => setPhase("playing")}
               style={{ paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.82)" }}>
               <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>好的，开始</Text>
             </Pressable>
           </View>
         )}
 
-        {phase === "playing" && (
+        {(phase === "playing" || phase === "busy") && (
           <View>
-            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>
-              {curr.from === "char" && (
-                <>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "500", color: GOLD_DEEP }}>{charName}</Text>
-                    {isSpeaking && (
-                      <View style={{ flexDirection: "row", gap: 2, alignItems: "flex-end", height: 12 }}>
-                        {[1, 2, 3].map(j => (
-                          <View key={j} style={{ width: 2, height: 4 + j * 3, backgroundColor: "rgba(196,149,58,0.6)", borderRadius: 1 }} />
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                  <Text style={{ fontSize: 15, lineHeight: 23, color: "#484145" }}>{curr.text}</Text>
-                </>
-              )}
-              {curr.from === "user-prompt" && (
-                <Text style={{ fontSize: 13, textAlign: "center", paddingVertical: 4, color: "#A39A9F" }}>
-                  轻点麦克风，说出你想说的话
+            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, minHeight: 90 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: "500", color: GOLD_DEEP }}>
+                  {isStreaming ? "旁白" : (latestBeat?.speaker || charName)}
                 </Text>
-              )}
+                {isSpeaking && (
+                  <View style={{ flexDirection: "row", gap: 2, alignItems: "flex-end", height: 12 }}>
+                    {[1, 2, 3].map(j => (
+                      <View key={j} style={{ width: 2, height: 4 + j * 3, backgroundColor: "rgba(196,149,58,0.6)", borderRadius: 1 }} />
+                    ))}
+                  </View>
+                )}
+              </View>
+              <Text style={{ fontSize: 15, lineHeight: 23, color: "#484145" }}>
+                {isStreaming ? streamText : (latestBeat?.text ?? "……")}
+              </Text>
             </View>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 16, paddingTop: 8, gap: 16 }}>
-              <Pressable onPress={() => setDlgIdx(i => Math.min(i + 1, dialogs.length - 1))}
-                style={{
-                  flex: 1, paddingVertical: 10, borderRadius: 999, alignItems: "center",
-                  backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
-                }}>
-                <Text style={{ fontSize: 12, color: "#4D4249" }}>换一种说法</Text>
-              </Pressable>
-              <Pressable onPress={handleUserSpeak}
-                style={{
-                  width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center",
-                  backgroundColor: isListening ? "rgba(243,216,199,0.95)" : "rgba(246,231,168,0.88)",
-                  borderWidth: 2, borderColor: isListening ? "rgba(196,149,58,0.65)" : "rgba(255,255,255,0.55)",
-                }}>
-                <Mic size={22} color={GOLD_DEEP} />
-              </Pressable>
-              <Pressable onPress={onEnd}
-                style={{
-                  flex: 1, paddingVertical: 10, borderRadius: 999, alignItems: "center",
-                  backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
-                }}>
-                <Text style={{ fontSize: 12, color: "#655D61" }}>离开场景</Text>
-              </Pressable>
-            </View>
+
+            {phase === "playing" && (
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}>
+                <Text style={{ fontSize: 12, color: "#A39A9F", marginBottom: 2 }}>你想怎么回应？</Text>
+                {(scene?.choices ?? []).map(choice => (
+                  <Pressable key={choice.id} onPress={() => handleChoice(choice)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 12, paddingHorizontal: 16, borderRadius: 999,
+                      backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
+                      opacity: pressed ? 0.85 : 1,
+                    })}>
+                    <Text style={{ fontSize: 13, color: "#4D4249" }}>{choice.label}</Text>
+                  </Pressable>
+                ))}
+                <Pressable onPress={onEnd} style={{ paddingVertical: 8, alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, color: "#A39A9F" }}>离开场景</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {phase === "busy" && (
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16, alignItems: "center" }}>
+                <Text style={{ fontSize: 12, color: "#A39A9F" }}>正在继续…</Text>
+              </View>
+            )}
           </View>
         )}
 
         {phase === "paused" && (
           <View style={{ padding: 20 }}>
             <Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 16, color: "#484145" }}>已暂停</Text>
+            {!!error && (
+              <Text style={{ fontSize: 12, textAlign: "center", marginBottom: 12, color: "#A26458" }}>{error}</Text>
+            )}
             {!showAdjust ? (
               <View style={{ gap: 8 }}>
                 <Pressable onPress={() => setPhase("playing")}
@@ -707,7 +935,7 @@ export function ScenePlay({ onEnd }: { onEnd: () => void }) {
                     style={{ flex: 1, paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(255,252,245,0.65)" }}>
                     <Text style={{ fontSize: 13, color: "#655D61" }}>取消</Text>
                   </Pressable>
-                  <Pressable onPress={() => { setShowAdjust(false); setAdjustInput(""); setPhase("playing"); }}
+                  <Pressable onPress={handleCalibrate}
                     style={{ flex: 1, paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.82)" }}>
                     <Text style={{ fontSize: 13, fontWeight: "500", color: "#4D4249" }}>调整后继续</Text>
                   </Pressable>
@@ -723,9 +951,38 @@ export function ScenePlay({ onEnd }: { onEnd: () => void }) {
 
 // ─── Scene End ───────────────────────────────────────────────────────────────
 
-export function SceneEnd({ onBack, onReplay }: { onBack: () => void; onReplay: () => void }) {
+export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | null; onBack: () => void; onReplay: () => void }) {
   const [saved, setSaved] = useState(false);
-  const keyQuote = "我其实一直很在意。";
+  const [settling, setSettling] = useState(false);
+  const [error, setError] = useState("");
+  const [keyQuote, setKeyQuote] = useState("……");
+
+  useEffect(() => {
+    if (!sceneId) return;
+    getScene(sceneId).then((s: SceneDetail) => {
+      const beats = s.beats || [];
+      const last = beats[beats.length - 1];
+      if (last?.text) setKeyQuote(last.text);
+    }).catch(() => {});
+  }, [sceneId]);
+
+  const doSettle = async (keep: boolean) => {
+    if (!sceneId || settling) return;
+    setSettling(true);
+    try {
+      await settleScene(sceneId, {
+        card_text: keyQuote,
+        insight_text: keyQuote,
+        action_text: "带着这份感受，继续下一步",
+        keep,
+      });
+      setSaved(keep);
+      setError("");
+    } catch (err) {
+      setError((err as any)?.message ?? "结算失败");
+    }
+    setSettling(false);
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -765,11 +1022,15 @@ export function SceneEnd({ onBack, onReplay }: { onBack: () => void; onReplay: (
             </Text>
           </View>
 
+          {!!error && (
+            <Text style={{ fontSize: 12, textAlign: "center", color: "#A26458" }}>{error}</Text>
+          )}
+
           <View style={{ gap: 8, paddingTop: 16 }}>
             {!saved ? (
-              <Pressable onPress={() => setSaved(true)}
-                style={{ paddingVertical: 14, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.88)" }}>
-                <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>把这句话留下</Text>
+              <Pressable onPress={() => doSettle(true)} disabled={settling}
+                style={{ paddingVertical: 14, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.88)", opacity: settling ? 0.6 : 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>{settling ? "正在保存…" : "把这句话留下"}</Text>
               </Pressable>
             ) : (
               <View style={{ paddingVertical: 14, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(221,237,227,0.72)" }}>
@@ -783,7 +1044,7 @@ export function SceneEnd({ onBack, onReplay }: { onBack: () => void; onReplay: (
               }}>
               <Text style={{ fontSize: 14, fontWeight: "500", color: "#484145" }}>再试一次</Text>
             </Pressable>
-            <Pressable onPress={onBack} style={{ paddingVertical: 12, alignItems: "center" }}>
+            <Pressable onPress={() => { doSettle(false).then(() => onBack()); }} style={{ paddingVertical: 12, alignItems: "center" }}>
               <Text style={{ fontSize: 13, color: "#A39A9F" }}>直接离开</Text>
             </Pressable>
             <Text style={{ fontSize: 11, textAlign: "center", marginTop: 4, color: "#D0C8BF" }}>

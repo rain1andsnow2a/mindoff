@@ -114,37 +114,39 @@
 
 ### 6.4 情绪 Emotions ★
 | GET `/emotions` ★ · GET `/emotions/{id}` · DELETE `/emotions/{id}` |
-> 只承接不强转任务；一般不编辑，可删除（隐私）。默认进"三日寄存"。
+> 只承接不强转任务；一般不编辑，可删除（隐私）。默认进"寄存"（7 天到期硬删）。
 
 ## 7. 片场 Theater ★
 
-### 7.1 候选片段 Candidates ★
+### 7.1 候选片段 Candidates ★ — ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/candidates` ★ | 待确认候选（当晚静默入草稿箱，**次日提醒**） |
-| GET | `/candidates/{id}` | 详情 |
+| GET | `/candidates/{id}` ★ | 详情 |
 | POST | `/candidates/{id}/confirm` ★ | 确认 → 转为正式 scene，响应返回新 scene（副作用动作，故用子资源而非 PATCH） |
 | DELETE | `/candidates/{id}` ★ | 忽略/删除 |
 
-### 7.2 场景 Scenes ★
+### 7.2 场景 Scenes ★ — ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/scenes` ★ | 我的场景 |
 | POST | `/scenes` ★ | 主动创建：`{title, people, place, plot, intent}`（补充人物/地点/经过/想尝试的表达） |
 | GET | `/scenes/{id}` ★ | 详情（含视觉小说节点/脚本） |
-| PATCH | `/scenes/{id}` ○ | 补充细节 |
-| DELETE | `/scenes/{id}` ○ | 删除 |
-| GET | `/scenes/templates` ○ | 高频模板（没说出口的话/冲突后另一种回应/重要时刻预演） |
+| PATCH | `/scenes/{id}` ★ | 补充细节（标题/设定） |
+| DELETE | `/scenes/{id}` ★ | 删除 |
+| GET | `/scenes/templates` ★ | 内置模板（深夜通话/家中餐桌/离开的路上；对齐前端卡片） |
 
-### 7.3 场景体验 Scene Play ★（视觉小说互动）
+### 7.3 场景体验 Scene Play ★（视觉小说互动）— ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/scenes/{id}/plays` ★ | 开始一次体验 → 生成/返回首个剧情节点 |
-| GET | `/scenes/{id}/plays/{playId}` ★ | 当前剧情节点（背景/立绘/对话/可选回应） |
+| POST | `/scenes/{id}/plays` ★ | 开始一次体验 → 返回首个剧情节点 |
+| GET | `/scenes/{id}/plays/{playId}` ★ | 当前剧情节点（背景/角色/对话/可选回应） |
 | POST | `/scenes/{id}/plays/{playId}/choices` ★ | 提交一次回应选择 → 推进剧情（体验另一种表达） |
 | POST | `/scenes/{id}/plays/{playId}/settlement` ★ | 结束 → 生成**结算卡** |
 
 > 剧情生成与推进（`plays`、`choices`）同样可返回 `text/event-stream`，逐句吐视觉小说文本。
+> MVP 下 **plays 子资源复用 Scene 的当前状态**（`play_id` 映射到 `scene_id`），
+> 既保留 REST 契约，又避免新增独立 Play 表。后续如需支持同一 Scene 多次重玩，再拆分模型。
 
 ## 8. 信箱 Mailbox ★
 
@@ -152,26 +154,29 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/mailbox` ★ | 聚合概览：今日待启数、未读来信（`unread_letters_count`）、三日寄存概况（`ephemeral_count`）、珍藏入口（`treasures_count`） |
+| GET | `/mailbox` ★ | 聚合概览：今日待启数、未读来信（`unread_letters_count`）、寄存概况（7 天，`ephemeral_count`）、珍藏入口（`treasures_count`） |
 
 ### 8.1 桌宠来信 Letters ★（主动陪伴产物）— ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/letters` ★ | `?type=music\|movie\|book\|greeting\|relationship\|scene_invite&unread=true` |
+| GET | `/letters` ★ | `?type=music\|movie\|book\|greeting\|relationship\|scene_invite\|weekly&unread=true` |
 | GET | `/letters/{id}` ★ | 详情 |
 | PATCH | `/letters/{id}` ★ | 标记已读 `{read:true}` |
 | DELETE | `/letters/{id}` ○ | 删除 |
 > 生成是服务端主动行为（定时/触发），非公开写接口；落库创建走 `LetterStore.create`（内部入口）。每天≤1–2 封、无内容不发。
-> ✅ 已实现（`app/routers/letters.py`、`app/services/letter_store.py`、`app/models/letter.py`）。
+> `type=weekly` 为每周小结：每周日 20:00（东八区）由 `weekly_report.run_weekly_reports_all` 投递，聚合本周情绪走向/完成待办；只取 depth=surface 素材，不含被焚原话。
+> ✅ 已实现（`app/routers/letters.py`、`app/services/letter_store.py`、`app/services/weekly_report.py`、`app/models/letter.py`）。
 
-### 8.2 三日寄存 Ephemeral ★（72h TTL）— ✅ 已实现
+### 8.2 寄存 Ephemeral ★（7 天 TTL）— ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/ephemeral` ★ | 临时寄存（情绪/生活片段/未确认候选），每项带 `expiresAt`（默认 72h） |
+| GET | `/ephemeral` ★ | 临时寄存（情绪/生活片段/未确认候选），每项带 `expiresAt`（默认 7 天） |
 | POST | `/ephemeral/{id}/keep` ★ | 用户主动留下 → 转入长久珍藏（副作用动作） |
 | DELETE | `/ephemeral/{id}` ○ | 立即删除 |
-> 到期真删，不保留人物/地点/原话/具体事件（后端定时任务，隐私红线）。
-> ✅ 已实现（`app/routers/ephemeral.py`、`app/services/ephemeral_store.py`；到期遗忘走 `inbox.expire_ephemeral`）。
+> 到期**硬删**：物理删除记忆行 + 其历史行，不保留人物/地点/原话/具体事件（隐私红线）。
+> 这是记忆系统「软删+历史审计」(Property 4) 的受限例外，仅对到期寄存生效。
+> ✅ 已实现：TTL 由 `dump_ingest` 在创建情绪/片段时落（`inbox.EPHEMERAL_TTL_DAYS=7`）；
+> 到期硬删走 `inbox.expire_ephemeral`（`_hard_delete_memory`，含 FK 断链）。
 
 ### 8.3 长久珍藏 Treasures ★ — ✅ 已实现
 | 方法 | 路径 | 说明 |

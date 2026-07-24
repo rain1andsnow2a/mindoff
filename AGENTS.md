@@ -11,7 +11,8 @@
 | `backend/docs/api-design.md` | REST 接口契约（各节标注 ✅ 已实现 / 未实现） |
 | `.kiro/specs/memory-system/` | 双轴记忆系统 spec（requirements/design/tasks），Phase 0–6 已全部实现 |
 | `theater/` | three.js 重演剧场场景库（六个预置场景），详见 `theater/README.md` |
-| `mindoff-proto/` | 前端 HTML 原型（4-Tab IA） |
+| `mindoff-proto/` | 前端 HTML 原型（4-Tab IA，Vite 原型；`npm run dev`） |
+| `frontend-demo/` | React Native / Expo 移植版（`npm run web` 浏览器预览 / `npm run android`），详见 `frontend-demo/README.md` |
 | `references/` | 参考架构文档 |
 
 ## 常用命令

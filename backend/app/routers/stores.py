@@ -82,6 +82,9 @@ class TodoPatch(BaseModel):
 def _is_today(dt: datetime | None) -> bool:
     if dt is None:
         return False
+    # SQLite 存的是 naive UTC；若缺时区则按 UTC 解释
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
     return dt.astimezone(timezone.utc).date() == now.date()
 

@@ -46,6 +46,10 @@ def main() -> None:
         print("[list] count =", len(items), "(应为2，排除原始倾倒root)")
         assert len(items) == 2 and {tid, yid} <= {i["id"] for i in items}
 
+        detail = c.get(f"{BASE}/candidates/{tid}", headers=auth).json()
+        print("[detail] id =", detail["id"], "content =", detail["content"][:20])
+        assert detail["id"] == tid
+
         rem = c.get(f"{BASE}/reminders", headers=auth).json()
         print("[reminders] candidate_count =", rem["candidate_count"], "(应为1，只昨天那条)")
         assert rem["candidate_count"] == 1 and rem["candidates"][0]["memory_id"] == yid

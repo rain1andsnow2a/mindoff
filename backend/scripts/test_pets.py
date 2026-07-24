@@ -59,7 +59,7 @@ assert r.status_code == 200, r.text
 assert r.json()["name"] == "小默默" and r.json()["tone"] == "更软一点，多说短句"
 
 # 5. 再激活另一只预设 → 触发交接信（旧 → 新）
-r = httpx.put(f"{B}/pets/active", headers=H, json={"petId": "dudu"}, timeout=60)
+r = httpx.put(f"{B}/pets/active", headers=H, json={"petId": "bobi"}, timeout=60)
 print("SWITCH:", r.status_code)
 assert r.status_code == 200, r.text
 body = r.json()

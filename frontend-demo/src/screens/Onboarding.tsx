@@ -7,7 +7,7 @@ import { Check } from "lucide-react-native";
 import { GhostBtn, GlassCard, PetPlaceholder, PrimaryBtn, SafeHeader } from "../components";
 import { palette, useNight } from "../theme";
 
-export function OnboardWelcome({ onNext }: { onNext: () => void }) {
+export function OnboardWelcome({ onNext, onSkip }: { onNext: () => void; onSkip?: () => void }) {
   const night = useNight();
   const C = palette(night);
   return (
@@ -24,7 +24,7 @@ export function OnboardWelcome({ onNext }: { onNext: () => void }) {
       </View>
       <View style={{ alignSelf: "stretch", alignItems: "center", gap: 12 }}>
         <PrimaryBtn onClick={onNext} full>认识一下</PrimaryBtn>
-        <GhostBtn onClick={onNext}>已经了解，直接开始</GhostBtn>
+        <GhostBtn onClick={onSkip ?? onNext}>已经了解，直接开始</GhostBtn>
       </View>
     </View>
   );
@@ -63,16 +63,14 @@ export function OnboardHow({ onNext, onBack }: { onNext: () => void; onBack: () 
   );
 }
 
-export function OnboardPet({ onNext, onBack, selected, onSelect }: {
-  onNext: () => void; onBack: () => void; selected: number; onSelect: (i: number) => void;
+export function OnboardPet({ onNext, onBack, pets, selectedId, onSelect }: {
+  onNext: () => void; onBack: () => void;
+  pets: { id: number | string; name: string; emoji: string; summary: string }[];
+  selectedId: number | string | null; onSelect: (id: number | string) => void;
 }) {
   const night = useNight();
   const C = palette(night);
-  const pets = [
-    { name: "小栖", trait: "温柔，善于倾听", desc: "喜欢在安静的傍晚陪你说话", emoji: "🌿" },
-    { name: "晴晴", trait: "活泼，偶尔调皮", desc: "会在你沮丧时想办法让你笑一下", emoji: "☀️" },
-    { name: "暮云", trait: "沉稳，有时神秘", desc: "话不多，但每句都刚好", emoji: "🌙" },
-  ];
+  const selectedIndex = pets.findIndex((p) => p.id === selectedId);
   return (
     <View style={{ flex: 1 }}>
       <SafeHeader onBack={onBack} />
@@ -82,12 +80,12 @@ export function OnboardPet({ onNext, onBack, selected, onSelect }: {
           <Text style={{ fontSize: 15, marginBottom: 24, color: C.text2 }}>之后随时可以更换，记忆会妥善交接</Text>
           <View style={{ gap: 12 }}>
             {pets.map((pet, i) => (
-              <GlassCard key={i} onClick={() => onSelect(i)}
+              <GlassCard key={i} onClick={() => onSelect(pet.id)}
                 style={{
                   padding: 20, flexDirection: "row", alignItems: "center", gap: 16,
-                  borderWidth: selected === i ? 1.5 : 1,
-                  borderColor: selected === i ? "rgba(196,149,58,0.5)" : "rgba(255,255,255,0.45)",
-                  backgroundColor: selected === i ? "rgba(246,231,168,0.42)" : undefined,
+                  borderWidth: selectedIndex === i ? 1.5 : 1,
+                  borderColor: selectedIndex === i ? "rgba(196,149,58,0.5)" : "rgba(255,255,255,0.45)",
+                  backgroundColor: selectedIndex === i ? "rgba(246,231,168,0.42)" : undefined,
                 }}>
                 <View style={{
                   width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
@@ -99,12 +97,12 @@ export function OnboardPet({ onNext, onBack, selected, onSelect }: {
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 }}>
                     <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>{pet.name}</Text>
                     <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(243,216,199,0.6)" }}>
-                      <Text style={{ fontSize: 11, color: "#655D61" }}>{pet.trait}</Text>
+                      <Text style={{ fontSize: 11, color: "#655D61" }}>陪伴伙伴</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 13, color: C.text2 }}>{pet.desc}</Text>
+                  <Text style={{ fontSize: 13, color: C.text2 }}>{pet.summary}</Text>
                 </View>
-                {selected === i && (
+                {selectedIndex === i && (
                   <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(196,149,58,0.8)" }}>
                     <Check size={11} color="#fff" />
                   </View>
@@ -113,7 +111,7 @@ export function OnboardPet({ onNext, onBack, selected, onSelect }: {
             ))}
           </View>
         </View>
-        <PrimaryBtn onClick={onNext} full disabled={selected === -1}>就选它了</PrimaryBtn>
+        <PrimaryBtn onClick={onNext} full disabled={selectedIndex === -1}>就选它了</PrimaryBtn>
       </ScrollView>
     </View>
   );

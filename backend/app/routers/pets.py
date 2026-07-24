@@ -40,6 +40,7 @@ class PresetOut(BaseModel):
     personality: str
     tone: str
     actions: list[str]
+    system_prompt: str | None = None
 
 
 class PetOut(BaseModel):
@@ -49,6 +50,7 @@ class PetOut(BaseModel):
     personality: str
     tone: str
     actions: list[str] = []
+    system_prompt: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -62,6 +64,7 @@ class PetPatch(BaseModel):
     personality: str | None = Field(None, max_length=300)
     tone: str | None = Field(None, max_length=300)
     actions: list[str] | None = None
+    system_prompt: str | None = None
 
 
 class ActivateRequest(BaseModel):

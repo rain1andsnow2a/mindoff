@@ -67,8 +67,10 @@ def create_treasure(
 
     title = body.title
     content = body.content
-    # 引用记忆来源时缺省取快照（校验归属）
-    if body.source_id is not None and (title is None or content is None):
+    # 记忆类来源可缺省取快照（校验归属）；conversation/scene 需显式给 title/content
+    MEMORY_BACKED = {"memory", "ephemeral", "summary", "idea"}
+    if (body.source_type in MEMORY_BACKED and body.source_id is not None
+            and (title is None or content is None)):
         mem = MemoryStore(db).get(body.source_id)
         if mem is None or mem.user_id != user.id or mem.is_forgotten:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "来源记忆不存在")

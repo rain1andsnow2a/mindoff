@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-B = "http://127.0.0.1:8010/api/v1"
+B = "http://127.0.0.1:8011/api/v1"
 
 u = {"username": "stores_smoke", "password": "pass1234"}
 r = httpx.post(f"{B}/auth/register", json=u)

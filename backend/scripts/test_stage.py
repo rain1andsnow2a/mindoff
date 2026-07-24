@@ -106,24 +106,28 @@ db.refresh(role)
 assert "重演领悟" in role.notes and "等妈妈先认可我" in role.notes
 print("SETTLE 角色笔记: 已追加 ✓")
 
-# 珍藏卡：无 TTL
+# 珍藏卡：无 TTL + 同步生成长久珍藏
 card = store.get(result["card_memory_id"])
 assert card.expires_at is None
-print("SETTLE 珍藏卡: 长久保存（无 TTL）✓")
+assert result["treasure_id"] is not None
+from app.services.treasure_store import TreasureStore
+treasure = TreasureStore(db).get(uid, result["treasure_id"])
+assert treasure is not None and treasure.content == "那句没说出口的话：妈，我需要的是你先信我一次。"
+print("SETTLE 珍藏卡: 长久保存（无 TTL）+ 已生成 Treasure ✓")
 
-# 即焚卡：带短 TTL，可被 expire 遗忘
+# 即焚卡：带短 TTL，可被 expire 遗忘；不生成 Treasure
 from datetime import datetime, timezone
 r2 = stage.settle(db, uid, keep=False, card_text="即焚卡：今晚说完就放下")
 burn = store.get(r2["card_memory_id"])
 assert burn.expires_at is not None
+assert r2["treasure_id"] is None, "即焚卡不应生成 Treasure"
 # 手动把 expires_at 拨到过去，验证 expire 路径
 burn.expires_at = datetime.now(timezone.utc)
 db.commit()
 from app.services.inbox import expire_ephemeral
 expire_ephemeral(db)
-db.refresh(burn)
-assert burn.is_forgotten
-print("SETTLE 即焚卡: 到期遗忘 ✓")
+assert store.get(r2["card_memory_id"]) is None, "即焚卡到期应被物理删除"
+print("SETTLE 即焚卡: 到期遗忘，无 Treasure ✓")
 
 # history 完整性（Property 4）
 from sqlalchemy import select

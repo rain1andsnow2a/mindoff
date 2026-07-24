@@ -7,69 +7,83 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, View,
+  Animated, Easing, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View,
 } from "react-native";
+import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { ChevronLeft, X } from "lucide-react-native";
 import { CREAM, GOLD_DEEP, palette, useNight } from "./theme";
 
 // ─── Mist Background ─────────────────────────────────────────────────────────
 
+// orb: 中心百分比坐标 (x,y) + 直径占屏宽百分比 (s) + 峰值不透明度 (o)。
+// 对齐 mindoff-proto：原型用 blur(88px) 把大色斑晕成柔和暖色渐变；
+// RN 原生不支持 CSS filter，改用 SVG 径向渐变（中心不透明→边缘透明）等效还原。
 const DAY_ORBS = [
-  { c: "#F6E7A8", x: "8%", y: "-8%", s: 280 },
-  { c: "#F3D8C7", x: "58%", y: "58%", s: 300 },
-  { c: "#DDEDE3", x: "-4%", y: "48%", s: 240 },
-  { c: "#DFE7F5", x: "48%", y: "4%", s: 220 },
-  { c: "#E9E4F3", x: "68%", y: "22%", s: 200 },
+  { c: "#F6E7A8", x: 8, y: -8, s: 72, o: 0.5 },
+  { c: "#F3D8C7", x: 58, y: 58, s: 78, o: 0.5 },
+  { c: "#DDEDE3", x: -4, y: 48, s: 62, o: 0.45 },
+  { c: "#DFE7F5", x: 48, y: 4, s: 58, o: 0.42 },
+  { c: "#E9E4F3", x: 68, y: 22, s: 52, o: 0.4 },
 ];
 const NIGHT_ORBS = [
-  { c: "rgba(89,70,83,0.82)", x: "8%", y: "-8%", s: 280 },
-  { c: "rgba(59,51,64,0.88)", x: "58%", y: "58%", s: 300 },
-  { c: "rgba(50,46,56,0.92)", x: "-4%", y: "48%", s: 240 },
-  { c: "rgba(41,38,48,0.90)", x: "48%", y: "4%", s: 220 },
-  { c: "rgba(69,58,72,0.75)", x: "68%", y: "22%", s: 200 },
-  { c: "rgba(221,199,143,0.09)", x: "40%", y: "30%", s: 230 },
+  { c: "#594653", x: 8, y: -8, s: 72, o: 0.82 },
+  { c: "#3B3340", x: 58, y: 58, s: 78, o: 0.88 },
+  { c: "#322E38", x: -4, y: 48, s: 62, o: 0.92 },
+  { c: "#292630", x: 48, y: 4, s: 58, o: 0.9 },
+  { c: "#453A48", x: 68, y: 22, s: 52, o: 0.75 },
+  { c: "#DDC78F", x: 40, y: 30, s: 60, o: 0.09 },
 ];
 
-/** 雾感背景：web 版是 blur 圆斑，RN 用低透明度圆 + 缓慢漂移近似 */
+/** 雾感背景：SVG 径向渐变软色斑，跨端一致地还原原型 blur(88px) 的柔和暖色渐变。 */
 export function MistBackground() {
   const night = useNight();
   const orbs = night ? NIGHT_ORBS : DAY_ORBS;
+  const { width: W, height: H } = useWindowDimensions();
   const drift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // 缓慢整体漂移保留「雾感」；useNativeDriver 关闭以兼容 web / 缺失 RCTAnimation 的环境
     const loop = Animated.loop(
       Animated.timing(drift, {
-        toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true,
+        toValue: 1, duration: 12000, easing: Easing.inOut(Easing.sin), useNativeDriver: false,
       })
     );
     loop.start();
     return () => loop.stop();
   }, [drift]);
 
-  const dx = drift.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 10, 0] });
-  const dy = drift.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -12, 0] });
+  const dx = drift.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 12, 0] });
+  const dy = drift.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -14, 0] });
 
-  // web 走真实高斯模糊（对齐设计稿 blur(88px)/opacity .62）；原生无 filter，退回低透明度近似
-  const isWeb = Platform.OS === "web";
+  // 模糊晕散半径按屏宽等比缩放（原型基准帧宽 372 / blur 88px）
+  const blur = 88 * (W / 372);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { overflow: "hidden" }]} pointerEvents="none">
-      {orbs.map((o, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            position: "absolute", left: o.x as any, top: o.y as any,
-            width: o.s, height: o.s, borderRadius: o.s / 2,
-            backgroundColor: o.c, opacity: isWeb ? 0.62 : 0.55,
-            ...(isWeb ? { filter: "blur(88px)" } : null) as any,
-            transform: [
-              { translateX: i % 2 === 0 ? dx : Animated.multiply(dx, -1) },
-              { translateY: i % 2 === 0 ? dy : Animated.multiply(dy, -1) },
-            ],
-          }}
-        />
-      ))}
-    </View>
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { pointerEvents: "none", transform: [{ translateX: dx }, { translateY: dy }] }]}
+    >
+      <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
+        <Defs>
+          {orbs.map((o, i) => (
+            <RadialGradient key={i} id={`orb${i}`} cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor={o.c} stopOpacity={o.o} />
+              <Stop offset="45%" stopColor={o.c} stopOpacity={o.o * 0.55} />
+              <Stop offset="75%" stopColor={o.c} stopOpacity={o.o * 0.15} />
+              <Stop offset="100%" stopColor={o.c} stopOpacity={0} />
+            </RadialGradient>
+          ))}
+        </Defs>
+        {orbs.map((o, i) => (
+          <Circle
+            key={i}
+            cx={(o.x / 100) * W}
+            cy={(o.y / 100) * H}
+            r={(o.s / 100) * W / 2 + blur}
+            fill={`url(#orb${i})`}
+          />
+        ))}
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -81,15 +95,21 @@ export function PetPlaceholder({ size = 200, emoji = "🌿" }: { size?: number; 
   return (
     <View style={{ width: size * 1.55, height: size * 1.55, alignItems: "center", justifyContent: "center" }}>
       <View style={{
-        position: "absolute", width: size * 1.55, height: size * 1.55, borderRadius: size,
-        backgroundColor: night ? "rgba(221,199,143,0.14)" : "rgba(246,231,168,0.30)",
+        position: "absolute", width: size * 1.4, height: size * 1.4, borderRadius: size,
+        backgroundColor: night ? "rgba(221,199,143,0.08)" : "rgba(246,231,168,0.16)",
       }} />
       <View style={{
         width: size, height: size, borderRadius: size / 2,
         alignItems: "center", justifyContent: "center",
-        backgroundColor: night ? "rgba(59,51,64,0.45)" : "rgba(255,252,245,0.7)",
+        backgroundColor: night ? "rgba(59,51,64,0.55)" : "rgba(255,253,249,0.92)",
         borderWidth: 1.5,
-        borderColor: night ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)",
+        borderColor: night ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.7)",
+        // 设计稿里是一个干净、轮廓明显的白圆（软阴影悬浮感），而非被黄晕包裹：降低外层晕开亮度、加强白圆不透明度与阴影。
+        shadowColor: night ? "#000" : "#8A7B55",
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: night ? 0.35 : 0.18,
+        shadowRadius: 28,
+        elevation: 8,
       }}>
         <Text style={{ fontSize: size * 0.3 }}>{emoji}</Text>
         <Text style={{ fontSize: size * 0.072, color: night ? C.text3 : "#C0B5A8", marginTop: size * 0.04, letterSpacing: 0.5 }}>
@@ -320,20 +340,21 @@ export function LiquidGlassShell({ children, onClick, style }: {
   children: React.ReactNode; onClick?: () => void; style?: any;
 }) {
   const night = useNight();
-  const inner = (
-    <View style={[{
-      backgroundColor: night ? "rgba(255,248,244,0.08)" : "rgba(255,252,245,0.65)",
-      borderWidth: 1,
-      borderColor: night ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.45)",
-      overflow: "hidden",
-    }, style]}>
-      {children}
-    </View>
-  );
-  if (!onClick) return inner;
+  // 视觉样式（背景/描边）。布局类样式（如 flex:1）由调用方经 style 传入。
+  const visual = {
+    backgroundColor: night ? "rgba(255,248,244,0.08)" : "rgba(255,252,245,0.65)",
+    borderWidth: 1,
+    borderColor: night ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.45)",
+    overflow: "hidden" as const,
+  };
+  // 无点击：普通容器。
+  if (!onClick) return <View style={[visual, style]}>{children}</View>;
+  // 有点击：把完整 style（含 flex:1 等布局）直接给 Pressable，
+  // 否则 flex 落在内层 View、而行内的 flex 子是 Pressable，导致输入框不拉伸、被挤向左侧。
   return (
-    <Pressable onPress={onClick} style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-      {inner}
+    <Pressable onPress={onClick}
+      style={({ pressed }) => [visual, style, { opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+      {children}
     </Pressable>
   );
 }
@@ -357,7 +378,7 @@ export function CreamRipple({ active }: { active: boolean }) {
 
   if (!active) return null;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
       <Animated.View style={{
         position: "absolute", width: 80, height: 80, borderRadius: 40,
         top: "50%", left: "50%", marginTop: -40, marginLeft: -40,

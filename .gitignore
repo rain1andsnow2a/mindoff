@@ -7,3 +7,9 @@ dist/
 *.db-shm
 *.db-wal
 theater/_verify_*.png
+frontend-demo/.expo/
+**/build/
+**/.gradle/
+**/.cxx/
+/2026-07-24-adventurex-companion-personality-prompt(1).md
+/2026-07-24-adventurex-morning-light-messenger-prompt.md

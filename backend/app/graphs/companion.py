@@ -48,9 +48,17 @@ def _build_messages(
     history: list[dict[str, str]],
     fragment_context: str | None = None,
     memory_context: str | None = None,
+    pet_prompt: str | None = None,
 ) -> list:
-    """组装 system + 历史消息（复用于流式与非流式）。"""
-    system = BASE_PERSONA + "\n" + MODE_HINTS.get(mode, DEFAULT_HINT)
+    """组装 system + 历史消息（复用于流式与非流式）。
+
+    提示词分层：BASE_PERSONA（红线，最外层不可覆盖） → 桌宠人格层（pet_prompt）
+    → mode 侧重 → 记忆/片段上下文。
+    """
+    system = BASE_PERSONA
+    if pet_prompt:
+        system += "\n\n## 你的人格与角色\n" + pet_prompt
+    system += "\n" + MODE_HINTS.get(mode, DEFAULT_HINT)
     if memory_context:
         system += (
             "\n\n下面是你对这位用户的一些记忆，只作背景参考、自然地融入对话，"
@@ -78,6 +86,7 @@ class ReplyState(TypedDict):
     history: list[dict[str, str]]
     fragment_context: str | None
     memory_context: str | None
+    pet_prompt: str | None
     reply: str
     error: str
 
@@ -85,7 +94,8 @@ class ReplyState(TypedDict):
 def call_llm(state: ReplyState) -> dict:
     model = get_chat_model(temperature=0.7)
     messages = _build_messages(
-        state["mode"], state["history"], state.get("fragment_context"), state.get("memory_context")
+        state["mode"], state["history"], state.get("fragment_context"),
+        state.get("memory_context"), state.get("pet_prompt"),
     )
     try:
         resp = model.invoke(messages)
@@ -117,6 +127,7 @@ def run_companion(
     history: list[dict[str, str]],
     fragment_context: str | None = None,
     memory_context: str | None = None,
+    pet_prompt: str | None = None,
 ) -> str:
     """非流式：返回完整回应。LLM 失败返回温和兜底句。"""
     result = _reply_graph.invoke({
@@ -124,6 +135,7 @@ def run_companion(
         "history": history,
         "fragment_context": fragment_context,
         "memory_context": memory_context,
+        "pet_prompt": pet_prompt,
         "reply": "",
         "error": "",
     })
@@ -138,10 +150,11 @@ def stream_companion(
     history: list[dict[str, str]],
     fragment_context: str | None = None,
     memory_context: str | None = None,
+    pet_prompt: str | None = None,
 ) -> Generator[str, None, None]:
     """流式：逐 token yield 文本增量（供 SSE）。失败时 yield 兜底句。"""
     model = get_chat_model(temperature=0.7)
-    messages = _build_messages(mode, history, fragment_context, memory_context)
+    messages = _build_messages(mode, history, fragment_context, memory_context, pet_prompt)
     try:
         for chunk in model.stream(messages):
             delta = chunk.content

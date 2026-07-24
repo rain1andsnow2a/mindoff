@@ -30,6 +30,7 @@ from app.routers import (
     preferences,
     realtime,
     reminders,
+    role_profiles,
     scenes,
     stores,
     stt,
@@ -40,19 +41,45 @@ from app.routers import (
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-# 做梦 Agent 定时触发时间（默认凌晨 0 点）
+# 做梦 Agent 定时触发时间（默认凌晨 0 点，UTC）
 DREAM_HOUR = 0
 DREAM_MINUTE = 0
 
+# 晚间来信定时触发时间（东八区 21:30，产品面向国内用户固定时区）
+CST = timezone(timedelta(hours=8))
+EVENING_HOUR = 21
+EVENING_MINUTE = 30
+
+# 每周周报触发时间（东八区周日 20:00）。weekday: 周一=0 … 周日=6
+WEEKLY_WEEKDAY = 6
+WEEKLY_HOUR = 20
+WEEKLY_MINUTE = 0
+
+
+def _seconds_until(hour: int, minute: int, tz: timezone) -> float:
+    """计算距离下一个 tz 时区 hour:minute 的秒数。"""
+    now = datetime.now(tz)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+def _seconds_until_weekly(weekday: int, hour: int, minute: int, tz: timezone) -> float:
+    """计算距离下一个 tz 时区「周 weekday 的 hour:minute」的秒数。"""
+    now = datetime.now(tz)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    days_ahead = (weekday - now.weekday()) % 7
+    target += timedelta(days=days_ahead)
+    if target <= now:
+        target += timedelta(days=7)
+    return (target - now).total_seconds()
+
 
 async def _dream_scheduler():
-    """后台协程：每天 DREAM_HOUR:DREAM_MINUTE 触发做梦 Agent。"""
+    """后台协程：每天 DREAM_HOUR:DREAM_MINUTE(UTC) 触发做梦 Agent。"""
     while True:
-        now = datetime.now(timezone.utc)
-        target = now.replace(hour=DREAM_HOUR, minute=DREAM_MINUTE, second=0, microsecond=0)
-        if target <= now:
-            target += timedelta(days=1)
-        wait_seconds = (target - now).total_seconds()
+        wait_seconds = _seconds_until(DREAM_HOUR, DREAM_MINUTE, timezone.utc)
         logger.info("[scheduler] next dream run in %.0f seconds", wait_seconds)
         await asyncio.sleep(wait_seconds)
 
@@ -70,14 +97,66 @@ async def _dream_scheduler():
                 db.close()
 
 
+async def _evening_letter_scheduler():
+    """后台协程：每晚 21:30（东八区）由桌宠给每个用户写一封晚间来信。
+
+    独立于 proactive 开关，每晚都发；只有 LLM 调用失败才不发。
+    """
+    while True:
+        wait_seconds = _seconds_until(EVENING_HOUR, EVENING_MINUTE, CST)
+        logger.info("[scheduler] next evening letter in %.0f seconds", wait_seconds)
+        await asyncio.sleep(wait_seconds)
+
+        from app.db import SessionLocal
+        from app.services.evening_letter import run_evening_letters_all
+
+        db = SessionLocal()
+        try:
+            results = run_evening_letters_all(db)
+            sent = sum(1 for r in results if r.get("sent"))
+            logger.info("[scheduler] evening letters: %d sent / %d users", sent, len(results))
+        except Exception as e:
+            logger.error("[scheduler] evening letter failed: %s", e)
+        finally:
+            db.close()
+
+
+async def _weekly_report_scheduler():
+    """后台协程：每周日 20:00（东八区）给每个用户投一封本周小结。
+
+    独立于 proactive 开关，每周日都发；只有 LLM 调用失败才不发。
+    """
+    while True:
+        wait_seconds = _seconds_until_weekly(WEEKLY_WEEKDAY, WEEKLY_HOUR, WEEKLY_MINUTE, CST)
+        logger.info("[scheduler] next weekly report in %.0f seconds", wait_seconds)
+        await asyncio.sleep(wait_seconds)
+
+        from app.db import SessionLocal
+        from app.services.weekly_report import run_weekly_reports_all
+
+        db = SessionLocal()
+        try:
+            results = run_weekly_reports_all(db)
+            sent = sum(1 for r in results if r.get("sent"))
+            logger.info("[scheduler] weekly reports: %d sent / %d users", sent, len(results))
+        except Exception as e:
+            logger.error("[scheduler] weekly report failed: %s", e)
+        finally:
+            db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时确保表存在（开发期；生产走 Alembic）
     Base.metadata.create_all(bind=engine)
-    # 启动做梦定时调度
-    task = asyncio.create_task(_dream_scheduler())
+    # 启动定时调度：做梦（0:00 UTC）+ 晚间来信（21:30 东八区）+ 周报（周日 20:00 东八区）
+    dream_task = asyncio.create_task(_dream_scheduler())
+    evening_task = asyncio.create_task(_evening_letter_scheduler())
+    weekly_task = asyncio.create_task(_weekly_report_scheduler())
     yield
-    task.cancel()
+    dream_task.cancel()
+    evening_task.cancel()
+    weekly_task.cancel()
 
 
 app = FastAPI(title="MindOff Backend", version="0.3.0", lifespan=lifespan)
@@ -127,6 +206,9 @@ app.include_router(candidates.router)
 app.include_router(theater_ext.router)
 # 业务层：片场场景（候选确认后生成，互动体验/结算）
 app.include_router(scenes.router)
+
+# 业务层：角色档案
+app.include_router(role_profiles.router)
 
 # 业务层：信箱扩展（来信/三日寄存/长久珍藏）
 app.include_router(letters.router)

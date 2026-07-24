@@ -91,6 +91,83 @@ def _persist_opening(db: Session, user_id: int, opening: dict, fragment_id: int 
     return s
 
 
+def _node(s: Scene) -> dict:
+    """把 Scene 当前状态转成视觉小说节点（背景/角色/对话/可选回应）。"""
+    speakers = set()
+    for b in (s.beats or []):
+        if isinstance(b, dict):
+            sp = b.get("speaker")
+            if sp and sp != "旁白":
+                speakers.add(sp)
+    return {
+        "background": s.setting or "",
+        "characters": [{"name": name, "sprite": None} for name in speakers],
+        "dialogue": s.beats or [],
+        "choices": s.choices or [],
+    }
+
+
+def _play_id_match(s: Scene, play_id: str) -> bool:
+    return play_id in (str(s.id), f"play-{s.id}")
+
+
+def _advance_scene(db: Session, s: Scene, choice_id: str) -> None:
+    """非流式：验证选项并用 theater.advance 推进一幕。"""
+    chosen = next((c for c in (s.choices or []) if str(c.get("id")) == choice_id), None)
+    if chosen is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
+    res = theater.advance(
+        {"setting": s.setting, "beats": s.beats, "history": s.history, "turn": s.turn},
+        chosen["label"],
+    )
+    s.turn = s.turn + 1
+    s.beats = res["beats"]
+    s.choices = res["choices"]
+    s.history = (s.history or []) + [{"turn": s.turn, "choice": chosen["label"]}]
+    db.commit()
+    db.refresh(s)
+
+
+def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
+    """流式推进的 SSE 生成器（被 /choices 与 /plays/{play_id}/choices 复用）。"""
+    db2 = SessionLocal()
+    try:
+        sc = db2.get(Scene, scene_id)
+        if sc is None:
+            yield _sse("error", {"message": "场景不存在"})
+            return
+        narrative, choices = "", []
+        for kind, val in theater.stream_advance_tokens(
+            {"setting": sc.setting, "beats": sc.beats, "history": sc.history, "turn": sc.turn},
+            label, final=final,
+        ):
+            if kind == "token":
+                narrative += val
+                yield _sse("token", {"delta": val})
+            elif kind == "choices":
+                choices = val
+                yield _sse("choices", {"choices": val})
+        ended = final or not choices
+        sc.turn = turn
+        sc.beats = [{"speaker": "旁白", "text": narrative.strip() or "……"}]
+        sc.choices = [] if ended else choices
+        sc.history = (sc.history or []) + [{"turn": turn, "choice": label}]
+        db2.commit()
+        yield _sse("done", {"scene_id": sc.id, "turn": turn, "ended": ended})
+    finally:
+        db2.close()
+
+
+class PlayOut(BaseModel):
+    play_id: str
+    scene_id: int
+    status: str
+    turn: int
+    node: dict
+
+    model_config = {"from_attributes": True}
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[SceneOut])
@@ -142,6 +219,105 @@ def create_scene(
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+# ─── Plays 子资源（MVP 下每场 Scene 对应单次体验，play_id 复用 scene_id）────────
+
+@router.post("/{scene_id}/plays", response_model=PlayOut)
+def start_play(
+    scene_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """开始一次场景体验，返回首个视觉小说节点。"""
+    s = _get_owned(db, user.id, scene_id)
+    if s.status == "settled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
+    return PlayOut(
+        play_id=str(s.id), scene_id=s.id, status=s.status,
+        turn=s.turn, node=_node(s),
+    )
+
+
+@router.get("/{scene_id}/plays/{play_id}", response_model=PlayOut)
+def get_play(
+    scene_id: int,
+    play_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取某次体验的当前节点。"""
+    s = _get_owned(db, user.id, scene_id)
+    if not _play_id_match(s, play_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "体验不存在")
+    return PlayOut(
+        play_id=play_id, scene_id=s.id, status=s.status,
+        turn=s.turn, node=_node(s),
+    )
+
+
+@router.post("/{scene_id}/plays/{play_id}/choices", response_model=None)
+def play_choose(
+    scene_id: int,
+    play_id: str,
+    body: ChoiceIn,
+    stream: bool = Query(False, description="true 走 SSE 逐句浮现"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """在指定体验中提交一次回应，推进剧情。"""
+    s = _get_owned(db, user.id, scene_id)
+    if not _play_id_match(s, play_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "体验不存在")
+    if s.status == "settled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
+
+    chosen = next((c for c in (s.choices or []) if str(c.get("id")) == body.choice_id), None)
+    if chosen is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
+
+    if not stream:
+        _advance_scene(db, s, body.choice_id)
+        return PlayOut(
+            play_id=play_id, scene_id=s.id, status=s.status,
+            turn=s.turn, node=_node(s),
+        )
+
+    turn = s.turn + 1
+    final = turn >= theater.MAX_TURNS
+    return StreamingResponse(
+        _advance_stream_gen(scene_id, chosen["label"], turn, final),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/{scene_id}/plays/{play_id}/settlement")
+def play_settle(
+    scene_id: int,
+    play_id: str,
+    body: SettlementIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """结束本次体验 → 结算卡。"""
+    s = _get_owned(db, user.id, scene_id)
+    if not _play_id_match(s, play_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "体验不存在")
+    if s.status == "settled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
+    result = stage.settle(
+        db, user.id,
+        action_text=body.action_text,
+        insight_text=body.insight_text,
+        related_memory_ids=body.related_memory_ids,
+        role_id=body.role_id,
+        keep=body.keep,
+        card_text=body.card_text,
+    )
+    s.status = "settled"
+    s.choices = []
+    db.commit()
+    return {"play_id": play_id, "scene_id": s.id, "status": "settled", "settlement": result}
+
+
 @router.get("/{scene_id}", response_model=SceneOut)
 def get_scene(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return _get_owned(db, user.id, scene_id)
@@ -180,38 +356,18 @@ def choose(
     turn = s.turn + 1
     final = turn >= theater.MAX_TURNS
 
-    def gen():
-        db2 = SessionLocal()
-        try:
-            sc = db2.get(Scene, scene_id)
-            narrative, choices = "", []
-            for kind, val in theater.stream_advance_tokens(
-                {"setting": sc.setting, "beats": sc.beats, "history": sc.history, "turn": sc.turn},
-                label, final=final,
-            ):
-                if kind == "token":
-                    narrative += val
-                    yield _sse("token", {"delta": val})
-                elif kind == "choices":
-                    choices = val
-                    yield _sse("choices", {"choices": val})
-            ended = final or not choices
-            sc.turn = turn
-            sc.beats = [{"speaker": "旁白", "text": narrative.strip() or "……"}]
-            sc.choices = [] if ended else choices
-            sc.history = (sc.history or []) + [{"turn": turn, "choice": label}]
-            db2.commit()
-            yield _sse("done", {"scene_id": sc.id, "turn": turn, "ended": ended})
-        finally:
-            db2.close()
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        _advance_stream_gen(scene_id, label, turn, final),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/{scene_id}/settlement")
 def settle_scene(scene_id: int, body: SettlementIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """结束体验 → 结算卡。复用 stage.settle 回写（行动→待办、领悟→记忆、卡→珍藏/即焚）。"""
     s = _get_owned(db, user.id, scene_id)
+    if s.status == "settled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
     result = stage.settle(
         db, user.id,
         action_text=body.action_text,

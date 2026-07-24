@@ -67,6 +67,16 @@ def list_candidates(user: User = Depends(get_current_user), db: Session = Depend
     return list(db.scalars(_pending_stmt(user.id).order_by(MemoryItem.created_at.desc())).all())
 
 
+@router.get("/{candidate_id}", response_model=CandidateOut)
+def get_candidate(
+    candidate_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单个候选片段详情。"""
+    return _get_owned(db, user.id, candidate_id)
+
+
 @router.post("/{candidate_id}/confirm")
 def confirm_candidate(
     candidate_id: int,

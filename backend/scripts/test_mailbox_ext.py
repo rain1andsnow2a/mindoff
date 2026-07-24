@@ -141,4 +141,35 @@ r = httpx.get(f"{B}/ephemeral", headers=H)
 assert len(r.json()) == 0, r.text
 print("EPHEMERAL DELETE: ok")
 
+# ───  synthesized letters persistence (DAY-163 fix) ─────────────────────────
+# 新建用户：有 surface 记忆但无来信 → /mailbox 应自动合成并落库 Letter
+u3 = {"username": f"mbx_synth_{uuid.uuid4().hex[:8]}", "password": "pass1234"}
+tok3 = httpx.post(f"{B}/auth/register", json=u3).json()["access_token"]
+H3 = {"Authorization": f"Bearer {tok3}"}
+uid3 = httpx.get(f"{B}/users/me", headers=H3).json()["id"]
+db = SessionLocal()
+MemoryStore(db).create(
+    user_id=uid3, layer="state", kind="待办", depth="surface",
+    content="下午三点交报告", surface_text="下午三点交报告", status="pending",
+)
+MemoryStore(db).create(
+    user_id=uid3, layer="state", kind="小结", depth="surface",
+    content="今天状态不错", surface_text="今天状态不错",
+)
+db.close()
+r = httpx.get(f"{B}/mailbox", headers=H3)
+assert r.status_code == 200, r.text
+ov3 = r.json()
+print("SYNTHESIZED MAILBOX:", ov3["letters_count"], "letters")
+assert ov3["letters_count"] > 0, "应有合成的来信"
+# 落库验证：GET /letters 能读到，且 type 合法
+letters3 = httpx.get(f"{B}/letters", headers=H3).json()
+assert len(letters3) == ov3["letters_count"], "mailbox 与 /letters 数量应一致"
+for l in letters3:
+    assert l["type"] in {"greeting", "reminder"}, f"未知来信类型: {l['type']}"
+# 幂等验证：再次调用 /mailbox 不会重复创建
+r2 = httpx.get(f"{B}/mailbox", headers=H3)
+assert r2.json()["letters_count"] == ov3["letters_count"], "应幂等，不重复生成"
+print("SYNTHESIZED LETTERS PERSISTED: ok")
+
 print("\n=== Mailbox Ext ALL PASS ===")

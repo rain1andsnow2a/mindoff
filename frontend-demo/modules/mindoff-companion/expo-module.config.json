@@ -1,0 +1,10 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": [
+      "com.mindoff.companion.MindoffCompanionModule",
+      "com.mindoff.companion.MindoffPcmModule"
+    ],
+    "packageImportPath": "com.mindoff.companion"
+  }
+}

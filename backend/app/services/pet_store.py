@@ -28,6 +28,7 @@ class PetStore:
             personality=preset["personality"],
             tone=preset["tone"],
             actions=list(preset.get("actions") or []),
+            system_prompt=preset.get("system_prompt"),
         )
         self._db.add(pet)
         self._db.commit()

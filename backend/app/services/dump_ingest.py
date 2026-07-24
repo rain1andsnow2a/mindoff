@@ -7,14 +7,29 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Generator
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.graphs.extractor import run_extractor
+from app.models.preference import UserPreference
+from app.services import privacy
 from app.services.memory_store import MemoryStore
+from app.services.preferences import ttl_days_for
 
 logger = logging.getLogger(__name__)
+
+# 入「寄存」并落 TTL 的 kind：情绪、未确认片段（候选）。
+# 待办/小结/灵感是可行动产出，进各自存储、不过期。
+EPHEMERAL_KINDS = {"情绪", "片段"}
+
+
+def _should_keep_raw(db: Session, user_id: int) -> bool:
+    """读用户「保留原始倾诉」开关；无偏好行时默认保留（不焚）。"""
+    pref = db.scalar(select(UserPreference).where(UserPreference.user_id == user_id))
+    return pref.keep_raw_dump if pref else True
 
 
 @dataclass
@@ -57,6 +72,7 @@ def ingest_dump(db: Session, *, user_id: int, dump_text: str,
         {"event": "done", "data": {}}                结束标记
     """
     store = MemoryStore(db)
+    ttl_days = ttl_days_for(db, user_id)  # 用户偏好的寄存天数（默认 7）
 
     # 1. raw_ref 落库（创建一条 root 记忆作为倾倒原始记录）
     raw_item = store.create(
@@ -97,6 +113,12 @@ def ingest_dump(db: Session, *, user_id: int, dump_text: str,
     kind_counts: dict[str, int] = {}
 
     for fact in facts:
+        # 情绪 / 未确认片段入寄存并落 TTL（按用户偏好天数，到期由 inbox.expire_ephemeral 真删）
+        ttl = (
+            datetime.now(timezone.utc) + timedelta(days=ttl_days)
+            if fact["kind"] in EPHEMERAL_KINDS
+            else None
+        )
         mem = store.create(
             user_id=user_id,
             layer=fact["layer"],
@@ -109,6 +131,7 @@ def ingest_dump(db: Session, *, user_id: int, dump_text: str,
             emotion=fact.get("emotion"),
             provenance=[dump_id],
             raw_ref=None,  # 子条目不重复存 raw
+            expires_at=ttl,
             actor="extractor",
         )
         ri = ReceiptItem(kind=fact["kind"], content=fact["content"], memory_id=mem.id)
@@ -136,6 +159,12 @@ def ingest_dump(db: Session, *, user_id: int, dump_text: str,
             outputs[key].append(ri.memory_id)
 
     store.set_status(dump_id, "done", actor="dump_ingest")
+
+    # 6. 原文即焚（requirements 7.4）：提取成功、已有整理后 surface 可替代原话时，
+    #    按用户开关抹掉逐字原文 / 原始语音引用。失败兜底分支不焚（见上：原话须留住）。
+    if not _should_keep_raw(db, user_id):
+        privacy.burn_raw_ref(db, dump_id, actor="dump_ingest")
+
     receipt = DumpReceipt(
         dump_id=dump_id, total=len(items),
         items=items, kind_counts=kind_counts, outputs=outputs,

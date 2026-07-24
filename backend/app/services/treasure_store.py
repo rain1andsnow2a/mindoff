@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.treasure import Treasure
 
-SOURCE_TYPES = {"summary", "idea", "memory", "ephemeral"}
+SOURCE_TYPES = {"summary", "idea", "memory", "ephemeral", "conversation", "scene", "letter"}
 
 
 class TreasureStore:

@@ -31,3 +31,22 @@ def trigger_dream_all(db: Session = Depends(get_db)):
 
     results = run_dreaming_all(db)
     return {"results": results}
+
+
+@router.post("/evening-letter")
+def trigger_evening_letter(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手动触发当前用户的晚间来信（无需等 21:30）。"""
+    from app.services.evening_letter import generate_evening_letter
+
+    letter = generate_evening_letter(db, user.id)
+    if letter is None:
+        return {"sent": False, "reason": "llm_failed"}
+    return {
+        "sent": True,
+        "letter_id": letter.id,
+        "title": letter.title,
+        "body": letter.body,
+    }

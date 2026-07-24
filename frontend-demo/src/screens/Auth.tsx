@@ -20,6 +20,20 @@ import { login as apiLogin, register as apiRegister, Tokens } from "../api";
 
 type Mode = "login" | "register";
 
+// Web 预览时，浏览器（尤其 Edge）会在 password 输入框内自带一个原生"显示密码"眼睛，
+// 与卡片右侧自定义眼睛重叠成"两个眼睛"。这里隐藏原生控件，只保留外层自定义眼睛。
+// 仅在 web 生效；原生端 RN 不渲染该控件，此段自动跳过。
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const STYLE_ID = "mindoff-hide-native-reveal";
+  if (!document.getElementById(STYLE_ID)) {
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent =
+      "input::-ms-reveal,input::-ms-clear{display:none!important;}";
+    document.head.appendChild(style);
+  }
+}
+
 export function AuthScreen({
   onAuthed,
 }: {
@@ -107,11 +121,11 @@ export function AuthScreen({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 26, paddingTop: 80, paddingBottom: 40 }}
+        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 26, paddingTop: 44, paddingBottom: 36 }}
         keyboardShouldPersistTaps="handled"
       >
         {/* 品牌 */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 26 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <View
             style={{
               width: 54,
@@ -175,6 +189,10 @@ export function AuthScreen({
                 onChangeText: setPassword,
                 placeholder: "悄悄话，只有你知道",
                 secureTextEntry: !showPw,
+                // 关掉 Android 原生自动填充/密码管理器的"内层"眼睛，只保留 App 自绘的外层眼睛（DAY-173）
+                autoComplete: "off",
+                importantForAutofill: "no",
+                textContentType: "none",
               },
               <Pressable onPress={() => setShowPw((s) => !s)} hitSlop={8}>
                 {showPw ? (

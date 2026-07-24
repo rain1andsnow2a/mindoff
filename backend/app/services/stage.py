@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.models.memory import MemoryItem
 from app.models.role_profile import RoleProfile
 from app.services.memory_store import MemoryStore
+from app.services.treasure_store import TreasureStore
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +81,15 @@ def settle(
     role_id: int | None = None,
     keep: bool = True,
     card_text: str | None = None,
+    scene_id: int | None = None,
     actor: str = "stage",
 ) -> dict[str, Any]:
     """结算回写。返回各产出引用的 id。"""
     store = MemoryStore(db)
     related_memory_ids = related_memory_ids or []
     result: dict[str, Any] = {"action_memory_id": None, "insight_memory_id": None,
-                              "role_note_appended": False, "card_memory_id": None}
+                              "role_note_appended": False, "card_memory_id": None,
+                              "treasure_id": None}
 
     # 1) 最小行动 → surface/待办（进次日信箱「今日待启」，requirements 5.3）
     if action_text:
@@ -131,5 +134,16 @@ def settle(
             expires_at=expires, actor=actor,
         )
         result["card_memory_id"] = card.id
+
+        # 珍藏：同步写入长久珍藏（source=scene），即焚则不生成
+        if keep:
+            treasure = TreasureStore(db).create(
+                user_id=user_id,
+                source_type="scene",
+                source_id=scene_id,
+                title="重演结算卡",
+                content=card_text,
+            )
+            result["treasure_id"] = treasure.id
 
     return result

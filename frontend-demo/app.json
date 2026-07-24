@@ -5,9 +5,40 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
-    "ios": { "supportsTablet": false },
-    "android": { "package": "com.mindoff.app" },
-    "web": { "bundler": "metro" }
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-asset",
+      "expo-audio"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MindOff 需要麦克风权限来把你的语音转成文字，不会保留原始录音。"
+      }
+    },
+    "android": {
+      "package": "com.mindoff.app",
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_SPECIAL_USE",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    }
   }
 }

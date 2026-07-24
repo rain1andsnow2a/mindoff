@@ -3,7 +3,7 @@
  * 今日待启（周视图 + 任务列表）/ 桌宠来信（信封→信纸）/ 长久珍藏（双列册子）/ 三日寄存
  * + TaskDetail / StorageDetail 两个详情屏。
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   Check, ChevronLeft, ChevronRight, Film, Heart, Mail, MapPin, Music,
@@ -13,6 +13,7 @@ import {
   BottomSheet, CreamRipple, GlassCard, PrimaryBtn, SafeHeader,
 } from "../components";
 import { CREAM, GOLD_DEEP, palette, useNight } from "../theme";
+import { createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
 
 // ─── Types & Mock ────────────────────────────────────────────────────────────
 
@@ -30,13 +31,39 @@ export interface Keepsake {
 
 const TODAY_DATE = "2026-07-23";
 
-const INITIAL_TASKS: Task[] = [
-  { id: "t1", title: "回复那封邮件", date: "2026-07-23", time: "今天内", source: "来自昨晚的整理", completed: false },
-  { id: "t2", title: "和朋友见面", date: "2026-07-23", time: "15:00", source: "手动添加", completed: false },
-  { id: "t3", title: "记得喝水", date: "2026-07-23", time: "持续", source: "桌宠提醒", completed: true },
-  { id: "t4", title: "与朋友的约定", date: "2026-07-24", time: "15:00", source: "来自昨晚的整理", completed: false },
-  { id: "t5", title: "整理书桌", date: "2026-07-22", time: "", source: "手动添加", completed: true },
-];
+/** 后端 StoreItemOut(待办) → 前端 Task */
+function mapTodo(t: any): Task {
+  const due: string | null = t?.due_date ?? null;
+  const date = due ? String(due).slice(0, 10) : TODAY_DATE;
+  const hhmm = due ? String(due).slice(11, 16) : "";
+  return {
+    id: String(t.id),
+    title: t.surface_text || t.content || "",
+    date,
+    time: hhmm && hhmm !== "00:00" ? hhmm : "",
+    source: "来自整理",
+    completed: t.status === "done",
+  };
+}
+
+/** date + time(HH:MM 或自由文本) → 后端 due_date（datetime 字符串） */
+function dueFrom(date: string, time: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((time || "").trim());
+  const hh = m ? m[1].padStart(2, "0") : "00";
+  const mm = m ? m[2] : "00";
+  return `${date}T${hh}:${mm}:00`;
+}
+
+/** 三日寄存剩余时间文案 */
+function remainText(expiresAt: string | null): string {
+  if (!expiresAt) return "";
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return "已到期";
+  const days = Math.floor(ms / 86400000);
+  if (days >= 1) return `${days}天后到期`;
+  return `${Math.max(1, Math.floor(ms / 3600000))}小时后到期`;
+}
+
 
 const INITIAL_KEEPSAKES: Keepsake[] = [
   { id: "k1", type: "letter", title: "桐桐写给我的信", excerpt: "你已经做得比自己感觉到的更多了。", savedAt: "7月24日", petName: "桐桐", source: "桌宠来信" },
@@ -46,19 +73,25 @@ const INITIAL_KEEPSAKES: Keepsake[] = [
   { id: "k5", type: "quote", title: "朋友说：你不用每次都表现得没事。", excerpt: "", savedAt: "5月28日", petName: "小栖", source: "一句话" },
 ];
 
-const LETTER_DATA = {
-  date: "7月24日 · 星期五",
-  greeting: "晚上好呀",
-  from: "桐桐",
-  deliveryTime: "7月24日 · 晚上 9:30 送达",
-  preview: "今天也有一些话想告诉你",
-  body: [
-    "我记得你今天一直在推进那件很重要的事情，好像没有给自己留下多少喘气的时间。你已经做得比自己感觉到的更多了。",
-    "如果今晚还是有点紧绷，也不用急着把所有事情想明白。先在这里坐一会儿，我会陪着你。",
-    "我还给你夹了一首很慢的歌，希望它能替我抱抱你。",
-  ],
-  attachment: { label: "信里夹了一首歌", title: "Bloom", artist: "ODESZA", reason: "旋律很慢，适合把今天一点点放下来。" },
+// 后端 TreasureOut → 前端 Keepsake
+const _TREASURE_TYPE: Record<string, Keepsake["type"]> = {
+  summary: "insight", idea: "insight", memory: "quote", scene: "scene", ephemeral: "moment",
 };
+const _TREASURE_SOURCE: Record<string, string> = {
+  summary: "今日小结", idea: "灵感收藏", memory: "记忆", scene: "场景结算", ephemeral: "三日寄存",
+};
+function mapTreasure(t: any): Keepsake {
+  const st = String(t?.source_type || "");
+  return {
+    id: String(t.id),
+    type: _TREASURE_TYPE[st] || "insight",
+    title: t.title || t.content || "",
+    excerpt: t.title ? (t.content || "") : "",
+    savedAt: t.created_at ? String(t.created_at).slice(5, 10).replace("-", "月") + "日" : "",
+    petName: "",
+    source: _TREASURE_SOURCE[st] || "珍藏",
+  };
+}
 
 // ─── Week helpers ────────────────────────────────────────────────────────────
 
@@ -573,7 +606,32 @@ function KeepsakeAlbum({ keepsakes, onSelectItem, onRemove }: {
 
 export type LetterState = "waiting" | "sealed" | "opening" | "opened" | "saved";
 
-function SealedEnvelope({ onOpen, isOpening }: { onOpen: () => void; isOpening: boolean }) {
+/** 后端 LetterOut */
+export interface ApiLetter {
+  id: number;
+  type: string;
+  title: string;
+  body: string;
+  pet_id: number | null;
+  ref_memory_id: number | null;
+  attachment: { label?: string; title?: string; artist?: string; reason?: string } | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+function _fmtLetterDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const wd = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+    return `${d.getMonth() + 1}月${d.getDate()}日 · 周${wd}`;
+  } catch {
+    return "";
+  }
+}
+
+function SealedEnvelope({ letter, onOpen, isOpening }: {
+  letter: ApiLetter; onOpen: () => void; isOpening: boolean;
+}) {
   const night = useNight();
   const C = palette(night);
   const [showRipple, setShowRipple] = useState(false);
@@ -598,9 +656,9 @@ function SealedEnvelope({ onOpen, isOpening }: { onOpen: () => void; isOpening: 
               <Text style={{ fontSize: 17 }}>🌿</Text>
             </View>
           </View>
-          <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: "#4D4249" }}>桐桐今天写给你</Text>
-          <Text style={{ fontSize: 12, marginBottom: 5, color: "#8C8187" }}>{LETTER_DATA.deliveryTime}</Text>
-          <Text style={{ fontSize: 12, color: "#A39A9F" }}>{LETTER_DATA.preview}</Text>
+          <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: "#4D4249" }}>{letter.title}</Text>
+          <Text style={{ fontSize: 12, marginBottom: 5, color: "#8C8187" }}>{_fmtLetterDate(letter.created_at)}</Text>
+          <Text style={{ fontSize: 12, color: "#A39A9F" }} numberOfLines={1}>{letter.body.slice(0, 24)}…</Text>
         </View>
         {/* 信封下折角近似 */}
         <View style={{
@@ -615,7 +673,9 @@ function SealedEnvelope({ onOpen, isOpening }: { onOpen: () => void; isOpening: 
   );
 }
 
-function LetterAttachment({ saved, onSave }: { saved: boolean; onSave: () => void }) {
+function LetterAttachment({ attachment, saved, onSave }: {
+  attachment: NonNullable<ApiLetter["attachment"]>; saved: boolean; onSave: () => void;
+}) {
   return (
     <View style={{
       marginVertical: 20, borderRadius: 18, overflow: "hidden",
@@ -624,7 +684,7 @@ function LetterAttachment({ saved, onSave }: { saved: boolean; onSave: () => voi
       <View style={{ padding: 16 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
           <Music size={12} color="#B98232" />
-          <Text style={{ fontSize: 12, fontWeight: "500", color: "#B98232" }}>{LETTER_DATA.attachment.label}</Text>
+          <Text style={{ fontSize: 12, fontWeight: "500", color: "#B98232" }}>{attachment.label ?? "信里夹了点什么"}</Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={{
@@ -634,11 +694,13 @@ function LetterAttachment({ saved, onSave }: { saved: boolean; onSave: () => voi
             <Text style={{ fontSize: 20 }}>🎵</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }} numberOfLines={1}>{LETTER_DATA.attachment.title}</Text>
-            <Text style={{ fontSize: 12, marginTop: 2, color: "#8C8187" }}>{LETTER_DATA.attachment.artist}</Text>
+            <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }} numberOfLines={1}>{attachment.title}</Text>
+            {!!attachment.artist && <Text style={{ fontSize: 12, marginTop: 2, color: "#8C8187" }}>{attachment.artist}</Text>}
           </View>
         </View>
-        <Text style={{ fontSize: 13, marginTop: 12, lineHeight: 19, color: "#62575D" }}>{LETTER_DATA.attachment.reason}</Text>
+        {!!attachment.reason && (
+          <Text style={{ fontSize: 13, marginTop: 12, lineHeight: 19, color: "#62575D" }}>{attachment.reason}</Text>
+        )}
         <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
           <Pressable style={{
             flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
@@ -662,10 +724,12 @@ function LetterAttachment({ saved, onSave }: { saved: boolean; onSave: () => voi
   );
 }
 
-function LetterPaper({ saved, onAck, onReply, onSave }: {
+function LetterPaper({ letter, petName, saved, onAck, onReply, onSave }: {
+  letter: ApiLetter; petName: string;
   saved: boolean; onAck: () => void; onReply: () => void; onSave: () => void;
 }) {
   const [attachSaved, setAttachSaved] = useState(false);
+  const paras = letter.body.split("\n").filter(p => p.trim());
   return (
     <View style={{
       borderRadius: 24, overflow: "hidden",
@@ -676,8 +740,8 @@ function LetterPaper({ saved, onAck, onReply, onSave }: {
       <View style={{ padding: 24 }}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
           <View>
-            <Text style={{ fontSize: 12, marginBottom: 4, color: "#8C8187" }}>{LETTER_DATA.date}</Text>
-            <Text style={{ fontSize: 20, fontWeight: "500", color: "#4D4249" }}>{LETTER_DATA.greeting}</Text>
+            <Text style={{ fontSize: 12, marginBottom: 4, color: "#8C8187" }}>{_fmtLetterDate(letter.created_at)}</Text>
+            <Text style={{ fontSize: 20, fontWeight: "500", color: "#4D4249" }}>{letter.title}</Text>
           </View>
           <View style={{
             width: 38, height: 38, borderRadius: 8, alignItems: "center", justifyContent: "center",
@@ -688,15 +752,17 @@ function LetterPaper({ saved, onAck, onReply, onSave }: {
         </View>
 
         <View style={{ gap: 16 }}>
-          {LETTER_DATA.body.map((para, i) => (
+          {paras.map((para, i) => (
             <Text key={i} style={{ fontSize: 15, lineHeight: 25, color: "#62575D" }}>{para}</Text>
           ))}
         </View>
 
-        <LetterAttachment saved={attachSaved} onSave={() => setAttachSaved(s => !s)} />
+        {letter.attachment && (
+          <LetterAttachment attachment={letter.attachment} saved={attachSaved} onSave={() => setAttachSaved(s => !s)} />
+        )}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 4 }}>
-          <Text style={{ fontSize: 15, fontStyle: "italic", letterSpacing: 0.5, color: "#8C8187" }}>{LETTER_DATA.from}</Text>
+          <Text style={{ fontSize: 15, fontStyle: "italic", letterSpacing: 0.5, color: "#8C8187" }}>{petName}</Text>
           <View style={{ width: 28, height: 28, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(243,216,199,0.45)" }}>
             <Text style={{ fontSize: 14 }}>✦</Text>
           </View>
@@ -759,25 +825,27 @@ function WaitingLetterState() {
   );
 }
 
-function DailyLetterView({ onReply, letterState, onOpenLetter, onSaveLetter, onAckLetter }: {
-  onReply: () => void; letterState: LetterState;
-  onOpenLetter: () => void; onSaveLetter: () => void; onAckLetter: () => void;
+function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter }: {
+  letters: ApiLetter[]; petName: string; letterState: LetterState;
+  onReply: () => void; onOpenLetter: () => void; onSaveLetter: () => void; onAckLetter: () => void;
 }) {
+  const letter = letters[0] ?? null;
   const saved = letterState === "saved";
   const isOpening = letterState === "opening";
-  const showEnvelope = letterState === "sealed" || letterState === "opening";
-  const showLetter = letterState === "opened" || letterState === "saved";
+  const showEnvelope = letter != null && (letterState === "sealed" || letterState === "opening");
+  const showLetter = letter != null && (letterState === "opened" || letterState === "saved");
 
   return (
     <View>
-      {letterState === "waiting" && <WaitingLetterState />}
+      {(letter == null || letterState === "waiting") && <WaitingLetterState />}
       {showEnvelope && (
         <View style={{ alignItems: "center", paddingVertical: 32 }}>
-          <SealedEnvelope onOpen={onOpenLetter} isOpening={isOpening} />
+          <SealedEnvelope letter={letter} onOpen={onOpenLetter} isOpening={isOpening} />
         </View>
       )}
       {showLetter && (
-        <LetterPaper saved={saved} onAck={onAckLetter} onReply={onReply} onSave={onSaveLetter} />
+        <LetterPaper letter={letter} petName={petName} saved={saved}
+          onAck={onAckLetter} onReply={onReply} onSave={onSaveLetter} />
       )}
     </View>
   );
@@ -785,35 +853,125 @@ function DailyLetterView({ onReply, letterState, onOpenLetter, onSaveLetter, onA
 
 // ─── Mailbox Screen ──────────────────────────────────────────────────────────
 
-export function MailboxScreen({ onTaskDetail, onStorageDetail, letterState, onOpenLetter, onSaveLetter, onAckLetter, onReplyLetter }: {
+export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, onToast, petName = "你的伙伴" }: {
   onTaskDetail: () => void;
   onStorageDetail: () => void;
-  letterState: LetterState;
-  onOpenLetter: () => void;
-  onSaveLetter: () => void;
-  onAckLetter: () => void;
   onReplyLetter: () => void;
+  onToast?: (msg: string) => void;
+  petName?: string;
 }) {
   const night = useNight();
   const C = palette(night);
   const [sec, setSec] = useState(0);
   const sections = ["桌宠来信", "今日待启", "长久珍藏", "三日寄存"];
 
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
   const [weekOffset, setWeekOffset] = useState(0);
   const [showAddTask, setShowAddTask] = useState(false);
 
-  const [keepsakes, setKeepsakes] = useState<Keepsake[]>(INITIAL_KEEPSAKES);
+  const [keepsakes, setKeepsakes] = useState<Keepsake[]>([]);
   const [selectedKeepsake, setSelectedKeepsake] = useState<Keepsake | null>(null);
+  const [ephem, setEphem] = useState<any[]>([]);
+
+  // ─── 来信（真实后端）───
+  const [letters, setLetters] = useState<ApiLetter[]>([]);
+  const [letterState, setLetterState] = useState<LetterState>("waiting");
+  const [savedLetterIds, setSavedLetterIds] = useState<Set<number>>(new Set());
+
+  const activeLetter = letters[0] ?? null;
+
+  const reloadLetters = async () => {
+    try {
+      const list = await listLetters("");
+      const arr = Array.isArray(list) ? list : [];
+      setLetters(arr);
+      const first = arr[0] ?? null;
+      if (!first) setLetterState("waiting");
+      else if (first.is_read) setLetterState(savedLetterIds.has(first.id) ? "saved" : "opened");
+      else setLetterState("sealed");
+    } catch { /* 网络异常保持当前 */ }
+  };
+
+  const handleOpenLetter = () => {
+    if (letterState !== "sealed" || !activeLetter) return;
+    setLetterState("opening");
+    markLetterRead(activeLetter.id).catch(() => {});
+    setLetters(ls => ls.map(l => l.id === activeLetter.id ? { ...l, is_read: true } : l));
+    setTimeout(() => setLetterState("opened"), 680);
+  };
+
+  const handleSaveLetter = async () => {
+    if (!activeLetter || savedLetterIds.has(activeLetter.id)) return;
+    try {
+      await createTreasure({
+        source_type: "letter", source_id: activeLetter.id,
+        title: activeLetter.title, content: activeLetter.body,
+      });
+      setSavedLetterIds(s => new Set(s).add(activeLetter.id));
+      setLetterState("saved");
+      onToast?.("已放入长久珍藏 ✦");
+      reloadTreasures();
+    } catch {
+      onToast?.("没存上，待会儿再试试");
+    }
+  };
+
+  const handleAckLetter = () => onToast?.("它知道你收到了");
 
   const dayTasks = tasks.filter(t => t.date === selectedDate);
-  const toggleTask = (id: string) => setTasks(ts => ts.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  const deleteTask = (id: string) => setTasks(ts => ts.filter(t => t.id !== id));
-  const addTask = (t: Task) => setTasks(ts => [...ts, t]);
+  const reloadTasks = async () => {
+    try {
+      const list = await listTodos("");
+      setTasks((Array.isArray(list) ? list : []).map(mapTodo));
+    } catch { /* 网络异常保持当前列表 */ }
+  };
+  const reloadTreasures = async () => {
+    try {
+      const list = await listTreasures();
+      setKeepsakes((Array.isArray(list) ? list : []).map(mapTreasure));
+    } catch { /* 网络异常保持当前列表 */ }
+  };
+  const reloadEphemeral = async () => {
+    try {
+      const list = await listEphemeral();
+      setEphem(Array.isArray(list) ? list : []);
+    } catch { /* 网络异常保持当前列表 */ }
+  };
+  useEffect(() => { reloadTasks(); reloadTreasures(); reloadEphemeral(); reloadLetters(); }, []);
+
+  const keepEph = (id: number) => {
+    setEphem(list => list.filter(e => e.id !== id));
+    keepEphemeral(id).then(reloadTreasures).catch(() => {});
+  };
+  const dropEph = (id: number) => {
+    setEphem(list => list.filter(e => e.id !== id));
+    dropEphemeral(id).catch(() => {});
+  };
+
+  const toggleTask = (id: string) => {
+    let done = false;
+    setTasks(ts => ts.map(t => {
+      if (t.id === id) { done = !t.completed; return { ...t, completed: done }; }
+      return t;
+    }));
+    updateTodo(Number(id), { status: done ? "done" : "pending" }).catch(() => {});
+  };
+  const deleteTask = (id: string) => {
+    setTasks(ts => ts.filter(t => t.id !== id));
+    deleteTodo(Number(id)).catch(() => {});
+  };
+  const addTask = async (t: Task) => {
+    setTasks(ts => [...ts, t]); // 乐观追加，reload 后换成真实 id
+    try {
+      await createTodo({ content: t.title, surface_text: t.title, due_date: dueFrom(t.date, t.time) });
+      await reloadTasks();
+    } catch { /* 失败保留乐观项 */ }
+  };
   const removeKeepsake = (id: string) => {
     setKeepsakes(ks => ks.filter(k => k.id !== id));
     setSelectedKeepsake(null);
+    deleteTreasure(Number(id)).catch(() => {});
   };
 
   return (
@@ -823,7 +981,9 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, letterState, onOp
       </View>
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {sections.map((s, i) => (
+          {sections.map((s, i) => {
+            const unread = i === 0 ? letters.filter(l => !l.is_read).length : 0;
+            return (
             <Pressable key={i} onPress={() => setSec(i)}
               style={{
                 paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
@@ -836,9 +996,10 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, letterState, onOp
               <Text style={{
                 fontSize: 13, fontWeight: "500",
                 color: sec === i ? (night ? "#F4EFEA" : "#494145") : (night ? "#B7ADB4" : "#6E6764"),
-              }}>{s}</Text>
+              }}>{s}{unread > 0 ? ` · ${unread}` : ""}</Text>
             </Pressable>
-          ))}
+            );
+          })}
         </ScrollView>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
@@ -851,30 +1012,41 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, letterState, onOp
           </>
         )}
         {sec === 0 && (
-          <DailyLetterView letterState={letterState} onOpenLetter={onOpenLetter}
-            onSaveLetter={onSaveLetter} onAckLetter={onAckLetter} onReply={onReplyLetter} />
+          <DailyLetterView letters={letters} petName={petName} letterState={letterState}
+            onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
+            onAckLetter={handleAckLetter} onReply={onReplyLetter} />
         )}
         {sec === 2 && (
           <KeepsakeAlbum keepsakes={keepsakes} onSelectItem={setSelectedKeepsake} onRemove={removeKeepsake} />
         )}
         {sec === 3 && (
           <>
-            {[
-              { title: "那次和妈妈的通话", time: "2天后到期", tag: "温暖" },
-              { title: "昨晚想到的一个主意", time: "1天后到期", tag: "灵感" },
-              { title: "有点烦那件事", time: "今天到期", tag: "情绪" },
-            ].map((s, i) => (
-              <GlassCard key={i} style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 12 }} onClick={onStorageDetail}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "500", marginBottom: 6, color: C.text }}>{s.title}</Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(246,231,168,0.65)" }}>
-                      <Text style={{ fontSize: 11, color: "#655D61" }}>{s.tag}</Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: C.muted }}>{s.time}</Text>
+            {ephem.length === 0 && (
+              <Text style={{ fontSize: 13, color: C.muted, paddingVertical: 24, textAlign: "center" }}>
+                这里暂时空空的，睡前说的情绪和碎片会先在这儿待三天。
+              </Text>
+            )}
+            {ephem.map((it) => (
+              <GlassCard key={it.id} style={{ padding: 16, marginBottom: 12 }}>
+                <Text style={{ fontSize: 15, fontWeight: "500", marginBottom: 6, color: C.text }}>
+                  {it.surface_text || it.content}
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(246,231,168,0.65)" }}>
+                    <Text style={{ fontSize: 11, color: "#655D61" }}>{it.kind}</Text>
                   </View>
+                  <Text style={{ fontSize: 12, color: C.muted }}>{remainText(it.expires_at)}</Text>
                 </View>
-                <ChevronRight size={15} color={C.muted} />
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable onPress={() => keepEph(it.id)}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center", backgroundColor: "rgba(246,231,168,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>珍藏</Text>
+                  </Pressable>
+                  <Pressable onPress={() => dropEph(it.id)}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center", backgroundColor: "rgba(221,237,227,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>放下</Text>
+                  </Pressable>
+                </View>
               </GlassCard>
             ))}
           </>

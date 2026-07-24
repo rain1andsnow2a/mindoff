@@ -47,10 +47,13 @@ def companion_home(
 
     # 轻量邀请（最多一个，低干扰）：未读来信 > 今日待启
     invitation = None
-    unread = LetterStore(db).unread_count(user.id)
+    store = LetterStore(db)
+    unread = store.unread_count(user.id)
     if unread > 0:
-        invitation = {"type": "letter", "count": unread,
-                      "text": "有一封信在等你拆开"}
+        # 用最新一封未读信的信题作为邀请预览（内容由晚间来信等 LLM 生成）
+        latest = store.list_for_user(user.id, unread=True, limit=1)
+        preview = latest[0].title if latest else "有一封信在等你拆开"
+        invitation = {"type": "letter", "count": unread, "text": preview}
     else:
         today = build_today(db, user.id)
         n = len(today["actionable"])

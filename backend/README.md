@@ -30,6 +30,7 @@ uv run uvicorn app.main:app --reload   # 默认 http://127.0.0.1:8000
 | 信箱 | `/mailbox`、`/letters`、`/ephemeral`、`/treasures` | ✅ |
 | 桌宠 | `/pets[/presets|/active|/{id}]`（切换触发交接信） | ✅ |
 | 交接信 | `/handoffs[/{id}]`（只读） | ✅ |
+| 片场 | `/candidates`、`/scenes`（含 templates/plays/calibrate/settlement） | ✅ |
 
 ## 验证（需先启动服务）
 
@@ -51,9 +52,11 @@ uv run python scripts/test_phase3.py         # 记忆 phase3（做梦 Agent）
 service 层测试（免启动服务，需 `PYTHONPATH=.`）：
 
 ```bash
-uv run python scripts/test_stage.py      # 片场供给/结算
-uv run python scripts/test_proactive.py  # 信任门控
-uv run python scripts/test_phase6.py     # 隐私/上下文/审阅（含 HTTP 段，需服务）
+uv run python scripts/test_stage.py            # 片场供给/结算
+uv run python scripts/test_proactive.py        # 信任门控
+uv run python scripts/test_phase6.py           # 隐私/上下文/审阅（含 HTTP 段，需服务）
+uv run python scripts/test_burn_raw.py         # keep_raw_dump→burn_raw_ref 焚原文 + 情绪落 7 天 TTL
+uv run python scripts/test_ephemeral_weekly.py # 到期硬删（行+历史）+ 周报生成/幂等
 ```
 
 > Windows 控制台跑脚本请加 `PYTHONUTF8=1`（否则 emoji print 报 GBK 编码错）。
@@ -74,4 +77,8 @@ uv run python scripts/test_phase6.py     # 隐私/上下文/审阅（含 HTTP �
   `app/services/privacy.py` 的 `can_send_external`。
 - **检索纯本地、无向量库**（hermes 式架构）：召回 = 结构化分层 + 关键词/实体匹配，
   做梦聚类 = 纯 entity 交集。私密内容没有任何外发路径。
-- 来信每天 ≤1–2 封；三日寄存到期真删。
+- 来信每天 ≤1–2 封；每周日 20:00（东八区）投一封周报（`type=weekly`，只取 surface 素材）。
+- 寄存 7 天（`inbox.EPHEMERAL_TTL_DAYS`）到期**硬删**：物理删记忆行 + 历史行，不留人物/地点/原话/事件
+  （`inbox._hard_delete_memory`；Property 4 的受限例外，仅到期寄存）。
+- 原始倾诉按用户 `keep_raw_dump` 开关：关则提取成功后即焚 `raw_ref`（含语音，走 `privacy.burn_raw_ref`），
+  仅留整理后的 `surface_text`；提取失败不焚（先接住用户）。agent 上下文只读 `surface_text`，焚原文不影响记忆连续性。
