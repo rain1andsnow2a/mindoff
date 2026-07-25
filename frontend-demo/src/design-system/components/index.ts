@@ -44,6 +44,8 @@ export {
 
 export {
   CreamRipple,
+  GlassSurface,
+  GrainTexture,
   MistBackground,
   PetPlaceholder,
 } from "./effects";

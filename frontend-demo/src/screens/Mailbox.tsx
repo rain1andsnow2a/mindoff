@@ -15,6 +15,8 @@ import {
   Chip,
   CreamRipple,
   EmptyState,
+  GlassSurface,
+  GrainTexture,
   IconButton,
   PageContainer,
   PageHeader,
@@ -434,6 +436,7 @@ function KeepsakeArtifact({ item, onOpen }: { item: Keepsake; onOpen: () => void
         borderRadius: 24, overflow: "hidden",
         backgroundColor: "rgba(255,252,245,0.62)", borderWidth: 1, borderColor: "rgba(255,255,255,0.52)",
       }}>
+        <GrainTexture />
         {isMedia ? (
           <View style={{ padding: 13 }}>
             <View style={{
@@ -837,6 +840,7 @@ function LetterPaper({ letter, petName, saved, onAck, onReply, onSave, onEnterSc
       borderRadius: 24, overflow: "hidden",
       backgroundColor: "rgba(255,253,247,0.96)", borderWidth: 1, borderColor: "rgba(255,255,255,0.6)",
     }}>
+      <GrainTexture />
       {/* 信纸左侧边线 */}
       <View style={{ position: "absolute", left: 44, top: 0, bottom: 0, width: 1, backgroundColor: "rgba(243,216,199,0.3)" }} />
       <View style={{ padding: 24 }}>
