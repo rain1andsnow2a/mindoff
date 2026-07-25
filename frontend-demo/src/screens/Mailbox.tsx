@@ -827,9 +827,10 @@ function SceneInviteCard({ attachment, onEnter, entering }: {
   );
 }
 
-function LetterPaper({ letter, petName, saved, onAck, onReply, onSave, onEnterScene, entering }: {
+function LetterPaper({ letter, petName, saved, onAck, acking, acked, onReply, onSave, onEnterScene, entering }: {
   letter: ApiLetter; petName: string;
-  saved: boolean; onAck: () => void; onReply: () => void; onSave: () => void;
+  saved: boolean; onAck: () => void; acking?: boolean; acked?: boolean;
+  onReply: () => void; onSave: () => void;
   onEnterScene?: () => void; entering?: boolean;
 }) {
   const [attachSaved, setAttachSaved] = useState(false);
@@ -881,9 +882,17 @@ function LetterPaper({ letter, petName, saved, onAck, onReply, onSave, onEnterSc
         {/* Actions */}
         <View style={{ marginTop: 24, gap: 8 }}>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable onPress={onAck}
-              style={{ flex: 1, paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.75)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)" }}>
-              <Text style={{ fontSize: 14, fontWeight: "500", color: "#4D4249" }}>收到啦</Text>
+            <Pressable onPress={onAck} disabled={!!acking || !!acked}
+              style={({ pressed }) => [{
+                flex: 1, paddingVertical: 12, borderRadius: 999, alignItems: "center",
+                backgroundColor: acked ? "rgba(221,237,227,0.55)" : acking ? "rgba(246,231,168,0.4)" : "rgba(246,231,168,0.75)",
+                borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+                opacity: acked ? 0.7 : 1,
+                transform: [{ scale: pressed && !acking && !acked ? 0.97 : 1 }],
+              }]}>
+              <Text style={{ fontSize: 14, fontWeight: "500", color: acked ? "#5A8A6A" : "#4D4249" }}>
+                {acked ? "✓ 已收到" : acking ? "正在告诉它…" : "收到啦"}
+              </Text>
             </Pressable>
             <Pressable onPress={onReply}
               style={{ flex: 1, paddingVertical: 12, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(255,252,245,0.7)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)" }}>
@@ -934,9 +943,10 @@ function WaitingLetterState() {
   );
 }
 
-function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter, onEnterScene, entering }: {
+function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter, acking, ackedIds, onEnterScene, entering }: {
   letters: ApiLetter[]; petName: string; letterState: LetterState;
   onReply: () => void; onOpenLetter: () => void; onSaveLetter: () => void; onAckLetter: () => void;
+  acking?: boolean; ackedIds?: Set<number>;
   onEnterScene?: (letter: ApiLetter) => void; entering?: boolean;
 }) {
   const letter = letters[0] ?? null;
@@ -955,7 +965,8 @@ function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter,
       )}
       {showLetter && (
         <LetterPaper letter={letter} petName={petName} saved={saved}
-          onAck={onAckLetter} onReply={onReply} onSave={onSaveLetter}
+          onAck={onAckLetter} acking={acking} acked={ackedIds?.has(letter.id) ?? false}
+          onReply={onReply} onSave={onSaveLetter}
           onEnterScene={onEnterScene ? () => onEnterScene(letter) : undefined}
           entering={entering} />
       )}
@@ -992,6 +1003,8 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   const [letters, setLetters] = useState<ApiLetter[]>([]);
   const [letterState, setLetterState] = useState<LetterState>("waiting");
   const [savedLetterIds, setSavedLetterIds] = useState<Set<number>>(new Set());
+  const [ackingLetter, setAckingLetter] = useState(false);
+  const [ackedLetterIds, setAckedLetterIds] = useState<Set<number>>(new Set());
 
   const activeLetter = letters[0] ?? null;
 
@@ -1032,12 +1045,16 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   };
 
   const handleAckLetter = async () => {
-    if (!activeLetter) return;
+    if (!activeLetter || ackingLetter || ackedLetterIds.has(activeLetter.id)) return;
+    setAckingLetter(true);
     try {
       const res = await ackLetter(activeLetter.id);
+      setAckedLetterIds(s => new Set(s).add(activeLetter.id));
       onToast?.(res.message || "它知道你收到了");
     } catch {
       onToast?.("它知道你收到了");
+    } finally {
+      setAckingLetter(false);
     }
   };
 
@@ -1128,7 +1145,7 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
         {sec === 0 && (
           <DailyLetterView letters={letters} petName={petName} letterState={letterState}
             onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
-            onAckLetter={handleAckLetter}
+            onAckLetter={handleAckLetter} acking={ackingLetter} ackedIds={ackedLetterIds}
             onReply={() => onReplyLetter(activeLetter ? { title: activeLetter.title, body: activeLetter.body } : null)}
             onEnterScene={handleEnterScene} entering={enteringScene} />
       )}

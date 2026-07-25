@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Dimensions, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
+  ActivityIndicator, Animated, Dimensions, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronLeft, Mic, Play, Send, Edit3 } from "lucide-react-native";
@@ -31,6 +31,7 @@ import {
 } from "../api";
 import type { SSEEvent, SceneParseResult } from "../api";
 import { useVoiceInput } from "../useVoiceInput";
+import { useTypewriter } from "../useTypewriter";
 import type { TheaterSceneId } from "../theater";
 
 function useSceneSurface() {
@@ -942,12 +943,73 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   );
 }
 
+// ─── Dynamic Background ──────────────────────────────────────────────────────
+
+const bgFill = { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 };
+
+/** galgame 动态背景：url 变化时旧图淡出、新图淡入（≤300ms）；
+ *  加载前暖色底 + 指示器占位，加载失败退回暖色渐变。 */
+function DynamicBackground({ url, reducedMotion }: { url: string | null; reducedMotion: boolean }) {
+  const [current, setCurrent] = useState<string | null>(url);
+  const [previous, setPrevious] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const fade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (url === current) return;
+    const prev = current;
+    setCurrent(url);
+    setLoaded(false);
+    setFailed(false);
+    if (reducedMotion || !prev) {
+      setPrevious(null);
+      fade.setValue(1);
+      return;
+    }
+    setPrevious(prev);
+    fade.setValue(0);
+    Animated.timing(fade, { toValue: 1, duration: 260, useNativeDriver: true })
+      .start(() => setPrevious(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, reducedMotion]);
+
+  if (!current || failed) {
+    return (
+      <LinearGradient colors={["#2A1E14", "#3A2A1C", "#4A3626"]} style={bgFill} />
+    );
+  }
+  return (
+    <>
+      {/* 暖色底：图片加载前的占位 */}
+      <View style={[bgFill, { backgroundColor: "#3A2A1C" }]} />
+      {previous && (
+        <Image source={{ uri: previous }} resizeMode="cover" style={bgFill} />
+      )}
+      <Animated.Image source={{ uri: current }} resizeMode="cover"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        style={[bgFill, { opacity: previous ? fade : 1 }]} />
+      {!loaded && !previous && (
+        <View style={[bgFill, { alignItems: "center", justifyContent: "center" }]}>
+          <ActivityIndicator color="rgba(246,231,168,0.85)" />
+        </View>
+      )}
+      {/* 暗化遮罩：保证字幕/按钮文字可读 */}
+      <View style={[bgFill, { backgroundColor: "rgba(20,14,10,0.28)" }]} />
+    </>
+  );
+}
+
 // ─── Character Artwork ───────────────────────────────────────────────────────
 
 function CharacterArtwork({ name, isSpeaking, isListening, spriteUrl }: {
   name: string; isSpeaking: boolean; isListening: boolean; spriteUrl: string;
 }) {
   const bounce = useRef(new Animated.Value(0)).current;
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setLoaded(false); setFailed(false); }, [spriteUrl]);
   useEffect(() => {
     if (isSpeaking) {
       const loop = Animated.loop(
@@ -961,6 +1023,9 @@ function CharacterArtwork({ name, isSpeaking, isListening, spriteUrl }: {
     }
   }, [isSpeaking, bounce]);
 
+  // 立绘加载失败：不画人物，退回纯背景/舞台
+  if (failed) return null;
+
   // 动态 galgame 立绘：图片人物（保留呼吸浮动 + 说话声波动效）
   return (
     <Animated.View style={{ alignItems: "center", transform: [{ translateY: bounce }] }}>
@@ -970,7 +1035,17 @@ function CharacterArtwork({ name, isSpeaking, isListening, spriteUrl }: {
           backgroundColor: "rgba(246,231,168,0.18)",
         }} />
       )}
+      {!loaded && (
+        <View style={{
+          position: "absolute", width: 300, height: 380, borderRadius: 24,
+          backgroundColor: "rgba(246,231,168,0.10)", alignItems: "center", justifyContent: "center",
+        }}>
+          <ActivityIndicator color="rgba(255,255,255,0.6)" />
+        </View>
+      )}
       <Image source={{ uri: spriteUrl }} resizeMode="contain"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
         style={{ width: 300, height: 380 }} />
       {isSpeaking && (
         <View style={{ flexDirection: "row", gap: 3, marginTop: 6, alignItems: "flex-end", height: 14 }}>
@@ -1013,19 +1088,54 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const [showAdjust, setShowAdjust] = useState(false);
   const [showCustom, setShowCustom] = useState(false);   // 「自己说」输入行是否展开
   const [customText, setCustomText] = useState("");
+  const [bgUpdating, setBgUpdating] = useState(false);   // 回合背景图重生成中（保留旧图）
+  const bgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reducedMotion = useReducedMotion();
 
-  const loadScene = async () => {
-    if (!sceneId) return;
+  const loadScene = async (): Promise<SceneDetail | null> => {
+    if (!sceneId) return null;
     try {
       const s = await getScene(sceneId);
       setScene(s);
       setError("");
+      return s;
     } catch (err) {
       setError((err as any)?.message ?? "加载场景失败");
+      return null;
     }
   };
 
   useEffect(() => { loadScene(); }, [sceneId]);
+
+  const stopBgPoll = () => {
+    if (bgPollRef.current) { clearInterval(bgPollRef.current); bgPollRef.current = null; }
+    setBgUpdating(false);
+  };
+
+  // 推进后背景图由后端异步重生成：轮询直到 bg_image 变化（约 8s 一次，最多 4 次）
+  const startBgPoll = (knownBg: string | null) => {
+    if (!sceneId) return;
+    stopBgPoll();
+    setBgUpdating(true);
+    let tries = 0;
+    bgPollRef.current = setInterval(async () => {
+      tries += 1;
+      try {
+        const s = await getScene(sceneId);
+        const nextBg: string | null = s?.bg_image ?? null;
+        if (nextBg && nextBg !== knownBg) {
+          setScene(s);
+          stopBgPoll();
+        } else if (tries >= 4) {
+          stopBgPoll();
+        }
+      } catch {
+        if (tries >= 4) stopBgPoll();
+      }
+    }, 8000);
+  };
+
+  useEffect(() => () => stopBgPoll(), [sceneId]);
 
   const speakers = new Set((scene?.beats ?? []).map(b => b.speaker).filter(s => s && s !== "旁白"));
   const charName = speakers.size > 0 ? Array.from(speakers)[0] : (scene?.title ?? "TA");
@@ -1039,18 +1149,24 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const latestBeat = scene?.beats?.[scene.beats.length - 1];
   const isStreaming = phase === "busy" && streamText.length > 0;
   const isSpeaking = isStreaming || (phase === "playing" && latestBeat?.speaker === "旁白");
+  // 打字机：SSE token 与整段 beat（含开场白）都逐字浮现；reduced motion 直接全量
+  const rawSubtitle = isStreaming ? streamText : (latestBeat?.text ?? "……");
+  const typedSubtitle = useTypewriter(rawSubtitle, reducedMotion);
 
-  // 推进剧情的公共 SSE 回调：逐字收 token，done 时刷新场景 / 结束。
+  // 推进剧情的公共 SSE 回调：token 先入缓冲（打字机按节奏显示），done 时刷新场景 / 结束。
   const advanceCb = (e: SSEEvent) => {
     if (e.event === "token" && e.data?.delta) setStreamText(t => t + e.data.delta);
     if (e.event === "done") {
       setTimeout(() => {
-        loadScene().then(() => {
+        loadScene().then((s) => {
           setStreamText("");
           if (e.data?.ended) {
+            stopBgPoll();
             onEnd();
           } else {
             setPhase("playing");
+            // galgame 场景：后台重生成背景，轮询等新图就绪后平滑切换
+            if (s?.render_kind === "dynamic_image") startBgPoll(s.bg_image ?? null);
           }
         });
       }, e.data?.ended ? 1400 : 100);
@@ -1104,17 +1220,9 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* 场景背景：动态 galgame 用背景图 / 无图兜底渐变，否则预置 3D 舞台 */}
-      {isDynamic && bgImageUrl ? (
-        <>
-          <Image source={{ uri: bgImageUrl }} resizeMode="cover"
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          {/* 暗化遮罩：保证字幕/按钮文字可读 */}
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(20,14,10,0.28)" }} />
-        </>
-      ) : isDynamic ? (
-        <LinearGradient colors={["#2A1E14", "#3A2A1C", "#4A3626"]}
-          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+      {/* 场景背景：动态 galgame 用背景图（随回合更新，crossfade 切换），否则预置 3D 舞台 */}
+      {isDynamic ? (
+        <DynamicBackground url={bgImageUrl} reducedMotion={reducedMotion} />
       ) : (
         <Scene3D sceneId={effectiveTheater} />
       )}
@@ -1183,9 +1291,12 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
           </View>
           <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
             <Text style={{ fontSize: 15, lineHeight: 24, color: "rgba(255,255,255,0.95)" }}>
-              {isStreaming ? streamText : (latestBeat?.text ?? "……")}
+              {typedSubtitle}
             </Text>
           </ScrollView>
+          {bgUpdating && (
+            <Text style={{ fontSize: 11, marginTop: 6, color: "rgba(255,255,255,0.55)" }}>画面更新中…</Text>
+          )}
 
           {phase === "playing" && (
             <View style={{ marginTop: 12, gap: 8 }}>
@@ -1325,26 +1436,37 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
   const [saved, setSaved] = useState(false);
   const [settling, setSettling] = useState(false);
   const [error, setError] = useState("");
-  const [keyQuote, setKeyQuote] = useState("……");
+  const [keyQuote, setKeyQuote] = useState("");
   const [companionComment, setCompanionComment] = useState("");
   const [actionHint, setActionHint] = useState("带着这份感受，继续下一步");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!sceneId) { setLoading(false); return; }
+    // 兜底链：summary.key_quote → 最后一条对白 → 用户最后一次选择；都没有则留空（隐藏区块）
+    const pickFallback = (s: SceneDetail | null): string => {
+      if (!s) return "";
+      const lastBeat = [...(s.beats || [])].reverse().find(b => (b?.text ?? "").trim());
+      if (lastBeat) return lastBeat.text.trim();
+      const lastChoice = [...(s.history || [])].reverse().find(h => (h?.choice ?? "").trim());
+      return lastChoice ? String(lastChoice.choice).trim() : "";
+    };
     getSceneSummary(sceneId)
-      .then((res: any) => {
-        if (res.key_quote) setKeyQuote(res.key_quote);
-        if (res.companion_comment) setCompanionComment(res.companion_comment);
-        if (res.action_hint) setActionHint(res.action_hint);
+      .then(async (res: any) => {
+        const kq = (res?.key_quote ?? "").trim();
+        if (kq && kq !== "……") {
+          setKeyQuote(kq);
+        } else {
+          const s = await getScene(sceneId).catch(() => null);
+          setKeyQuote(pickFallback(s));
+        }
+        if (res?.companion_comment) setCompanionComment(res.companion_comment);
+        if (res?.action_hint) setActionHint(res.action_hint);
       })
-      .catch(() => {
-        // LLM 失败时回退到对话末尾原文
-        getScene(sceneId).then((s: SceneDetail) => {
-          const beats = s.beats || [];
-          const last = beats[beats.length - 1];
-          if (last?.text) setKeyQuote(last.text);
-        }).catch(() => {});
+      .catch(async () => {
+        // LLM 失败时回退到场景原文
+        const s = await getScene(sceneId).catch(() => null);
+        setKeyQuote(pickFallback(s));
         setCompanionComment("这里没有答案，也没有正确的说法。你表达了，这就够了。");
       })
       .finally(() => setLoading(false));
@@ -1355,8 +1477,8 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
     setSettling(true);
     try {
       await settleScene(sceneId, {
-        card_text: keyQuote,
-        insight_text: keyQuote,
+        card_text: keyQuote || null,
+        insight_text: keyQuote || null,
         action_text: actionHint,
         keep,
       });
@@ -1374,12 +1496,14 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
         <PageHeader
           eyebrow="场景回顾"
           title="这一次，你说出了"
-          description={loading ? "正在回顾你的表达…" : `“${keyQuote}”`}
+          description={loading ? "正在回顾你的表达…" : keyQuote ? `“${keyQuote}”` : undefined}
         />
         <View style={{ gap: theme.spacing[4] }}>
-          <Card emphasized>
-            <Text style={[theme.typography.textStyles.sectionTitle, { color: theme.colors.textPrimary }]}>{keyQuote}</Text>
-          </Card>
+          {!!keyQuote && (
+            <Card emphasized>
+              <Text style={[theme.typography.textStyles.sectionTitle, { color: theme.colors.textPrimary }]}>{keyQuote}</Text>
+            </Card>
+          )}
 
           {!!companionComment && (
             <Card>

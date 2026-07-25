@@ -425,7 +425,8 @@ def parse_role(
 
 _IMG_PROMPT_SYSTEM = """你是 galgame 美术指导。根据一段场景种子，输出两段中文文生图 prompt。规则：
 - 背景（bg）：描述场景/环境/氛围/时间/光线，galgame 视觉小说风格插画，柔和唯美，无人物、无文字水印。
-- 立绘（sprite）：单个主要人物半身立绘，纯色背景，动漫赛璐璐风格，表情柔和，无文字。
+- 立绘（sprite）：单个主要人物半身立绘，背景必须是均匀纯绿色幕布（solid #00FF00 green screen），
+  人物发色、服装与配饰必须避开绿色，动漫赛璐璐风格，表情柔和，无文字。
 - 每段 prompt 不超过 200 字；只输出 JSON：
   {"bg": "背景 prompt", "character_name": "人物名", "sprite": "立绘 prompt"}"""
 
@@ -458,7 +459,7 @@ def generate_image_prompts(
     return {
         "bg": f"galgame 视觉小说风格插画，{place_txt}，柔和唯美的光线与氛围，无人物、无文字",
         "character_name": first_person[:20],
-        "sprite": f"动漫赛璐璐风格，{first_person}的半身立绘，表情柔和，纯色背景，无文字水印",
+        "sprite": f"动漫赛璐璐风格，{first_person}的半身立绘，表情柔和，均匀纯绿色幕布背景（solid #00FF00 green screen），服装与发色避免绿色，无文字水印",
     }
 
 

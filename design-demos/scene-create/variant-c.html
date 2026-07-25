@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 C · 对话引导式 — 新场景搭建（喵灵 Morning）</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --bg:#FCFAF7; --cream:#F7F2E8; --surface:#FFFFFF; --surface-warm:#FFFCF6;
+    --ink:#403A35; --ink2:#756C63; --ink3:#9D9389; --on-acc:#4E3D18;
+    --border:#E4DACE; --accent:#6E5A28; --acc-surf:#F0D477; --acc-soft:rgba(246,225,143,0.48);
+    --support:#718879;
+  }
+  body{
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(1100px 560px at 18% -12%, rgba(246,225,143,0.16), transparent 60%),
+      var(--bg);
+    color:var(--ink); padding:44px 40px 64px; -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- 页面头部 ---------- */
+  .head{max-width:1080px;margin:0 auto;}
+  .kicker{display:inline-flex;align-items:center;gap:12px;font-size:13px;letter-spacing:.22em;font-weight:600;color:var(--accent);}
+  .kicker::before{content:"";width:30px;height:8px;border-radius:99px;background:var(--acc-surf);}
+  h1{font-size:28px;font-weight:700;margin:12px 0 10px;letter-spacing:-0.2px;}
+  h1 .em{color:var(--accent);}
+  .sub{font-size:14px;color:var(--ink2);line-height:1.85;max-width:1020px;}
+  .sub b{color:var(--ink);font-weight:600;}
+  .wait-notes{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;}
+  .wait-notes .wn{
+    flex:1;min-width:220px;background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:12px 16px;font-size:12px;line-height:1.7;color:var(--ink2);
+    box-shadow:0 6px 18px rgba(64,58,53,0.06);position:relative;overflow:hidden;}
+  .wait-notes .wn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--acc-surf);}
+  .wait-notes .wn.green::before{background:var(--support);}
+  .wait-notes .wn b{display:block;font-size:12.5px;color:var(--ink);margin-bottom:3px;font-weight:600;}
+
+  /* ---------- 手机框 ---------- */
+  .row{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;margin-top:36px;align-items:flex-start;max-width:1080px;margin-left:auto;margin-right:auto;}
+  .col{width:300px;}
+  .plabel{font-style:italic;font-size:13px;color:var(--ink2);margin:0 0 10px 4px;line-height:1.5;}
+  .plabel b{font-style:normal;font-weight:600;color:var(--ink);}
+  .phone{width:300px;height:649px;border-radius:40px;background:#111;padding:8px;
+    box-shadow:0 24px 60px rgba(60,45,20,.22),0 0 0 2px #262626;}
+  .screen{position:relative;width:100%;height:100%;border-radius:33px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;}
+  .status{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;font-size:11px;font-weight:600;color:var(--ink);}
+  .punch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:9px;height:9px;border-radius:50%;background:#000;z-index:60;pointer-events:none;}
+  .icon{width:16px;height:16px;display:block;}
+
+  /* ---------- 聊天通用 ---------- */
+  .chead{flex:none;display:flex;align-items:center;gap:9px;padding:8px 14px 9px;border-bottom:1px solid var(--border);background:var(--surface-warm);}
+  .cava{width:30px;height:30px;border-radius:50%;background:var(--acc-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;}
+  .cava img{height:24px;object-fit:contain;}
+  .cname{font-size:13.5px;font-weight:600;}
+  .cstat{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink2);margin-top:1px;}
+  .cdot{width:5px;height:5px;border-radius:50%;background:var(--support);}
+  .cdot.busy{background:var(--acc-surf);box-shadow:0 0 0 2.5px var(--acc-soft);animation:dotbreathe 2.4s ease-in-out infinite;}
+  @keyframes dotbreathe{0%,100%{box-shadow:0 0 0 2px var(--acc-soft);}50%{box-shadow:0 0 0 4.5px var(--acc-soft);}}
+  .chexit{margin-left:auto;font-size:10.5px;color:var(--ink3);border:1px solid var(--border);border-radius:99px;padding:3px 10px;background:var(--surface);}
+
+  .msgs{flex:1;padding:14px 12px 8px;display:flex;flex-direction:column;overflow:hidden;}
+  .m{display:flex;gap:7px;margin-bottom:10px;max-width:92%;}
+  .m .bub{padding:8px 12px;font-size:12px;line-height:1.65;}
+  .m.agent .bub{background:var(--surface);border:1px solid var(--border);border-radius:14px 14px 14px 5px;
+    box-shadow:0 4px 12px rgba(64,58,53,.05);}
+  .m.user{align-self:flex-end;flex-direction:row-reverse;}
+  .m.user .bub{background:var(--acc-surf);color:var(--on-acc);border-radius:14px 14px 5px 14px;}
+  .m .mava{width:22px;height:22px;border-radius:50%;background:var(--acc-soft);flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:2px;}
+  .m .mava img{height:17px;object-fit:contain;}
+  .vtag{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10px;color:var(--on-acc);opacity:.72;}
+  .wave{display:flex;align-items:center;gap:2px;height:12px;}
+  .wave i{width:2.5px;border-radius:2px;background:var(--on-acc);animation:wv 1.1s ease-in-out infinite;}
+  .wave i:nth-child(1){height:5px;animation-delay:0s;}
+  .wave i:nth-child(2){height:10px;animation-delay:.15s;}
+  .wave i:nth-child(3){height:7px;animation-delay:.3s;}
+  .wave i:nth-child(4){height:11px;animation-delay:.45s;}
+  .wave i:nth-child(5){height:6px;animation-delay:.6s;}
+  @keyframes wv{0%,100%{transform:scaleY(.6);}50%{transform:scaleY(1);}}
+
+  /* 摘要 / 角色 内嵌卡 */
+  .incard{background:var(--surface);border:1px solid var(--border);border-radius:14px 14px 14px 5px;
+    box-shadow:0 6px 18px rgba(64,58,53,0.06);padding:11px 12px;width:238px;}
+  .incard .ict{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;}
+  .incard .ict .edit{margin-left:auto;color:var(--ink3);display:flex;align-items:center;gap:3px;font-size:10px;font-weight:400;}
+  .incard .icrow{display:flex;gap:8px;font-size:11px;line-height:1.6;margin-top:6px;color:var(--ink2);}
+  .incard .icrow .k{flex:none;color:var(--ink3);width:34px;}
+  .incard .icrow .v{color:var(--ink);}
+  .incard .icfoot{margin-top:9px;padding-top:8px;border-top:1px dashed var(--border);font-size:10.5px;color:var(--accent);display:flex;align-items:center;gap:4px;font-weight:600;}
+
+  .choice-row{display:flex;gap:8px;margin:2px 0 10px;align-self:flex-end;}
+  .btn-p{background:var(--acc-surf);color:var(--on-acc);font-size:11.5px;font-weight:600;border-radius:99px;padding:7px 14px;
+    box-shadow:0 4px 12px rgba(110,90,40,.18);}
+  .btn-s{background:var(--surface);border:1px solid var(--border);color:var(--ink2);font-size:11.5px;border-radius:99px;padding:7px 13px;}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto;padding-bottom:8px;}
+  .chip{font-size:11px;color:var(--accent);background:var(--acc-soft);border-radius:99px;padding:6px 12px;font-weight:600;}
+  .chip.ghost{background:var(--surface);border:1px solid var(--border);color:var(--ink2);font-weight:400;}
+
+  /* 角色卡 */
+  .role-head{display:flex;align-items:center;gap:9px;}
+  .role-ava{width:34px;height:34px;border-radius:50%;background:var(--acc-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex:none;}
+  .role-head .rn{font-size:13px;font-weight:600;}
+  .role-head .rr{font-size:10.5px;color:var(--support);margin-top:1px;}
+  .calib{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+  .calib .chip{font-size:10.5px;padding:5px 10px;}
+
+  /* 准备进度消息（等待态） */
+  .prep{display:flex;gap:7px;margin-bottom:9px;max-width:92%;}
+  .prep .pdot{flex:none;width:16px;height:16px;border-radius:50%;margin-top:8px;display:flex;align-items:center;justify-content:center;}
+  .prep.done .pdot{background:rgba(113,136,121,.16);color:var(--support);}
+  .prep.doing .pdot{background:var(--acc-soft);}
+  .prep.doing .pdot i{width:6px;height:6px;border-radius:50%;background:var(--acc-surf);animation:dotbreathe 2.2s ease-in-out infinite;}
+  .prep .bub{background:var(--surface);border:1px solid var(--border);border-radius:14px 14px 14px 5px;
+    padding:7px 12px;font-size:11.5px;line-height:1.6;color:var(--ink2);box-shadow:0 4px 12px rgba(64,58,53,.05);}
+  .prep.done .bub{color:var(--ink3);}
+  .prep.doing .bub{color:var(--ink);border-color:#DCC98F;background:var(--surface-warm);}
+  .prep .ptime{display:block;font-size:9.5px;color:var(--ink3);margin-top:3px;}
+
+  /* 场景预告卡 */
+  .pvcard{width:238px;background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+    box-shadow:0 8px 22px rgba(64,58,53,0.08);margin-bottom:10px;}
+  .pvthumb{height:74px;position:relative;background:linear-gradient(160deg,#F6E9C8 0%,#EFD9A6 46%,#E4C9A0 100%);}
+  .pvthumb .sun{position:absolute;right:18px;top:12px;width:22px;height:22px;border-radius:50%;background:#FBF3DC;box-shadow:0 0 14px rgba(251,243,220,.9);}
+  .pvthumb .win{position:absolute;left:16px;bottom:0;width:44px;height:40px;border:2px solid rgba(110,90,40,.35);border-bottom:none;border-radius:4px 4px 0 0;}
+  .pvthumb .win::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:rgba(110,90,40,.35);}
+  .pvbody{padding:10px 12px 12px;}
+  .pvbody .pt{font-size:13px;font-weight:600;}
+  .pvbody .pm{font-size:10.5px;color:var(--ink3);margin-top:3px;}
+  .pvbody .pbtn{margin-top:9px;background:var(--acc-surf);color:var(--on-acc);text-align:center;font-size:12px;font-weight:600;
+    border-radius:12px;padding:8px 0;box-shadow:0 4px 12px rgba(110,90,40,.18);}
+  .pvbody .plink{text-align:center;font-size:10.5px;color:var(--ink3);margin-top:7px;}
+
+  /* ---------- 宠物陪伴区 ---------- */
+  .petzone{position:relative;flex:none;display:flex;align-items:flex-end;justify-content:center;}
+  .petglow{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:150px;height:44px;border-radius:50%;
+    background:radial-gradient(closest-side, rgba(246,225,143,0.55), transparent);animation:glowbreathe 4s ease-in-out infinite;}
+  @keyframes glowbreathe{0%,100%{opacity:.55;transform:translateX(-50%) scale(1);}50%{opacity:.95;transform:translateX(-50%) scale(1.08);}}
+  .petimg{position:relative;height:120px;object-fit:contain;animation:petbreathe 4s ease-in-out infinite;}
+  @keyframes petbreathe{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
+
+  /* 等待态底部陪伴条 */
+  .compan{flex:none;display:flex;align-items:center;gap:9px;padding:8px 14px 4px;}
+  .compan .cpet{width:34px;height:34px;flex:none;display:flex;align-items:flex-end;justify-content:center;overflow:visible;}
+  .compan .cpet img{height:34px;object-fit:contain;}
+  .compan .ct{font-size:10.5px;color:var(--ink2);line-height:1.5;}
+  .compan .ct b{color:var(--ink);font-weight:600;}
+  .proline{flex:none;height:3px;margin:4px 20px 2px;border-radius:99px;background:var(--cream);overflow:hidden;}
+  .proline i{display:block;height:100%;border-radius:99px;background:var(--acc-surf);animation:linebreathe 3.2s ease-in-out infinite;}
+  @keyframes linebreathe{0%,100%{opacity:.55;}50%{opacity:1;}}
+
+  /* ---------- 输入条 ---------- */
+  .composer{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px 14px;}
+  .cfield{flex:1;min-height:42px;display:flex;align-items:center;padding:0 6px 0 14px;border-radius:99px;
+    border:1px solid var(--border);background:var(--surface);box-shadow:0 4px 12px rgba(64,58,53,.08);}
+  .cfield .ph{flex:1;font-size:11.5px;color:var(--ink3);}
+  .cfield.rec{background:var(--surface-warm);border-color:#DCC98F;}
+  .cfield .rectx{flex:1;font-size:11.5px;color:var(--accent);font-weight:600;display:flex;align-items:center;gap:7px;}
+  .cbtn{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:var(--ink2);}
+  .cbtn.solid{background:var(--acc-surf);color:var(--on-acc);box-shadow:0 4px 10px rgba(110,90,40,.2);}
+  .cbtn.ghosty{border:1px solid var(--border);background:var(--surface);}
+  .bgwait{flex:none;text-align:center;font-size:9.5px;color:var(--ink3);padding:0 0 8px;display:flex;align-items:center;justify-content:center;gap:4px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="kicker">方案 C · 新场景搭建（剧本生成）</div>
+  <h1>对话引导式 —— <span class="em">和喵灵聊着聊着，场景就搭好了</span></h1>
+  <p class="sub">
+    整个流程是一场与喵灵桌宠的连续对话：喵灵用气泡一步步问（「想重演哪段经历呀？」），用户用语音或文字回答；
+    信息以<b>聊天气泡 + 内嵌小卡片</b>呈现——摘要卡、角色卡都可以点开就改。没有表单页、没有步骤条，
+    用户始终只觉得「在跟一只认真的猫说话」。<b>等待态是本方案的核心</b>：生成时喵灵不消失、不盖黑屏，
+    而是进入「为你准备场景」的陪伴状态——它在旁边忙碌着、守着，准备进度以一条条小消息陆续发来，
+    把 60–90 秒变成一场有回应的陪伴，而不是一个转圈的覆盖层。
+  </p>
+  <div class="wait-notes">
+    <div class="wn"><b>进度怎么表达</b>不用百分比和进度条。三个阶段（搭场景 → 定语气 → 排开场）化作「准备消息流」，每 8–12 秒发来一条小气泡：完成的带绿勾，进行中的带呼吸黄点。底部只有一条极细的奶油黄呼吸线暗示整体进度——看得见在推进，又不制造倒计时焦虑。</div>
+    <div class="wn"><b>陪伴怎么表达</b>喵灵全程在场：进入忙碌/守着的精灵动画，身下一圈奶油黄柔光随呼吸明暗；头部状态从「在你身边」变成「正在为你准备」。文案温和而具体（「那天的光也调好了，偏暖一点」），每句都回应用户刚说过的话，不是冷冰冰的「正在生成 2/3」。</div>
+    <div class="wn green"><b>允许后台等待</b>明确告诉用户「大概一首歌的时间」，可以先去倒杯水：切出 App 后准备好会收到一条喵灵口吻的提醒。场景就绪后以预告小卡收尾（约 5 分钟 · 随时可离开），由用户自己决定「走进去」还是「再坐一会儿」——主动权始终在人这边。</div>
+  </div>
+</div>
+
+<div class="row">
+
+  <!-- ═══ 1 · 入口 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>01 · 入口</b> — 喵灵先开口， chips 降低开口成本</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:47</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot"></span>在你身边</div></div>
+        <div class="chexit">收起</div>
+      </div>
+      <div class="msgs">
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">晚上好呀。今天心里有没有哪段经历，想再走一遍、或者好好了结一下？</div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">说给我听就好，我帮你把它搭成一幕可以走进去的场景。</div></div>
+      </div>
+      <div class="chips" style="padding:0 12px 8px;">
+        <span class="chip">一次没说完的道别</span>
+        <span class="chip ghost">被误会的那次争吵</span>
+        <span class="chip ghost">很久没见的人</span>
+      </div>
+      <div class="composer">
+        <div class="cfield"><span class="ph">说说那段经历…</span>
+          <span class="cbtn solid"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══ 2 · 叙述采集 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>02 · 叙述采集</b> — 语音转文字，喵灵温柔追问</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:48</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot"></span>在认真听</div></div>
+        <div class="chexit">收起</div>
+      </div>
+      <div class="msgs">
+        <div class="m user"><div class="bub">高三那年搬家的前一天，我没来得及和同桌好好说再见，就只是随便挥了挥手。
+          <span class="vtag"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span>语音 · 0&Prime;18&Prime;</span></div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">我听到了。那种「来不及」的感觉，在心里放了挺久吧。那天最后见到 TA，是在哪里呀？</div></div>
+        <div class="m user"><div class="bub">在教室。放学的时候，我说了句「拜拜」就走了。</div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">嗯，放学后的教室。再多说一点点也没关系，我都在听。</div></div>
+      </div>
+      <div class="composer">
+        <div class="cfield rec"><span class="rectx"><span class="wave" style="height:12px;"><i style="background:var(--accent);"></i><i style="background:var(--accent);"></i><i style="background:var(--accent);"></i><i style="background:var(--accent);"></i><i style="background:var(--accent);"></i></span>正在听你说…</span>
+          <span class="cbtn solid"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══ 3 · 摘要预览 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>03 · 摘要预览</b> — 整理成卡片，点卡即改</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:51</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot"></span>在你身边</div></div>
+        <div class="chexit">收起</div>
+      </div>
+      <div class="msgs">
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">我把你说的整理成了这样——</div></div>
+        <div class="m agent" style="max-width:100%;"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="incard">
+            <div class="ict">《那个没说完的再见》
+              <span class="edit"><svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>改一改</span></div>
+            <div class="icrow"><span class="k">时间</span><span class="v">高三那年，初夏，放学后的傍晚</span></div>
+            <div class="icrow"><span class="k">地点</span><span class="v">空下来的教室，光从窗户斜进来</span></div>
+            <div class="icrow"><span class="k">心愿</span><span class="v">认真地、好好地说一次再见</span></div>
+            <div class="icfoot">点卡片任意一处都能修改</div>
+          </div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">是这样的吗？哪里不对就告诉我。</div></div>
+        <div class="choice-row"><span class="btn-s">再补充一点</span><span class="btn-p">对，就是这样</span></div>
+      </div>
+      <div class="composer">
+        <div class="cfield"><span class="ph">也可以直接打字补充…</span>
+          <span class="cbtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══ 4 · 角色设定 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>04 · 角色设定</b> — 角色卡逐项可点，补充校准</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:53</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot"></span>在你身边</div></div>
+        <div class="chexit">收起</div>
+      </div>
+      <div class="msgs">
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">那，站在你面前的 TA 是谁呢？</div></div>
+        <div class="m agent" style="max-width:100%;"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="incard">
+            <div class="role-head">
+              <div class="role-ava">晚</div>
+              <div><div class="rn">林晚</div><div class="rr">高中同桌</div></div>
+              <span class="edit" style="margin-left:auto;color:var(--ink3);display:flex;align-items:center;gap:3px;font-size:10px;">
+                <svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>编辑</span>
+            </div>
+            <div class="icrow"><span class="k">介绍</span><span class="v">爱笑，总借我半块橡皮的那个人</span></div>
+            <div class="calib">
+              <span class="chip">TA 说话轻轻的</span>
+              <span class="chip ghost">别替 TA 做决定</span>
+              <span class="chip ghost">+ 补充一点</span>
+            </div>
+          </div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">好，我记住 TA 的样子了。进去之后觉得哪里不像，随时校准。</div></div>
+        <div class="choice-row"><span class="btn-p">搭好这个场景</span></div>
+      </div>
+      <div class="composer">
+        <div class="cfield"><span class="ph">还想补充关于 TA 的事…</span>
+          <span class="cbtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══ 5 · 生成等待 · 前段 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>05 · 生成等待 · 前段</b> — 喵灵在忙，进度以消息送达</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:54</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img class="pet-busy" src="../../frontend-demo/assets/pets/miro/groom/frame-00.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot busy"></span>正在为你准备</div></div>
+        <div class="chexit">先去忙</div>
+      </div>
+      <div class="msgs">
+        <div class="m agent"><div class="mava"><img class="pet-busy" src="../../frontend-demo/assets/pets/miro/groom/frame-00.png" alt=""></div>
+          <div class="bub">交给我，大概一首歌的时间。你可以在这陪我，也可以先去倒杯水。</div></div>
+        <div class="prep done"><div class="pdot"><svg style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="bub">那间放学后的教室，搭好了<span class="ptime">21:54</span></div></div>
+        <div class="prep done"><div class="pdot"><svg style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="bub">那天的光也调好了，偏暖一点<span class="ptime">21:55</span></div></div>
+        <div class="prep doing"><div class="pdot"><i></i></div>
+          <div class="bub">在给 TA 选合适的语气…<span class="ptime">进行中</span></div></div>
+      </div>
+      <div class="proline"><i style="width:64%;"></i></div>
+      <div class="compan">
+        <div class="cpet"><img class="pet-busy" src="../../frontend-demo/assets/pets/miro/groom/frame-00.png" alt=""></div>
+        <div class="ct"><b>喵灵正陪着你</b> · 切出去也没关系，好了我叫你</div>
+      </div>
+      <div class="composer">
+        <div class="cfield"><span class="ph">想说什么也可以先留言…</span>
+          <span class="cbtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══ 6 · 生成等待 · 后段 → 就绪 ═══ -->
+  <div class="col">
+    <p class="plabel"><b>06 · 等待后段 → 就绪</b> — 预告卡收尾，主动权在人</p>
+    <div class="phone"><div class="screen">
+      <div class="punch"></div>
+      <div class="status"><span>21:56</span><span>喵灵 Morning</span></div>
+      <div class="chead">
+        <div class="cava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+        <div><div class="cname">喵灵</div><div class="cstat"><span class="cdot"></span>准备就绪</div></div>
+        <div class="chexit">收起</div>
+      </div>
+      <div class="msgs">
+        <div class="prep done"><div class="pdot"><svg style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="bub">给 TA 选好了语气，轻轻的<span class="ptime">21:56</span></div></div>
+        <div class="m agent"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="bub">都准备好了。随时可以进去，也可以再坐一会儿——它一直都在。</div></div>
+        <div class="m agent" style="max-width:100%;"><div class="mava"><img src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt=""></div>
+          <div class="pvcard">
+            <div class="pvthumb"><div class="sun"></div><div class="win"></div></div>
+            <div class="pvbody">
+              <div class="pt">《那个没说完的再见》</div>
+              <div class="pm">放学后的教室 · 和林晚 · 约 5 分钟 · 随时可离开</div>
+              <div class="pbtn">走进去</div>
+              <div class="plink">我还想再坐一会儿</div>
+            </div>
+          </div></div>
+      </div>
+      <div class="petzone" style="height:96px;">
+        <div class="petglow"></div>
+        <img class="petimg" style="height:92px;" src="../../frontend-demo/assets/pets/miro/miro-idle.png" alt="喵灵">
+      </div>
+      <div class="composer">
+        <div class="cfield"><span class="ph">和喵灵说点什么…</span>
+          <span class="cbtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+
+<script>
+  // 等待态：喵灵「忙碌/守着」精灵动画（梳理动作帧，慢速循环）
+  (function(){
+    var base = "../../frontend-demo/assets/pets/miro/groom/frame-";
+    var frames = [];
+    for (var i = 0; i <= 36; i++) frames.push(base + (i < 10 ? "0" + i : "" + i) + ".png");
+    // 预载，避免切换时闪烁
+    frames.forEach(function(src){ var im = new Image(); im.src = src; });
+    var f = 0;
+    setInterval(function(){
+      f = (f + 1) % frames.length;
+      document.querySelectorAll("img.pet-busy").forEach(function(el){ el.src = frames[f]; });
+    }, 110);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>P05 · 功能 · 睡前倾倒</title>
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  .stage{ position:absolute; inset:88px 0 0; padding:56px 96px 52px; display:flex; flex-direction:column; }
+  .h1{ margin-top:26px; }
+  .lede{ margin-top:22px; max-width:1000px; }
+
+  .flow{ margin-top:auto; display:flex; align-items:stretch; gap:0; }
+  .step{ flex:1; padding:28px 30px 28px 34px; }
+  .step .no{ font-size:15px; font-weight:700; letter-spacing:.18em; color:var(--accent); margin-bottom:12px; }
+  .step h3{ font-size:23px; font-weight:600; margin-bottom:10px; }
+  .step p{ font-size:16.5px; line-height:1.7; color:var(--ink2); }
+  .arrow{
+    flex:none; align-self:center; margin:0 18px; width:52px; height:52px; border-radius:50%;
+    background:var(--acc-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700;
+  }
+
+  .cats{ margin-top:auto; padding:26px 32px; }
+  .cats .row{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .cats .lbl{ font-size:16px; color:var(--ink2); margin-right:6px; }
+  .cats .note{ margin-top:14px; font-size:15px; color:var(--ink3); }
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="brand"><img src="../assets/logo.jpg" alt="喵灵">喵灵 Morning<span class="sep">·</span><span class="sub">产品介绍</span></div>
+    <div class="meta">ADVENTUREX 2026</div>
+  </div>
+
+  <div class="stage">
+    <div class="kicker">功能 02 · 睡前倾倒 NIGHT DUMP</div>
+    <h1 class="h1">睡前，<span class="em">一次说完</span>。</h1>
+    <p class="lede">计划、担忧、灵感、经历、情绪混在一起也没关系——<b>你说，它来整理</b>。整理完只还你一张回执，不拉着你逐条确认。</p>
+
+    <div class="flow">
+      <div class="card moodbar step">
+        <div class="no">STEP 1</div>
+        <h3>一股脑说完</h3>
+        <p>文字或语音都行，想到哪说到哪。重复、语无伦次都没关系，原始语音处理后即删。</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card moodbar green step">
+        <div class="no">STEP 2</div>
+        <h3>连夜自动整理</h3>
+        <p>Agent 把混杂的思绪分成五类，各归其位；反复牵动你的经历，静默进入片场草稿。</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card moodbar step">
+        <div class="no">STEP 3</div>
+        <h3>一张回执</h3>
+        <p>「都接住了，去睡吧。」知道思绪已被妥善安放，今晚就可以安心离开。</p>
+      </div>
+    </div>
+
+    <div class="card cats">
+      <div class="row">
+        <span class="lbl">自动整理为五类</span>
+        <span class="tagchip">待办与提醒</span>
+        <span class="tagchip green">今日小结</span>
+        <span class="tagchip">灵感收藏</span>
+        <span class="tagchip green">情绪记录</span>
+        <span class="tagchip">候选片段</span>
+      </div>
+      <div class="note">情绪只被承接，不强行变成任务；候选片段当晚静默进草稿箱，次日才会提起。</div>
+    </div>
+  </div>
+</body>
+</html>

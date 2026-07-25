@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MindOff",
+    "name": "喵灵",
     "slug": "mindoff",
     "version": "0.2.0",
     "orientation": "portrait",
@@ -25,7 +25,7 @@
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MindOff 需要麦克风权限来把你的语音转成文字，不会保留原始录音。",
+        "NSMicrophoneUsageDescription": "喵灵需要麦克风权限来把你的语音转成文字，不会保留原始录音。",
         "NSAppTransportSecurity": {
           "NSExceptionDomains": {
             "223.109.142.152": {

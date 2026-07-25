@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>P03 · 产品理念</title>
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  .stage{ position:absolute; inset:88px 0 0; padding:56px 96px 56px; display:flex; flex-direction:column; }
+  .h1{ margin-top:auto; }
+  .lede{ margin-top:22px; max-width:1000px; }
+  .grid{ margin-top:auto; display:grid; grid-template-columns:1fr 1fr; gap:26px; }
+  .value{ padding:28px 32px 28px 36px; display:flex; gap:22px; align-items:flex-start; }
+  .value .no{
+    flex:none; width:52px; height:52px; border-radius:16px;
+    background:var(--acc-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;
+  }
+  .value.green .no{ background:rgba(113,136,121,0.14); color:var(--support); }
+  .value h3{ font-size:24px; font-weight:600; margin-bottom:8px; }
+  .value p{ font-size:17px; line-height:1.7; color:var(--ink2); }
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="brand"><img src="../assets/logo.jpg" alt="喵灵">喵灵 Morning<span class="sep">·</span><span class="sub">产品介绍</span></div>
+    <div class="meta">ADVENTUREX 2026</div>
+  </div>
+
+  <div class="stage">
+    <div class="kicker">产品理念 PHILOSOPHY</div>
+    <h1 class="h1">不催促，不诊断，<span class="em">不打扰</span>。</h1>
+    <p class="lede">喵灵不是又一个要你去打卡的工具。它是一只住在手机里的桌宠，用四个约定陪你把思绪安放好。</p>
+
+    <div class="grid">
+      <div class="card moodbar value">
+        <div class="no">01</div>
+        <div>
+          <h3>陪伴</h3>
+          <p>桌宠用打盹、靠近、递卡片这些行为回应你，也会发起轻量邀请——但不催促、不诊断、不弹窗。</p>
+        </div>
+      </div>
+      <div class="card moodbar green value">
+        <div class="no">02</div>
+        <div>
+          <h3>清空</h3>
+          <p>睡前把计划、担忧、灵感、情绪一股脑说完，Agent 连夜自动整理，不要求你逐条确认。</p>
+        </div>
+      </div>
+      <div class="card moodbar green value">
+        <div class="no">03</div>
+        <div>
+          <h3>接住</h3>
+          <p>待办、小结、灵感、情绪各归其位。你知道它们被妥善安放，就可以放心暂时放下。</p>
+        </div>
+      </div>
+      <div class="card moodbar value">
+        <div class="no">04</div>
+        <div>
+          <h3>体验</h3>
+          <p>没闭环的经历，在互动剧情里换一种表达和选择去体验——不是还原，更不是修改事实。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>P06 · 功能 · 信箱</title>
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  .stage{ position:absolute; inset:88px 0 0; padding:56px 96px 52px; display:flex; flex-direction:column; }
+  .h1{ margin-top:26px; }
+  .lede{ margin-top:22px; max-width:1000px; }
+
+  .grid{ margin-top:auto; display:grid; grid-template-columns:1fr 1fr; gap:26px; }
+  .box{ padding:26px 30px 26px 34px; }
+  .box .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .box h3{ font-size:24px; font-weight:600; }
+  .box p{ font-size:17px; line-height:1.7; color:var(--ink2); }
+
+  .rules{ margin-top:auto; display:flex; align-items:center; gap:18px; padding:20px 30px; }
+  .rules .lbl{ font-size:16px; font-weight:600; color:var(--ink); flex:none; }
+  .rules .rule{ font-size:16px; color:var(--ink2); }
+  .rules .dot{ width:6px; height:6px; border-radius:50%; background:var(--acc-surf); flex:none; }
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="brand"><img src="../assets/logo.jpg" alt="喵灵">喵灵 Morning<span class="sep">·</span><span class="sub">产品介绍</span></div>
+    <div class="meta">ADVENTUREX 2026</div>
+  </div>
+
+  <div class="stage">
+    <div class="kicker">功能 03 · 信箱 MAILBOX</div>
+    <h1 class="h1">昨晚的思绪，今早<span class="em">各归其位</span>。</h1>
+    <p class="lede">第二天打开信箱：要办的、可看的、临时寄存的、值得留下的，分得清清楚楚——<b>看完就可以去生活</b>。</p>
+
+    <div class="grid">
+      <div class="card moodbar box">
+        <div class="top"><h3>今日待启</h3><span class="tagchip">今天</span></div>
+        <p>今天需要处理的计划、提醒和最小行动，完成或取消后就不再来烦你。</p>
+      </div>
+      <div class="card moodbar green box">
+        <div class="top"><h3>桌宠来信</h3><span class="tagchip green">低频</span></div>
+        <p>问候、音乐电影书籍推荐、关系回访和场景邀请。每天最多一两封，没有合适内容就不发。</p>
+      </div>
+      <div class="card moodbar green box">
+        <div class="top"><h3>三日寄存</h3><span class="tagchip green">72h 真删</span></div>
+        <p>情绪、生活片段和未确认的候选内容临时安放，默认 72 小时后真正删除，不留副本。</p>
+      </div>
+      <div class="card moodbar box">
+        <div class="top"><h3>长久珍藏</h3><span class="tagchip">你说了算</span></div>
+        <p>只保存你主动留下的总结、灵感和重要记忆，随时可查看、修改和删除。</p>
+      </div>
+    </div>
+
+    <div class="card rules">
+      <span class="lbl">主动陪伴三原则</span>
+      <span class="rule">有明确依据才发送</span><span class="dot"></span>
+      <span class="rule">默认低频，随时可关闭</span><span class="dot"></span>
+      <span class="rule">不用红点和连续通知制造留存</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -20,6 +20,7 @@ from app.models.user import User
 from app.services import stage
 from app.services.scene_images import gen_scene_images
 from app.services.scene_recommend import PRESET_THEATERS, detect_scene_intent
+from app.services.scene_turn_images import schedule_bg_regen
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 
@@ -166,11 +167,15 @@ def _advance_scene(db: Session, s: Scene, choice_id: str) -> None:
         chosen["label"],
     )
     s.turn = s.turn + 1
-    s.beats = res["beats"]
+    # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
+    s.beats = (s.beats or []) + res["beats"]
     s.choices = res["choices"]
     s.history = (s.history or []) + [{"turn": s.turn, "choice": chosen["label"]}]
     db.commit()
     db.refresh(s)
+    # DAY-229：galgame 场景推进后异步刷新背景图（旧图保留到新图就绪）
+    if not res.get("ended") and s.render_kind == "dynamic_image":
+        schedule_bg_regen(s.id)
 
 
 def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
@@ -194,10 +199,14 @@ def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
                 yield _sse("choices", {"choices": val})
         ended = final or not choices
         sc.turn = turn
-        sc.beats = [{"speaker": "旁白", "text": narrative.strip() or "……"}]
+        # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
+        sc.beats = (sc.beats or []) + [{"speaker": "旁白", "text": narrative.strip() or "……"}]
         sc.choices = [] if ended else choices
         sc.history = (sc.history or []) + [{"turn": turn, "choice": label}]
         db2.commit()
+        # DAY-229：galgame 场景推进后异步刷新背景图（不阻塞 SSE，旧图保留到新图就绪）
+        if not ended and sc.render_kind == "dynamic_image":
+            schedule_bg_regen(sc.id)
         yield _sse("done", {"scene_id": sc.id, "turn": turn, "ended": ended})
     finally:
         db2.close()
@@ -435,11 +444,15 @@ def choose(
             label,
         )
         s.turn = s.turn + 1
-        s.beats = res["beats"]
+        # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
+        s.beats = (s.beats or []) + res["beats"]
         s.choices = res["choices"]
         s.history = (s.history or []) + [{"turn": s.turn, "choice": label}]
         db.commit()
         db.refresh(s)
+        # DAY-229：galgame 场景推进后异步刷新背景图（旧图保留到新图就绪）
+        if not res.get("ended") and s.render_kind == "dynamic_image":
+            schedule_bg_regen(s.id)
         return SceneOut.model_validate(s)
 
     turn = s.turn + 1
@@ -481,7 +494,22 @@ def scene_summary(scene_id: int, user: User = Depends(get_current_user), db: Ses
         "beats": s.beats,
         "history": s.history,
     })
+    # DAY-228：LLM 失败/返空时 key_quote 退成占位「……」，这里用场景原文补足：
+    # 最后一条对白 → 用户最后一次选择；都没有则返回空串，由前端隐藏该区块。
+    kq = str(summary.get("key_quote") or "").strip()
+    if not kq or kq == "……":
+        summary["key_quote"] = _fallback_key_quote(s)
     return summary
+
+
+def _fallback_key_quote(s: Scene) -> str:
+    for b in reversed(s.beats or []):
+        if isinstance(b, dict) and (b.get("text") or "").strip():
+            return str(b["text"]).strip()[:30]
+    for h in reversed(s.history or []):
+        if isinstance(h, dict) and (h.get("choice") or "").strip():
+            return str(h["choice"]).strip()[:30]
+    return ""
 
 
 @router.delete("/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)

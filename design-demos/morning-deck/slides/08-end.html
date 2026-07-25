@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>P08 · 隐私与结尾</title>
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  .stage{ position:absolute; inset:88px 0 0; padding:52px 96px 0; display:flex; flex-direction:column; }
+  .h1{ margin-top:24px; font-size:56px; }
+
+  .redlines{ margin-top:auto; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .line-item{ display:flex; align-items:center; gap:18px; padding:18px 26px 18px 30px; }
+  .line-item .bar{ flex:none; width:8px; height:40px; border-radius:99px; background:var(--acc-surf); }
+  .line-item.green .bar{ background:var(--support); }
+  .line-item p{ font-size:18px; line-height:1.55; color:var(--ink); font-weight:500; }
+
+  .closing{ margin-top:auto; position:relative; text-align:center; padding-bottom:64px; }
+  .closing .big{ font-size:72px; font-weight:700; letter-spacing:-0.5px; }
+  .closing .big .em{ color:var(--accent); }
+  .closing .sub{ margin-top:18px; font-size:20px; color:var(--ink2); letter-spacing:.1em; }
+  .closing .cat{ position:absolute; right:40px; bottom:0; height:230px; }
+  .closing .glow{
+    position:absolute; right:10px; bottom:-30px; width:320px; height:320px; border-radius:50%;
+    background:radial-gradient(circle, rgba(240,212,119,0.35), transparent 65%);
+  }
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="brand"><img src="../assets/logo.jpg" alt="喵灵">喵灵 Morning<span class="sep">·</span><span class="sub">产品介绍</span></div>
+    <div class="meta">ADVENTUREX 2026</div>
+  </div>
+
+  <div class="stage">
+    <div class="kicker">隐私红线 PRIVACY</div>
+    <h1 class="h1">托付的前提，是<span class="em">你说删，就真删</span>。</h1>
+
+    <div class="redlines">
+      <div class="card line-item"><div class="bar"></div><p>原始语音、重复语句在处理后即删除，不留存。</p></div>
+      <div class="card line-item green"><div class="bar"></div><p>三日寄存到期真正删除——不留人物、地点、原话。</p></div>
+      <div class="card line-item green"><div class="bar"></div><p>记忆由你决定去向：查看、修改、删除，全部可以。</p></div>
+      <div class="card line-item"><div class="bar"></div><p>不做心理诊断，也从不把推测包装成事实。</p></div>
+    </div>
+
+    <div class="closing">
+      <div class="glow"></div>
+      <img class="cat" src="../assets/miro.png" alt="桌宠米露">
+      <div class="big">把明天的事，<span class="em">还给明天</span>。</div>
+      <div class="sub">喵灵 Morning · AdventureX 2026 · Dayfire 团队 —— 晚安，好梦。</div>
+    </div>
+  </div>
+</body>
+</html>
