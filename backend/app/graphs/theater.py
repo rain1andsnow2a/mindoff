@@ -7,15 +7,22 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.llm import get_chat_model
 
 logger = logging.getLogger(__name__)
 
 MAX_TURNS = 3  # 约 3 轮选择后进入可结算态
+
+# 所有要 JSON 的 prompt 都追加这段：模型在中文正文里吐英文双引号是 JSON 解析失败的头号原因
+_JSON_RULE = (
+    "\n严格要求：只输出一个 JSON 对象，前后不要有任何解释或 markdown 代码块。"
+    "字符串内部禁止出现英文双引号 \"，需要引号时用中文「」。禁止尾随逗号。"
+)
 
 _OPEN_SYSTEM = """你是 MindOff「片场」的编剧。把用户一段牵动他的经历，改写成一个温柔的
 视觉小说式场景，让用户可以在其中尝试"另一种表达/回应"。规则：
@@ -24,22 +31,101 @@ _OPEN_SYSTEM = """你是 MindOff「片场」的编剧。把用户一段牵动他
 - 只输出 JSON，无多余文字，结构：
   {"title": 短标题, "setting": 一句场景/氛围描述,
    "beats": [{"speaker": 说话人或"旁白", "text": 一句对白/旁白}]  (2-4 条),
-   "choices": [{"id": "1", "label": 一种回应，简短}]  (2-3 个"另一种回应")}"""
+   "choices": [{"id": "1", "label": 一种回应，简短}]  (2-3 个"另一种回应")}""" + _JSON_RULE
 
 _CONT_SYSTEM = """继续这个视觉小说场景。用户刚选了一种回应，请顺着自然写下去。
 规则同前：不改事实、不治疗、温柔克制。只输出 JSON：
 {"beats": [{"speaker","text"}] (1-3 条),
  "choices": [{"id","label"}] (剧情自然收束则给空数组 []),
- "ended": true/false}"""
+ "ended": true/false}""" + _JSON_RULE
 
 
 # ─── 解析/规范化 ────────────────────────────────────────────────────────────
 
+def _strip_fence(raw: str) -> str:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    return text
+
+
+def _repair(text: str) -> str:
+    """修常见的模型 JSON 毛病：尾随逗号、中文标点当分隔符、正文里的裸英文双引号。
+
+    最后一招针对实测最常见的失败（"她说"我没事""）：把「键值对之外」的英文双引号
+    换成中文引号。做法是重新扫一遍，只保留结构性引号（紧跟 { , : [ 或紧接 , : } ] 的那些）。
+    """
+    text = re.sub(r",\s*([}\]])", r"\1", text)          # 尾随逗号
+    text = text.replace("，\n", ",\n").replace("：\"", ":\"")  # 偶发全角分隔符
+
+    out: list[str] = []
+    in_str = False
+    stray_open = True   # 串内裸引号成对出现，交替换成「」
+    for i, ch in enumerate(text):
+        if ch != '"':
+            out.append(ch)
+            continue
+        if text[i - 1: i] == "\\":                      # 已转义，原样
+            out.append(ch)
+            continue
+        if not in_str:
+            in_str = True
+            stray_open = True
+            out.append(ch)
+            continue
+        # 串内遇到引号：只有后面紧跟结构符时才认为是收尾引号
+        rest = text[i + 1:].lstrip()
+        if rest[:1] in (",", ":", "}", "]", ""):
+            in_str = False
+            out.append(ch)
+        else:
+            out.append("「" if stray_open else "」")     # 正文里的裸引号 → 中文引号
+            stray_open = not stray_open
+    return "".join(out)
+
+
 def _parse_json(raw: str) -> dict:
-    raw = (raw or "").strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-    return json.loads(raw)
+    """从模型输出里抠出 JSON 对象。依次尝试：原样 → 截取花括号 → 修复。"""
+    text = _strip_fence(raw)
+    candidates = [text]
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(text[start: end + 1])
+    candidates.append(_repair(candidates[-1]))
+
+    last_err: Exception | None = None
+    for cand in candidates:
+        if not cand:
+            continue
+        try:
+            data = json.loads(cand)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, ValueError) as e:
+            last_err = e
+    raise ValueError(f"无法解析为 JSON 对象: {last_err}")
+
+
+def _invoke_json(messages: list, *, temperature: float = 0.8) -> dict:
+    """调模型并解析 JSON；首次解析失败时带着原文回炉重试一次再放弃。"""
+    model = get_chat_model(temperature=temperature)
+    resp = model.invoke(messages)
+    try:
+        return _parse_json(resp.content)
+    except ValueError as e:
+        logger.info("[theater] JSON 首解析失败，重试一次: %s", e)
+        retry = messages + [
+            AIMessage(content=resp.content or ""),
+            HumanMessage(
+                content="上面的输出不是合法 JSON。请只重新输出那个 JSON 对象，"
+                        "字符串内不要用英文双引号（改用「」），不要 markdown 代码块。"
+            ),
+        ]
+        resp2 = model.invoke(retry)
+        return _parse_json(resp2.content)
+
 
 
 def _norm_beats(beats: Any) -> list[dict]:
@@ -74,9 +160,9 @@ def _fallback_opening(desc: str) -> dict:
 
 def _generate(desc: str) -> dict:
     try:
-        model = get_chat_model(temperature=0.8)
-        resp = model.invoke([SystemMessage(content=_OPEN_SYSTEM), HumanMessage(content=desc)])
-        data = _parse_json(resp.content)
+        data = _invoke_json(
+            [SystemMessage(content=_OPEN_SYSTEM), HumanMessage(content=desc)], temperature=0.8
+        )
         return {
             "title": (data.get("title") or "那一刻")[:200],
             "setting": (data.get("setting") or "")[:1000],
@@ -135,6 +221,112 @@ def generate_manual(
     return _generate(manual_desc(title=title, people=people, place=place, plot=plot, intent=intent))
 
 
+# ─── 场景整理（把自由描述抽成结构化字段）─────────────────────────────────────
+
+_PARSE_SYSTEM = """你是 MindOff「片场」的场记。用户用大白话讲了一段他想重新经历的场景，
+你要把它整理成结构化字段，回读给用户确认。
+
+硬规则（违反即错误输出）：
+- 只能用用户话里已有的信息。**没提到的字段留空字符串**，绝不编造地点、人物或情节。
+- 「对方性格」只写用户描述过的具体行为倾向（例如"生气后会假装不在意"），
+  绝不贴人格标签、不做心理诊断、不用医疗化表达。
+- 每个字段都短，像便签而不是段落：地点/人物 ≤ 10 字，其余 ≤ 24 字。
+- 人物用用户的称呼（"朋友""妈妈""她"），不要替用户起名字。
+
+只输出 JSON：
+{"title": "≤10字的场景标题",
+ "place": "地点",
+ "people": "人物称呼",
+ "relation": "关系，如 朋友/父母/恋人/同事，判断不出就留空",
+ "counterpart_action": "对方当前在做什么",
+ "counterpart_traits": ["对方的行为倾向", "最多3条"],
+ "intent": "用户想尝试的表达或行动",
+ "missing": ["缺失字段的英文名，如 place"]}""" + _JSON_RULE
+
+# 「场景整理」卡片的字段顺序与中文标签，前端直接按 items 渲染
+PARSE_FIELD_LABELS: list[tuple[str, str]] = [
+    ("place", "地点"),
+    ("people", "人物"),
+    ("counterpart_action", "对方当前行动"),
+    ("counterpart_traits_text", "对方性格"),
+    ("intent", "你想尝试"),
+]
+
+
+def _clean(value: Any, limit: int) -> str:
+    return str(value or "").strip().strip("。，,.")[:limit]
+
+
+def parse_narration(text: str) -> dict:
+    """把用户的自由描述整理成「场景整理」页所需的结构化字段。
+
+    返回 {title, place, people, relation, counterpart_action, counterpart_traits,
+          intent, missing, items:[{label,value}], parsed:bool}
+    parsed=False 表示 LLM 不可用、字段是从原文里退化截取的——前端据此提示用户手填。
+    """
+    narration = (text or "").strip()
+    if not narration:
+        return _fallback_parse("")
+
+    try:
+        data = _invoke_json(
+            [SystemMessage(content=_PARSE_SYSTEM), HumanMessage(content=narration)],
+            temperature=0.3,  # 抽取任务要稳，不要发散
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[theater] parse_narration fallback: %s", e)
+        return _fallback_parse(narration)
+
+    traits = [
+        _clean(t, 24) for t in (data.get("counterpart_traits") or [])
+        if isinstance(t, (str, int, float)) and _clean(t, 24)
+    ][:3]
+    result = {
+        "title": _clean(data.get("title"), 20) or "那一刻",
+        "place": _clean(data.get("place"), 20),
+        "people": _clean(data.get("people"), 20),
+        "relation": _clean(data.get("relation"), 12),
+        "counterpart_action": _clean(data.get("counterpart_action"), 40),
+        "counterpart_traits": traits,
+        "intent": _clean(data.get("intent"), 40),
+        "parsed": True,
+    }
+    result["counterpart_traits_text"] = "、".join(traits)
+    # missing 由服务端按实际内容重算，不信任模型自报
+    result["missing"] = [
+        key for key in ("place", "people", "counterpart_action", "intent")
+        if not result.get(key)
+    ]
+    if not traits:
+        result["missing"].append("counterpart_traits")
+    result["items"] = [
+        {"key": key, "label": label, "value": result.get(key) or ""}
+        for key, label in PARSE_FIELD_LABELS
+    ]
+    return result
+
+
+def _fallback_parse(narration: str) -> dict:
+    """LLM 不可用时的退化：不编造内容，把原文放进「你想尝试」让用户自己改。"""
+    result = {
+        "title": "那一刻",
+        "place": "",
+        "people": "",
+        "relation": "",
+        "counterpart_action": "",
+        "counterpart_traits": [],
+        "counterpart_traits_text": "",
+        "intent": narration[:40],
+        "parsed": False,
+        "missing": ["place", "people", "counterpart_action", "counterpart_traits"],
+    }
+    result["items"] = [
+        {"key": key, "label": label, "value": result.get(key) or ""}
+        for key, label in PARSE_FIELD_LABELS
+    ]
+    return result
+
+
 _IMG_PROMPT_SYSTEM = """你是 galgame 美术指导。根据一段场景种子，输出两段中文文生图 prompt。规则：
 - 背景（bg）：描述场景/环境/氛围/时间/光线，galgame 视觉小说风格插画，柔和唯美，无人物、无文字水印。
 - 立绘（sprite）：单个主要人物半身立绘，纯色背景，动漫赛璐璐风格，表情柔和，无文字。
@@ -156,9 +348,9 @@ def generate_image_prompts(
         desc = f"{desc}\n开场氛围：{setting}"
     first_person = (people.split("、")[0] if people else "").strip() or "角色"
     try:
-        model = get_chat_model(temperature=0.7)
-        resp = model.invoke([SystemMessage(content=_IMG_PROMPT_SYSTEM), HumanMessage(content=desc)])
-        data = _parse_json(resp.content)
+        data = _invoke_json(
+            [SystemMessage(content=_IMG_PROMPT_SYSTEM), HumanMessage(content=desc)], temperature=0.7
+        )
         bg = str(data.get("bg") or "").strip()
         sprite = str(data.get("sprite") or "").strip()
         name = str(data.get("character_name") or "").strip() or first_person
@@ -178,7 +370,6 @@ def advance(scene: dict, chosen_label: str) -> dict:
     """按所选回应推进剧情。scene = {setting, beats, history, turn}。返回 {beats, choices, ended}。"""
     turn = int(scene.get("turn") or 0) + 1
     try:
-        model = get_chat_model(temperature=0.8)
         ctx = {
             "setting": scene.get("setting"),
             "history": scene.get("history"),
@@ -186,11 +377,13 @@ def advance(scene: dict, chosen_label: str) -> dict:
             "chosen": chosen_label,
             "turn": turn,
         }
-        resp = model.invoke([
-            SystemMessage(content=_CONT_SYSTEM),
-            HumanMessage(content=json.dumps(ctx, ensure_ascii=False)),
-        ])
-        data = _parse_json(resp.content)
+        data = _invoke_json(
+            [
+                SystemMessage(content=_CONT_SYSTEM),
+                HumanMessage(content=json.dumps(ctx, ensure_ascii=False)),
+            ],
+            temperature=0.8,
+        )
         ended = bool(data.get("ended")) or turn >= MAX_TURNS
         return {
             "beats": _norm_beats(data.get("beats")),

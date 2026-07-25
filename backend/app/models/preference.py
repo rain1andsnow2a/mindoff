@@ -3,10 +3,12 @@
 主动陪伴总开关/频率、睡前提醒时间、隐私相关开关。
 `proactive_enabled` 与 TrustState.proactive_enabled 同步写（信任门控读那边），
 其余字段为本表自有。
+
+另含主动触发（信号融合引擎）偏好：定时窗口、安静时段、分信号开关、每日上限。
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -42,6 +44,32 @@ class UserPreference(Base):
     last_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_city: Mapped[str | None] = mapped_column(String(60), nullable=True)
     location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ─── 主动触发（信号融合引擎）偏好 ──────────────────────────────────────
+    # 定时陪伴窗口（本地 HH:MM 列表，±6 分钟容差命中）
+    proactive_schedule_times: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # 安静时段：非定时类信号在此区间内不打扰
+    quiet_hours_start: Mapped[str] = mapped_column(String(5), nullable=False, default="23:00")
+    quiet_hours_end: Mapped[str] = mapped_column(String(5), nullable=False, default="07:00")
+    # 临时静音（所有主动触达一律不发）
+    is_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # 分信号类型开关
+    scheduled_checkin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    holiday_greeting_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    motion_detection_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    driving_alert_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    weather_alert_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    usage_anomaly_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # 每日主动触达硬上限（所有信号类型合计）
+    max_daily_triggers: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+
+    # 运行时状态（由信号上报接口写入，前端可读做 UI 提示）
+    driving_mode_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_motion_signal_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

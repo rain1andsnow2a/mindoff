@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+mindoff.db
+mindoff.db-*
+.env
+.env.*
+!.env.example
+static/
+scripts/
+docs/
+*.log
+*.err
+uv.lock

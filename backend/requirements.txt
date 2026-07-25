@@ -1,0 +1,17 @@
+# 容器构建用依赖清单（版本与本地 uv.lock 实测一致，避免线上装到不同大版本）。
+# 本地开发仍以 pyproject.toml + uv.lock 为准；改依赖时两边一起改。
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+httpx==0.28.1
+websockets==15.0.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-multipart==0.0.32
+langchain-core==1.5.0
+langchain-openai==1.4.0
+langgraph==1.2.9
+openai==2.47.0
+sqlalchemy==2.0.51
+alembic==1.18.5
+pyjwt==2.13.0
+bcrypt==5.0.0

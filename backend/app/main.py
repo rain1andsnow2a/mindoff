@@ -32,6 +32,7 @@ from app.routers import (
     reminders,
     role_profiles,
     scenes,
+    signals,
     stores,
     stt,
     theater_ext,
@@ -55,6 +56,9 @@ EVENING_MINUTE = 30
 WEEKLY_WEEKDAY = 6
 WEEKLY_HOUR = 20
 WEEKLY_MINUTE = 0
+
+# 主动信号扫描间隔（秒）。5 分钟一轮
+SIGNAL_TICK_INTERVAL_SECONDS = 5 * 60
 
 
 def _seconds_until(hour: int, minute: int, tz: timezone) -> float:
@@ -161,10 +165,10 @@ async def _weekly_report_scheduler():
 
 
 def _ensure_preference_location_columns() -> None:
-    """开发期轻量迁移：给已存在的 user_preferences 补地点列。
+    """开发期轻量迁移：给已存在的 user_preferences 补地点列与主动触发偏好列。
 
     create_all 不会给「已存在的表」加列；这里用 SQLite ADD COLUMN 幂等补齐，
-    让重启后端即生效、不丢数据、无需手动跑 alembic。
+    让重启后端即生效、不丢数据、无需手动跑 alembic（生产仍走 alembic 012）。
     """
     from sqlalchemy import inspect, text
     try:
@@ -175,6 +179,20 @@ def _ensure_preference_location_columns() -> None:
         adds = {
             "last_lat": "FLOAT", "last_lon": "FLOAT",
             "last_city": "VARCHAR(60)", "location_updated_at": "DATETIME",
+            # 主动触发（信号融合引擎）偏好
+            "proactive_schedule_times": "JSON",
+            "quiet_hours_start": "VARCHAR(5) NOT NULL DEFAULT '23:00'",
+            "quiet_hours_end": "VARCHAR(5) NOT NULL DEFAULT '07:00'",
+            "is_muted": "BOOLEAN NOT NULL DEFAULT 0",
+            "scheduled_checkin_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "holiday_greeting_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "motion_detection_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "driving_alert_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "weather_alert_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "usage_anomaly_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+            "max_daily_triggers": "INTEGER NOT NULL DEFAULT 6",
+            "driving_mode_active": "BOOLEAN NOT NULL DEFAULT 0",
+            "last_motion_signal_at": "DATETIME",
         }
         with engine.begin() as conn:
             for name, typ in adds.items():
@@ -185,19 +203,89 @@ def _ensure_preference_location_columns() -> None:
         logger.error("[migrate] ensure location columns failed: %s", e)
 
 
+async def _proactive_signal_scheduler():
+    """后台协程：每 5 分钟跑一轮主动信号检测 + 融合决策。
+
+    覆盖时间窗口 / 节假日 / 天气 / 城市变化 / 手机使用异常 / 驾车兜底。
+    客户端上报速度样本时会即时触发一次，本循环是兜底与轮询类信号的唯一入口。
+    """
+    interval = SIGNAL_TICK_INTERVAL_SECONDS
+    # 启动后先等一轮，避免与 create_all / 迁移抢 SQLite 写锁
+    await asyncio.sleep(30)
+    while True:
+        if settings.proactive_enabled:
+            from app.db import SessionLocal
+            from app.services.signals.runner import run_tick_all
+
+            db = SessionLocal()
+            try:
+                summary = await asyncio.to_thread(run_tick_all, db)
+                if summary.get("allowed") or summary.get("detected"):
+                    logger.info("[scheduler] signal tick: %s", summary)
+            except Exception as e:
+                logger.error("[scheduler] signal tick failed: %s", e)
+            finally:
+                db.close()
+        await asyncio.sleep(interval)
+
+
+async def _motion_cleanup_scheduler():
+    """后台协程：每天清理超过 30 天的速度样本。"""
+    while True:
+        await asyncio.sleep(24 * 3600)
+        from app.db import SessionLocal
+        from app.services.signals.runner import cleanup_motion_samples
+
+        db = SessionLocal()
+        try:
+            deleted = await asyncio.to_thread(cleanup_motion_samples, db)
+            logger.info("[scheduler] motion samples cleaned: %d", deleted)
+        except Exception as e:
+            logger.error("[scheduler] motion cleanup failed: %s", e)
+        finally:
+            db.close()
+
+
+async def _bedtime_reminder_scheduler():
+    """后台协程：每分钟扫描，到用户设定的 sleep_reminder_time，由当前激活桌宠 agent
+    写一条睡前提醒投进信箱（每天至多一条，幂等）。
+    """
+    while True:
+        await asyncio.sleep(60)
+        from app.db import SessionLocal
+        from app.services.bedtime_reminder import run_due_bedtime_reminders
+
+        db = SessionLocal()
+        try:
+            results = run_due_bedtime_reminders(db)
+            if results:
+                logger.info("[scheduler] bedtime reminders: %d sent", len(results))
+        except Exception as e:
+            logger.error("[scheduler] bedtime reminder failed: %s", e)
+        finally:
+            db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时确保表存在（开发期；生产走 Alembic）
     Base.metadata.create_all(bind=engine)
     _ensure_preference_location_columns()
     # 启动定时调度：做梦（0:00 UTC）+ 晚间来信（21:30 东八区）+ 周报（周日 20:00 东八区）
+    # + 主动信号扫描（每 5 分钟）+ 速度样本清理（每天）
     dream_task = asyncio.create_task(_dream_scheduler())
     evening_task = asyncio.create_task(_evening_letter_scheduler())
     weekly_task = asyncio.create_task(_weekly_report_scheduler())
+    signal_task = asyncio.create_task(_proactive_signal_scheduler())
+    motion_cleanup_task = asyncio.create_task(_motion_cleanup_scheduler())
+    bedtime_task = asyncio.create_task(_bedtime_reminder_scheduler())
     yield
     dream_task.cancel()
     evening_task.cancel()
     weekly_task.cancel()
+    signal_task.cancel()
+    motion_cleanup_task.cancel()
+    bedtime_task.cancel()
 
 
 app = FastAPI(title="MindOff Backend", version="0.3.0", lifespan=lifespan)
@@ -272,6 +360,9 @@ app.include_router(memory_review.router)
 
 # 业务层：主动提醒（待办到期桌宠提醒）
 app.include_router(reminders.router)
+
+# 业务层：主动触发信号（时间窗口/节假日/驾车/天气/城市变化/手机使用异常）
+app.include_router(signals.router)
 
 # 调试：做梦 Agent 手动触发
 app.include_router(debug.router)

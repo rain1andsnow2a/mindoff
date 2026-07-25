@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.models.letter import Letter
 
-LETTER_TYPES = {"music", "movie", "book", "greeting", "relationship", "scene_invite", "weekly", "reminder"}
+LETTER_TYPES = {
+    "music", "movie", "book", "greeting", "relationship", "scene_invite",
+    "weekly", "reminder",
+    # 主动触发信号产生的来信（定时问候 / 节日祝福 / 天气关心 …）
+    "proactive",
+}
 
 
 class LetterStore:

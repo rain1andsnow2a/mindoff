@@ -9,12 +9,13 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
+from app.graphs import theater
 from app.models.role_profile import RoleProfile
 from app.models.scene import Scene
 from app.models.user import User
@@ -52,6 +53,26 @@ TEMPLATES = [
 def list_templates(user: User = Depends(get_current_user)):
     """内置场景模板（前端轮播卡片数据源）。"""
     return TEMPLATES
+
+
+# ─── 场景整理（自由描述 → 结构化字段）────────────────────────────────────────
+
+class NarrationIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/parse")
+def parse_narration(
+    body: NarrationIn,
+    user: User = Depends(get_current_user),
+):
+    """把用户口述/输入的场景描述整理成「场景整理」页的结构化字段。
+
+    这一步不落库——用户在整理页确认后才 POST /scenes 建正式场景。
+    产品红线：只用用户话里已有的信息，没提到的字段留空（前端提示补充），
+    「对方性格」只写行为倾向、不贴人格标签。LLM 不可用时 parsed=false 退化返回。
+    """
+    return theater.parse_narration(body.text)
 
 
 # ─── 内部 ────────────────────────────────────────────────────────────────────

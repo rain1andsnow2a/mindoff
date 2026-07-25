@@ -3,9 +3,9 @@
  * 设置接 /api/v1/preferences；记忆管理接 /api/v1/memories 与 /api/v1/memory-review。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import {
-  Archive, Bell, ChevronRight, Clock, Layers, Moon, Shield, Trash2, Type,
+  Archive, Bell, ChevronRight, Clock, Layers, LogOut, Moon, Shield, Trash2, Type,
 } from "lucide-react-native";
 import { GlassCard, PrimaryBtn, SafeHeader } from "../components";
 import { palette, useNight } from "../theme";
@@ -108,16 +108,25 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
 
 export function ProfileScreen({
   onChangePet, night, onNightToggle, petName, petEmoji, petSummary,
-  onMemory, onMemoryReview, preferences, onSetPreference,
+  onMemory, onMemoryReview, preferences, onSetPreference, onLogout,
 }: {
   onChangePet: () => void; night: boolean; onNightToggle: () => void;
   petName: string; petEmoji: string; petSummary?: string;
   onMemory: () => void; onMemoryReview: () => void;
   preferences: Preferences;
   onSetPreference: (patch: Partial<Preferences>) => void;
+  onLogout?: () => void;
 }) {
   const C = palette(night);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const confirmLogout = () => {
+    if (!onLogout) return;
+    Alert.alert("退出登录", "退出后需要重新登录才能继续陪伴，确定吗？", [
+      { text: "再想想", style: "cancel" },
+      { text: "退出", style: "destructive", onPress: onLogout },
+    ]);
+  };
 
   const cycleFrequency = () => {
     const order = ["安静", "温和", "活跃"];
@@ -196,6 +205,20 @@ export function ProfileScreen({
             </GlassCard>
           </View>
         ))}
+
+        {onLogout && (
+          <Pressable onPress={confirmLogout}
+            style={({ pressed }) => [{
+              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+              marginTop: 4, paddingVertical: 15, borderRadius: 16,
+              backgroundColor: night ? "rgba(255,255,255,0.05)" : "rgba(255,252,245,0.5)",
+              borderWidth: 1, borderColor: night ? "rgba(255,255,255,0.1)" : "rgba(180,120,110,0.18)",
+              opacity: pressed ? 0.6 : 1,
+            }]}>
+            <LogOut size={15} color="#B0776E" />
+            <Text style={{ fontSize: 14, color: "#B0776E" }}>退出登录</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <TimePickerSheet

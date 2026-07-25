@@ -20,7 +20,7 @@ import { PetChange, PetHandoff, ProfileScreen, MemoryScreen, MemoryReviewScreen,
 import { AuthScreen } from "./src/screens/Auth";
 import {
   getActivePet, getPreferences, listHandoffs, listPets, listPetPresets,
-  loadTokens, setActivePet, Tokens, updatePreferences,
+  loadTokens, logout, setActivePet, Tokens, updatePreferences,
 } from "./src/api";
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
 import { reportCurrentLocation } from "./src/location";
@@ -421,7 +421,13 @@ export default function App() {
                 onMemory={() => go("memory-list")}
                 onMemoryReview={() => go("memory-review")}
                 preferences={preferences}
-                onSetPreference={handleSetPreference} />
+                onSetPreference={handleSetPreference}
+                onLogout={async () => {
+                  await logout();          // 清本地 token（即使 /logout 401 也会清）
+                  setTokens(null);         // → 回到登录页（AuthScreen）
+                  setScreen("companion");  // 重置导航，重登后从主页进入
+                  setTab("companion");
+                }} />
             )}
             {screen === "pet-change" && (
               <PetChange pets={presets} activePetId={activePresetId}

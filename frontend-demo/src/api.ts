@@ -5,7 +5,11 @@
  * - 流式（聊天/倾倒/片场）：用 ./sse 的 streamSSE（expo/fetch 流式）。
  * - 普通请求：request() 带 Bearer 头 + FastAPI 错误体解析 + 15s 超时。
  *
- * ⚙️ 真机调试改 LAN_HOST 为运行后端那台电脑的 WLAN IPv4，然后重建 APK。
+ * ⚙️ 后端地址优先级：
+ *   1. EXPO_PUBLIC_API_BASE 环境变量（推荐；web/APK 构建时注入，含协议与端口）
+ *   2. DEFAULT_API_BASE —— 线上 Docker 实例，见 deploy/README.md
+ *   本地联调：在 frontend-demo/.env 写 EXPO_PUBLIC_API_BASE=http://127.0.0.1:8000
+ *   （Android 真机改成那台电脑的 WLAN IPv4，模拟器用 http://10.0.2.2:8000），然后重启 Expo。
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
@@ -15,10 +19,16 @@ import { streamSSE, type SSEEvent } from "./sse";
 export { streamSSE };
 export type { SSEEvent };
 
-const LAN_HOST = "30.201.213.119";
-// web（浏览器预览）连本机 localhost；android/iOS 真机与模拟器都连同网段的后端 LAN_HOST
-export const API_BASE =
-  Platform.OS === "web" ? "http://localhost:8000" : `http://${LAN_HOST}:8000`;
+/** 线上后端（223.109.142.152 上的 mindoff-backend 容器，8000 端口）。 */
+const DEFAULT_API_BASE = "http://223.109.142.152:8000";
+
+function resolveApiBase(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
+  const base = (fromEnv && fromEnv.trim()) || DEFAULT_API_BASE;
+  return base.replace(/\/+$/, "");
+}
+
+export const API_BASE = resolveApiBase();
 
 /** 由 API_BASE 推导 WebSocket 地址（http->ws / https->wss）。 */
 export function wsUrl(path: string): string {
@@ -252,6 +262,26 @@ export const deleteTreasure = (id: number) => del(`/api/v1/treasures/${id}`);
 
 // ─── 片场 ────────────────────────────────────────────────────────────────
 export const listSceneTemplates = () => get("/api/v1/scenes/templates");
+
+/** 「场景整理」：把用户口述的场景描述交给后端 LLM 抽成结构化字段（不落库）。 */
+export interface SceneParseResult {
+  title: string;
+  place: string;
+  people: string;
+  relation: string;
+  counterpart_action: string;
+  counterpart_traits: string[];
+  counterpart_traits_text: string;
+  intent: string;
+  /** false 表示 LLM 不可用、字段是退化结果，需要用户自己补 */
+  parsed: boolean;
+  /** 用户没提到、建议补充的字段名 */
+  missing: string[];
+  items: { key: string; label: string; value: string }[];
+}
+export const parseSceneNarration = (text: string) =>
+  post<SceneParseResult>("/api/v1/scenes/parse", { text });
+
 export const listScenes = () => get("/api/v1/scenes");
 export const getScene = (id: number) => get(`/api/v1/scenes/${id}`);
 /** 非流即时建场景（方案B 一键进入用）：可带 theater_id，返回含 scene_id/theater_id 的 SceneOut。 */

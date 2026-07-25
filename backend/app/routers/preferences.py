@@ -18,6 +18,7 @@ from app.deps import get_current_user
 from app.models.preference import UserPreference
 from app.models.user import User
 from app.services import trust as trust_service
+from app.services.signals.detectors import DEFAULT_SCHEDULE_TIMES
 
 router = APIRouter(prefix="/api/v1/preferences", tags=["preferences"])
 
@@ -30,6 +31,11 @@ def _get_or_create(db: Session, user_id: int) -> UserPreference:
     if pref is None:
         pref = UserPreference(user_id=user_id)
         db.add(pref)
+        db.commit()
+        db.refresh(pref)
+    # 定时窗口默认值：老数据/新建行都补齐，前端不必处理 null
+    if pref.proactive_schedule_times is None:
+        pref.proactive_schedule_times = list(DEFAULT_SCHEDULE_TIMES)
         db.commit()
         db.refresh(pref)
     return pref
@@ -45,6 +51,21 @@ class PreferenceOut(BaseModel):
     companion_tone: str
     reduce_transparency: bool
 
+    # 主动触发（信号融合引擎）
+    proactive_schedule_times: list[str] | None
+    quiet_hours_start: str
+    quiet_hours_end: str
+    is_muted: bool
+    scheduled_checkin_enabled: bool
+    holiday_greeting_enabled: bool
+    motion_detection_enabled: bool
+    driving_alert_enabled: bool
+    weather_alert_enabled: bool
+    usage_anomaly_enabled: bool
+    max_daily_triggers: int
+    driving_mode_active: bool
+    last_motion_signal_at: datetime | None
+
     model_config = {"from_attributes": True}
 
 
@@ -57,6 +78,19 @@ class PreferencePatch(BaseModel):
     font_size: str | None = None
     companion_tone: str | None = None
     reduce_transparency: bool | None = None
+
+    # 主动触发（driving_mode_active / last_motion_signal_at 为服务端写入，不可改）
+    proactive_schedule_times: list[str] | None = None
+    quiet_hours_start: str | None = None
+    quiet_hours_end: str | None = None
+    is_muted: bool | None = None
+    scheduled_checkin_enabled: bool | None = None
+    holiday_greeting_enabled: bool | None = None
+    motion_detection_enabled: bool | None = None
+    driving_alert_enabled: bool | None = None
+    weather_alert_enabled: bool | None = None
+    usage_anomaly_enabled: bool | None = None
+    max_daily_triggers: int | None = None
 
 
 @router.get("", response_model=PreferenceOut)
@@ -90,6 +124,20 @@ def patch_preferences(
     if "font_size" in patch:
         if patch["font_size"] not in ("小", "标准", "大"):
             raise HTTPException(422, "字体须为 小/标准/大")
+    for key in ("quiet_hours_start", "quiet_hours_end"):
+        if key in patch and not _TIME_RE.match(patch[key]):
+            raise HTTPException(422, f"{key} 格式须为 HH:MM")
+    if "proactive_schedule_times" in patch:
+        times = patch["proactive_schedule_times"]
+        if not isinstance(times, list) or not 1 <= len(times) <= 6:
+            raise HTTPException(422, "定时窗口须为 1–6 个时刻")
+        for t in times:
+            if not isinstance(t, str) or not _TIME_RE.match(t):
+                raise HTTPException(422, "定时窗口格式须为 HH:MM")
+        patch["proactive_schedule_times"] = sorted(set(times))
+    if "max_daily_triggers" in patch:
+        if not 1 <= patch["max_daily_triggers"] <= 12:
+            raise HTTPException(422, "每日主动触达上限须在 1–12 次之间")
 
     for k, v in patch.items():
         setattr(pref, k, v)
