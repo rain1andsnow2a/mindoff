@@ -1,9 +1,11 @@
-"""阶跃语音合成（POST /v1/audio/speech，默认 step-tts-mini）。
+"""阶跃语音合成（POST /v1/audio/speech，默认 stepaudio-2.5-tts）。
 
 文档：https://platform.stepfun.com/docs/guides/developer/tts
 - 「桌宠语音回复」把桌宠的文字回复读成音频；音色默认「元气少女」(yuanqishaonv)，偏可爱活泼。
 - input 上限 1000 字符，超长截断而非报错；默认返回 mp3 二进制流，转存本地供前端播放。
 - key 只在服务端使用，绝不下发前端（与 chat/asr 一致）。
+- ⚠️ 模型名跟着 base_url 走：Step Plan（step_plan/v1）只有 stepaudio-2.5-tts，
+  step-tts-mini 在那里会 404。见 config.step_tts_model 的注释。
 """
 import logging
 import uuid

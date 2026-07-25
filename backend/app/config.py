@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     step_realtime_model: str = "stepaudio-2.5-realtime"
     step_realtime_voice: str = "linjiajiejie"
     step_realtime_instructions: str = "你是 MindOff 的桌宠，温柔、不催促、不评判。"
-    # 桌宠语音回复（TTS）：step-tts-mini 快而省，音色「元气少女」偏可爱活泼
-    step_tts_model: str = "step-tts-mini"
+    # 桌宠语音回复（TTS）。音色「元气少女」偏可爱活泼。
+    # ⚠️ 模型名必须用 stepaudio-2.5-tts：step-tts-mini 只存在于标准 /v1，
+    # Step Plan（step_plan/v1）下会 404 model_invalid。stepaudio-2.5-tts 两边都可用。
+    step_tts_model: str = "stepaudio-2.5-tts"
     step_tts_voice: str = "yuanqishaonv"
 
     # 彩云天气（Caiyun v2.6，按经纬度查实时天气；key 只在服务端使用，绝不下发前端）

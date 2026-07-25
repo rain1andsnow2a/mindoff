@@ -7,6 +7,34 @@ FastAPI + SQLAlchemy(SQLite) + LangGraph。分两层：
   `Authorization: Bearer <token>` 按用户隔离。接口契约见 [docs/api-design.md](docs/api-design.md)，
   记忆系统规格见 `../.kiro/specs/memory-system/`。
 
+## 阶跃模型接入
+
+| 能力 | 模型 | 端点 / 入口 |
+|---|---|---|
+| 文本 | `step-3.5-flash` | `POST /ai/chat`；服务端内部走 `app/llm.py`（对话/倾倒抽取/来信/剧本/场景整理/主动决策/结算摘要） |
+| 语音合成 | `stepaudio-2.5-tts` | `POST /ai/tts` → 转存 `/static/tts_audio/*.mp3` |
+| 语音转写 | `stepaudio-2.5-asr` / `-asr-stream` | `POST /ai/stt`、`WS /ai/stt/stream`（中继） |
+| 实时语音通话 | `stepaudio-2.5-realtime` | `WS /ai/realtime`（中继） |
+| 文生图 | `step-image-edit-2` | `image.generate_and_store` → `/static/scene_images/*.png` |
+| 图生图/改图 | `step-image-edit-2` | `image.edit_and_store`（`/v1/images/edits`，1–2s，剧情推进时按需换图） |
+
+### ⚠️ Step Plan 与标准 /v1 的模型清单不同
+
+`STEPFUN_BASE_URL` 可以指向两处，**可用模型不一样**：
+
+| base_url | chat | 生图/改图 | TTS |
+|---|:---:|:---:|---|
+| `https://api.stepfun.com/v1` | ✅ | ✅ | `step-tts-mini` ✅ / `stepaudio-2.5-tts` ✅ |
+| `https://api.stepfun.com/step_plan/v1` | ✅ | ✅ | 只有 `stepaudio-2.5-tts`；`step-tts-mini` → **404 model_invalid** |
+
+所以 `step_tts_model` 固定用 `stepaudio-2.5-tts`（两边都可用）。
+换 `STEPFUN_BASE_URL` 后**必须**跑一遍 `uv run python scripts/test_stepfun_caps.py`
+（文本/TTS/转写/生图四项全测），别只看 `/health` —— 它不体检各能力。
+
+Step Plan 是阶梯限速（实测 RPM=10）。一次用户操作常连打多次 LLM，
+`app/llm.py` 已把 `max_retries` 提到 5 让 SDK 自己退避重试；
+调用方仍保留兜底文案，重试用尽还是会降级。
+
 ## 快速开始
 
 ```bash
