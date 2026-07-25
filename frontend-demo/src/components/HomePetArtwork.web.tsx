@@ -8,9 +8,8 @@ import {
   View,
 } from "react-native";
 
-import { PetPlaceholder } from "../components";
+import { PetPlaceholder, useTheme } from "../design-system";
 import { getPetArtwork } from "../pets/assets";
-import { useNight } from "../theme";
 
 type HomePetArtworkProps = {
   presetId: string | null;
@@ -50,7 +49,7 @@ export function HomePetArtwork({
   fallbackEmoji,
   size = 215,
 }: HomePetArtworkProps) {
-  const night = useNight();
+  const night = useTheme().isNight;
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [assetsReady, setAssetsReady] = useState(false);
@@ -60,7 +59,9 @@ export function HomePetArtwork({
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [grooming, setGrooming] = useState(false);
   const frameSize = size * 1.42;
-  const spriteUri = Image.resolveAssetSource(MIRO_GROOM_SPRITE).uri;
+  // React Native Web 不提供 Image.resolveAssetSource；Expo Asset 负责把
+  // Metro 的静态模块 ID 解析为浏览器可加载的 URI。
+  const spriteUri = Asset.fromModule(MIRO_GROOM_SPRITE).uri;
 
   const clearIdleTimer = () => {
     if (idleTimer.current) {

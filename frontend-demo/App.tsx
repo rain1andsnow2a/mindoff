@@ -3,9 +3,15 @@
  * 桌宠/设置/记忆已接 /api/v1；原型 mock 仅在离线或 dev bypass 时降级。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, SafeAreaView, StatusBar, Text, View } from "react-native";
-import { MistBackground, TabBar, Tab } from "./src/components";
-import { NightCtx, palette } from "./src/theme";
+import { Animated, StatusBar } from "react-native";
+import {
+  AppShell,
+  DesignSystemPreview,
+  MistBackground,
+  NightCtx,
+  ToastSurface,
+  type AppTab,
+} from "./src/design-system";
 import {
   OnboardHow, OnboardPermission, OnboardPet, OnboardWelcome,
 } from "./src/screens/Onboarding";
@@ -28,13 +34,22 @@ import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
 import { THEATER_SCENE_IDS } from "./src/theater";
 
-type Screen =
-  | "onboard-1" | "onboard-2" | "onboard-3" | "onboard-4"
-  | "companion" | "chat" | "voice-call" | "sleep-dump" | "processing" | "receipt"
-  | "mailbox" | "task-detail" | "storage-detail"
-  | "scene" | "scene-play" | "scene-end"
-  | "profile" | "pet-change" | "pet-handoff"
-  | "memory-list" | "memory-review";
+const SCREEN_IDS = [
+  "auth",
+  "onboard-1", "onboard-2", "onboard-3", "onboard-4",
+  "companion", "chat", "voice-call", "sleep-dump", "processing", "receipt",
+  "mailbox", "task-detail", "storage-detail",
+  "scene", "scene-play", "scene-end",
+  "profile", "pet-change", "pet-handoff",
+  "memory-list", "memory-review",
+  "design-system",
+] as const;
+
+type Screen = (typeof SCREEN_IDS)[number];
+
+function isScreen(value: string | null): value is Screen {
+  return value !== null && (SCREEN_IDS as readonly string[]).includes(value);
+}
 
 type PetInfo = {
   id: number;
@@ -68,26 +83,33 @@ function petFromOwned(p: any): PetInfo {
   return { id: p.id as number, presetId: presetId || null, name: p.name, emoji, summary };
 }
 
-// 开发/验收钩子：web 下可用 ?screen=xxx 直达某屏（原生无 window，自动跳过）
-const INITIAL_SCREEN: Screen = (() => {
-  if (typeof window !== "undefined" && window.location?.search) {
-    const m = new URLSearchParams(window.location.search).get("screen");
-    if (m) return m as Screen;
-  }
-  return "onboard-1";
+// 开发/验收钩子：web 下可用合法的 ?screen=xxx 直达某屏（原生自动跳过）。
+const DEV_SCREEN: Screen | null = (() => {
+  if (typeof window === "undefined" || !window.location?.search) return null;
+  const value = new URLSearchParams(window.location.search).get("screen");
+  return isScreen(value) ? value : null;
 })();
 
-// web 下带 ?screen= 参数时，跳过登录直达该屏（方便验收其它屏，无需后端）
-const DEV_BYPASS =
-  typeof window !== "undefined" &&
-  !!window.location?.search &&
-  new URLSearchParams(window.location.search).has("screen");
+const INITIAL_SCREEN: Screen = DEV_SCREEN ?? "onboard-1";
+const INITIAL_TAB: AppTab =
+  DEV_SCREEN === "mailbox" || DEV_SCREEN === "task-detail" || DEV_SCREEN === "storage-detail"
+    ? "mailbox"
+    : DEV_SCREEN === "scene" || DEV_SCREEN === "scene-play" || DEV_SCREEN === "scene-end"
+      ? "scene"
+      : DEV_SCREEN === "profile" || DEV_SCREEN === "pet-change" || DEV_SCREEN === "pet-handoff"
+          || DEV_SCREEN === "memory-list" || DEV_SCREEN === "memory-review"
+        ? "profile"
+        : "companion";
+
+// auth 预览强制显示登录；其他合法页面 ID 才跳过登录。
+const DEV_AUTH = DEV_SCREEN === "auth";
+const DEV_BYPASS = DEV_SCREEN !== null && !DEV_AUTH;
 const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_type: "bearer" };
 
 const FULL_SCREENS: Screen[] = [
   "chat", "voice-call", "sleep-dump", "processing", "receipt",
   "task-detail", "storage-detail", "scene-play", "scene-end",
-  "pet-change", "pet-handoff", "memory-list", "memory-review",
+  "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system",
 ];
 
 const PREFERENCE_DEFAULTS: Preferences = {
@@ -104,7 +126,7 @@ const PREFERENCE_DEFAULTS: Preferences = {
 export default function App() {
   const [screen, setScreen] = useState<Screen>(INITIAL_SCREEN);
   const [tokens, setTokens] = useState<Tokens | null>(DEV_BYPASS ? DEV_TOKENS : null);
-  const [tab, setTab] = useState<Tab>("companion");
+  const [tab, setTab] = useState<AppTab>(INITIAL_TAB);
   const [night, setNight] = useState(false);
   const [pet, setPet] = useState<PetInfo>(DEFAULT_PET);
   const [presets, setPresets] = useState<PetInfo[]>([]);
@@ -131,7 +153,7 @@ export default function App() {
 
   // 启动时从存储恢复登录态（token 持久化，重启免重登）。
   useEffect(() => {
-    if (DEV_BYPASS) return;
+    if (DEV_BYPASS || DEV_AUTH) return;
     loadTokens().then((t) => {
       if (t) {
         setTokens(t);
@@ -297,16 +319,22 @@ export default function App() {
     }
   };
 
-  const C = palette(night);
   const isMainApp = !screen.startsWith("onboard");
-  const showTabBar = isMainApp && !FULL_SCREENS.includes(screen);
+  const showTabBar = Boolean(tokens) && isMainApp && !FULL_SCREENS.includes(screen);
 
   return (
     <NightCtx.Provider value={night}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: night ? "#1C1A20" : "#D8D2CA" }}>
-        <StatusBar barStyle={night ? "light-content" : "dark-content"} />
-        <View style={{ flex: 1, backgroundColor: C.bg, overflow: "hidden" }}>
-          <MistBackground />
+      <StatusBar barStyle={night ? "light-content" : "dark-content"} />
+      <AppShell
+        activeTab={tab}
+        background={<MistBackground />}
+        onTabChange={(nextTab) => {
+          setTab(nextTab);
+          go(nextTab as Screen);
+        }}
+        showNavigation={showTabBar}
+        toast={toast ? <ToastSurface message={toast} /> : undefined}
+      >
           {!tokens ? (
             <AuthScreen
               onAuthed={(t, m) => {
@@ -447,32 +475,15 @@ export default function App() {
             {screen === "memory-review" && (
               <MemoryReviewScreen onBack={() => { go("profile"); setTab("profile"); }} onToast={showToast} />
             )}
+            {screen === "design-system" && <DesignSystemPreview />}
           </Animated.View>
 
           <ModeSheet visible={showMode} onClose={() => setShowMode(false)}
             onSleepDump={() => { setDumpSeedText(""); setShowMode(false); go("sleep-dump"); }}
             onChat={(m) => { setChatSeedText(""); setLetterReplyBody(""); setChatMode(m); setShowMode(false); go("chat"); }} />
-
-          {/* In-frame toast */}
-          {toast && (
-            <View style={{
-              position: "absolute", bottom: 100, alignSelf: "center",
-              paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999,
-              backgroundColor: night ? "rgba(50,46,56,0.94)" : "rgba(255,252,245,0.92)",
-              borderWidth: 1,
-              borderColor: night ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)",
-            }}>
-              <Text style={{ fontSize: 13, fontWeight: "500", color: C.text }}>{toast}</Text>
-            </View>
-          )}
-
-          {showTabBar && (
-            <TabBar active={tab} onChange={(t) => { setTab(t); go(t as Screen); }} />
-          )}
           </>
           )}
-        </View>
-      </SafeAreaView>
+      </AppShell>
     </NightCtx.Provider>
   );
 }

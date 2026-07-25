@@ -43,6 +43,30 @@ cd theater && npm run build                           # 产出单文件 dist/ind
    默认 local 不外发（走 `app/services/privacy.py` 判定）。
 5. `mindoff.db*`、`.env` 不入库（见 `.gitignore`）。
 
+## 前端设计与迁移规则
+
+前端视觉重构的唯一规格是
+`docs/superpowers/specs/2026-07-25-mindoff-frontend-visual-redesign.md`。
+修改 `frontend-demo/` 时必须遵守：
+
+1. Web 与移动端同等重要，使用同一套 React Native / Expo 代码响应式适配。
+   `>= 1024px` 使用桌面侧栏，较窄视口使用手机底部导航；不能只把手机界面拉宽。
+2. 视觉方向是温暖、安静、治愈和克制。日间模式完整打磨；夜间模式至少保证
+   可读、可操作和语义色完整。
+3. 仅使用平台系统无衬线字体，不引入霞鹜文楷或其他外部字体。
+4. 新页面和已迁移页面只能从 `frontend-demo/src/design-system/` 使用主题、token
+   和公共组件。不得重新引入旧 `palette`、颜色常量或旧万能组件。
+5. 桌面侧栏与手机底栏的选中态使用半透明奶油鹅黄、暖棕前景和克制柔光；
+   不恢复暗红/砖红选中背景。
+6. 迁移只改变视觉、响应式布局与交互反馈；保留业务逻辑、API、数据状态、
+   用户文案和素材语义。需要改变业务行为时必须先取得用户确认。
+7. 高频交互不添加装饰性动画。按压反馈约 `scale(0.97)`；普通 UI 动画不超过
+   300ms，并支持 reduced motion。
+8. 不为每个阶段重复创建计划文档；在现有规格下直接按阶段执行。
+9. 每组页面完成后至少运行 `npm run typecheck`、`git diff --check`，并通过
+   `?screen=<screen-id>` 检查 390×844 手机视口、1440×900 桌面视口和基本夜间可用性。
+10. 不删除或覆盖队友的无关改动；提交按逻辑阶段拆分，工作区保持干净。
+
 ## 远程仓库
 
 `https://github.com/rain1andsnow2a/mindoff`（私有）。任务看板：Linear Dayfire 团队 mindoff 项目。
