@@ -266,6 +266,7 @@ export const getMailbox = () => get("/api/v1/mailbox");
 export const listLetters = (q = "") => get(`/api/v1/letters${q}`);
 export const getLetter = (id: number) => get(`/api/v1/letters/${id}`);
 export const markLetterRead = (id: number) => patch(`/api/v1/letters/${id}`, { read: true });
+export const ackLetter = (id: number) => post<{ message: string }>(`/api/v1/letters/${id}/ack`, {});
 /** 接受场景邀请信：幂等创建场景，返回 { scene_id, render_kind, theater_id, already_accepted }。 */
 export const acceptSceneInvite = (id: number) =>
   post<{ scene_id: number; render_kind: string; theater_id: string | null; already_accepted: boolean }>(
@@ -387,6 +388,7 @@ export async function streamSceneCustom(
 export const calibrateScene = (id: number, roleName: string, adjustment: string) =>
   post(`/api/v1/scenes/${id}/calibrate`, { role_name: roleName, adjustment });
 export const settleScene = (id: number, b: any) => post(`/api/v1/scenes/${id}/settlement`, b);
+export const getSceneSummary = (id: number) => post(`/api/v1/scenes/${id}/summary`, {});
 
 // ─── 桌宠 / 交接信 ────────────────────────────────────────────────────────
 export const listPets = () => get("/api/v1/pets");

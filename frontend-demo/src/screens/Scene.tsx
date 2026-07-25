@@ -27,7 +27,7 @@ import { Scene3D } from "./Scene3D";
 import {
   listSceneTemplates, listScenes, createScene, parseSceneNarration, parseSceneRole,
   listCandidates, dismissCandidate, streamConfirmCandidate,
-  getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, absUrl,
+  getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, getSceneSummary, absUrl,
 } from "../api";
 import type { SSEEvent, SceneParseResult } from "../api";
 import { useVoiceInput } from "../useVoiceInput";
@@ -1419,14 +1419,28 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
   const [settling, setSettling] = useState(false);
   const [error, setError] = useState("");
   const [keyQuote, setKeyQuote] = useState("……");
+  const [companionComment, setCompanionComment] = useState("");
+  const [actionHint, setActionHint] = useState("带着这份感受，继续下一步");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!sceneId) return;
-    getScene(sceneId).then((s: SceneDetail) => {
-      const beats = s.beats || [];
-      const last = beats[beats.length - 1];
-      if (last?.text) setKeyQuote(last.text);
-    }).catch(() => {});
+    if (!sceneId) { setLoading(false); return; }
+    getSceneSummary(sceneId)
+      .then((res: any) => {
+        if (res.key_quote) setKeyQuote(res.key_quote);
+        if (res.companion_comment) setCompanionComment(res.companion_comment);
+        if (res.action_hint) setActionHint(res.action_hint);
+      })
+      .catch(() => {
+        // LLM 失败时回退到对话末尾原文
+        getScene(sceneId).then((s: SceneDetail) => {
+          const beats = s.beats || [];
+          const last = beats[beats.length - 1];
+          if (last?.text) setKeyQuote(last.text);
+        }).catch(() => {});
+        setCompanionComment("这里没有答案，也没有正确的说法。你表达了，这就够了。");
+      })
+      .finally(() => setLoading(false));
   }, [sceneId]);
 
   const doSettle = async (keep: boolean) => {
@@ -1436,7 +1450,7 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
       await settleScene(sceneId, {
         card_text: keyQuote,
         insight_text: keyQuote,
-        action_text: "带着这份感受，继续下一步",
+        action_text: actionHint,
         keep,
       });
       setSaved(keep);
@@ -1453,22 +1467,24 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
         <PageHeader
           eyebrow="场景回顾"
           title="这一次，你说出了"
-          description={`“${keyQuote}”`}
+          description={loading ? "正在回顾你的表达…" : `“${keyQuote}”`}
         />
         <View style={{ gap: theme.spacing[4] }}>
           <Card emphasized>
             <Text style={[theme.typography.textStyles.sectionTitle, { color: theme.colors.textPrimary }]}>{keyQuote}</Text>
           </Card>
 
-          <Card>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <Text style={{ fontSize: 13 }}>🌿</Text>
-              <Text style={[theme.typography.textStyles.label, { color: theme.colors.textMuted }]}>小栖</Text>
-            </View>
-            <Text style={[theme.typography.textStyles.body, { color: theme.colors.textSecondary }]}>
-              这里没有答案，也没有正确的说法。你表达了，这就够了。
-            </Text>
-          </Card>
+          {!!companionComment && (
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <Text style={{ fontSize: 13 }}>🌿</Text>
+                <Text style={[theme.typography.textStyles.label, { color: theme.colors.textMuted }]}>小栖</Text>
+              </View>
+              <Text style={[theme.typography.textStyles.body, { color: theme.colors.textSecondary }]}>
+                {companionComment}
+              </Text>
+            </Card>
+          )}
 
           {!!error && (
             <Text style={[theme.typography.textStyles.caption, { textAlign: "center", color: theme.colors.error }]}>{error}</Text>
@@ -1476,7 +1492,7 @@ export function SceneEnd({ sceneId, onBack, onReplay }: { sceneId?: number | nul
 
           <View style={{ gap: theme.spacing[2], paddingTop: theme.spacing[4] }}>
             {!saved ? (
-              <Button fullWidth onPress={() => doSettle(true)} disabled={settling}>
+              <Button fullWidth onPress={() => doSettle(true)} disabled={settling || loading}>
                 {settling ? "正在保存…" : "把这句话留下"}
               </Button>
             ) : (

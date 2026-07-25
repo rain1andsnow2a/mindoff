@@ -579,3 +579,59 @@ def stream_advance_tokens(scene: dict, chosen_label: str, *, final: bool):
         [SystemMessage(content=sys), HumanMessage(content=json.dumps(ctx, ensure_ascii=False))],
         want_choices=not final,
     )
+
+
+# ─── 结算摘要（LLM 生成结算卡内容）─────────────────────────────────────────────
+
+_SUMMARY_SYSTEM = """你是 MindOff「片场」的陪伴角色。场景刚结束，请根据整段对话为用户生成一张结算卡。
+规则：
+- 温柔、克制、不说教、不治疗，绝不贴标签或做诊断。
+- key_quote：从用户在对话中说过的原话里，摘出最有力量/最有表达意义的一句（≤30 字）。如果用户的表达都很短，直接用最有触动的那句。
+- companion_comment：以陪伴角色身份写一句话（≤40 字），肯定用户的表达/勇气，不评价对错。
+- action_hint：一句极短的未来暗示（≤20 字），让用户感到这次表达有延续的可能。
+只输出 JSON：{"key_quote": "...", "companion_comment": "...", "action_hint": "..."}""" + _JSON_RULE
+
+_SUMMARY_FALLBACK = {
+    "key_quote": "……",
+    "companion_comment": "这里没有答案，也没有正确的说法。你表达了，这就够了。",
+    "action_hint": "带着这份感受，继续下一步",
+}
+
+
+def summarize(scene: dict) -> dict:
+    """根据场景对话历史生成结算摘要：key_quote / companion_comment / action_hint。"""
+    beats = scene.get("beats") or []
+    history = scene.get("history") or []
+    setting = scene.get("setting") or ""
+
+    # 拼装对话记录给 LLM
+    dialogue_lines = []
+    for b in beats:
+        speaker = b.get("speaker", "旁白")
+        text = b.get("text", "")
+        if text:
+            dialogue_lines.append(f"{speaker}：{text}")
+    for h in history:
+        choice = h.get("choice", "")
+        if choice:
+            dialogue_lines.append(f"用户选择了：{choice}")
+
+    if not dialogue_lines:
+        return dict(_SUMMARY_FALLBACK)
+
+    ctx = f"场景设定：{setting}\n\n对话记录：\n" + "\n".join(dialogue_lines)
+
+    try:
+        data = _invoke_json(
+            [SystemMessage(content=_SUMMARY_SYSTEM), HumanMessage(content=ctx)],
+            temperature=0.7,
+        )
+        return {
+            "key_quote": str(data.get("key_quote") or _SUMMARY_FALLBACK["key_quote"]),
+            "companion_comment": str(data.get("companion_comment") or _SUMMARY_FALLBACK["companion_comment"]),
+            "action_hint": str(data.get("action_hint") or _SUMMARY_FALLBACK["action_hint"]),
+        }
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[theater] summarize fallback: %s", e)
+        return dict(_SUMMARY_FALLBACK)
+

@@ -1,9 +1,11 @@
 """桌宠来信 REST 接口（api-design §8.1）。
 
-GET    /api/v1/letters        列表（?type=&unread=）
-GET    /api/v1/letters/{id}   详情
-PATCH  /api/v1/letters/{id}   标记已读 {read:true}
-DELETE /api/v1/letters/{id}   删除
+GET    /api/v1/letters            列表（?type=&unread=）
+GET    /api/v1/letters/{id}       详情
+PATCH  /api/v1/letters/{id}       标记已读 {read:true}
+DELETE /api/v1/letters/{id}       删除
+POST   /api/v1/letters/{id}/ack   「收到啦」：标记已读 + 桌宠 agent 回一句轻回应
+POST   /api/v1/letters/{id}/reply 「回它一句」：以来信为上下文开一段对话 + 桌宠续写
 
 生成是服务端主动行为（proactive / 定时），不开放公开写接口。
 """
@@ -17,6 +19,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
 from app.services.letter_store import LETTER_TYPES, LetterStore
+from app.services.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/letters", tags=["letters"])
 
@@ -96,6 +99,34 @@ def delete_letter(
     letter = _require_letter(db, user, letter_id)
     LetterStore(db).delete(letter)
     return None
+
+
+@router.post("/{letter_id}/ack")
+def ack_letter(
+    letter_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """用户点击「收到啦」后：标记已读 + 由**当前激活桌宠**回一句轻回应。
+
+    回应经 run_companion（BASE_PERSONA + 桌宠 system_prompt 人格层）生成，
+    与聊天同一套人格，不是通用文案。与 /reply 的区别：ack 不开会话、不留对话记录。
+    """
+    from app.services.letter_ack import generate_ack_response
+
+    letter = _require_letter(db, user, letter_id)
+    LetterStore(db).mark_read(letter, True)
+
+    pet = PetStore(db).get_active(user.id)
+    text = generate_ack_response(
+        letter.body, pet_prompt=pet.system_prompt if pet is not None else None
+    )
+    return {
+        "message": text,
+        "letter_id": letter.id,
+        "is_read": True,
+        "pet_name": getattr(pet, "name", None),
+    }
 
 
 class ReplyIn(BaseModel):

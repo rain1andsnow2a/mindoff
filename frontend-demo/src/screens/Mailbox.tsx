@@ -22,7 +22,7 @@ import {
   useResponsive,
   useTheme,
 } from "../design-system";
-import { acceptSceneInvite, createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
+import { acceptSceneInvite, ackLetter, createTodo, createTreasure, deleteTodo, deleteTreasure, dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures, markLetterRead, updateTodo } from "../api";
 
 function useMailboxSurface() {
   const theme = useTheme();
@@ -1027,7 +1027,15 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     }
   };
 
-  const handleAckLetter = () => onToast?.("它知道你收到了");
+  const handleAckLetter = async () => {
+    if (!activeLetter) return;
+    try {
+      const res = await ackLetter(activeLetter.id);
+      onToast?.(res.message || "它知道你收到了");
+    } catch {
+      onToast?.("它知道你收到了");
+    }
+  };
 
   // ─── scene_invite：接受邀请 → 建场景 → 进片场 ───
   const [enteringScene, setEnteringScene] = useState(false);

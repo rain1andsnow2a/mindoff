@@ -472,6 +472,18 @@ def settle_scene(scene_id: int, body: SettlementIn, user: User = Depends(get_cur
     return {"scene_id": s.id, "status": "settled", "settlement": result}
 
 
+@router.post("/{scene_id}/summary")
+def scene_summary(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """生成结算摘要：LLM 根据场景对话史产出 key_quote / companion_comment / action_hint。"""
+    s = _get_owned(db, user.id, scene_id)
+    summary = theater.summarize({
+        "setting": s.setting,
+        "beats": s.beats,
+        "history": s.history,
+    })
+    return summary
+
+
 @router.delete("/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scene(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     s = _get_owned(db, user.id, scene_id)

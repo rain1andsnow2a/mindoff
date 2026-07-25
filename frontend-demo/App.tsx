@@ -15,7 +15,7 @@ import {
 import {
   OnboardHow, OnboardPermission, OnboardPet, OnboardWelcome,
 } from "./src/screens/Onboarding";
-import { CompanionChat, CompanionIdle, ModeSheet } from "./src/screens/Companion";
+import { CompanionChat, CompanionIdle, CompanionJournal, ModeSheet } from "./src/screens/Companion";
 import { VoiceCall } from "./src/screens/VoiceCall";
 import { ProcessingScreen, ReceiptScreen, SleepDump } from "./src/screens/Dump";
 import {
@@ -37,7 +37,7 @@ import { THEATER_SCENE_IDS } from "./src/theater";
 const SCREEN_IDS = [
   "auth",
   "onboard-1", "onboard-2", "onboard-3", "onboard-4",
-  "companion", "chat", "voice-call", "sleep-dump", "processing", "receipt",
+  "companion", "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
   "mailbox", "task-detail", "storage-detail",
   "scene", "scene-play", "scene-end",
   "profile", "pet-change", "pet-handoff",
@@ -107,7 +107,7 @@ const DEV_BYPASS = DEV_SCREEN !== null && !DEV_AUTH;
 const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_type: "bearer" };
 
 const FULL_SCREENS: Screen[] = [
-  "chat", "voice-call", "sleep-dump", "processing", "receipt",
+  "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
   "task-detail", "storage-detail", "scene-play", "scene-end",
   "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system",
 ];
@@ -148,6 +148,7 @@ export default function App() {
   const [chatSeedText, setChatSeedText] = useState("");
   const [letterReplyBody, setLetterReplyBody] = useState("");  // 「回它一句」带上的来信正文，供宠物基于信回复
   const [dumpSeedText, setDumpSeedText] = useState("");
+  const [seedConvId, setSeedConvId] = useState<number | null>(null);  // 往日会话：进入聊天页时加载该会话历史并续聊
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fade = useRef(new Animated.Value(1)).current;
 
@@ -375,15 +376,23 @@ export default function App() {
             {screen === "companion" && (
               <CompanionIdle petName={pet.name} petEmoji={pet.emoji} petPresetId={pet.presetId}
                 night={night} onNightToggle={() => setNight(n => !n)}
-                onChat={() => { setLetterReplyBody(""); go("chat"); }}
-                onVoiceChat={(text) => { setLetterReplyBody(""); setChatSeedText(text); go("chat"); }}
+                onChat={() => { setSeedConvId(null); setLetterReplyBody(""); go("chat"); }}
+                onVoiceChat={(text) => { setSeedConvId(null); setLetterReplyBody(""); setChatSeedText(text); go("chat"); }}
                 onVoiceCall={() => go("voice-call")}
+                onOpenJournal={() => go("journal")}
+                onResumeChat={(id) => { setChatSeedText(""); setLetterReplyBody(""); setSeedConvId(id); go("chat"); }}
                 onModeSheet={() => setShowMode(true)} />
             )}
             {screen === "chat" && (
               <CompanionChat petName={pet.name} petEmoji={pet.emoji} mode={chatMode}
                 initialText={chatSeedText} letterContext={letterReplyBody}
-                onBack={() => { setChatSeedText(""); setLetterReplyBody(""); go("companion"); setTab("companion"); }} />
+                seedConversationId={seedConvId}
+                onBack={() => { setChatSeedText(""); setLetterReplyBody(""); setSeedConvId(null); go("companion"); setTab("companion"); }} />
+            )}
+            {screen === "journal" && (
+              <CompanionJournal petEmoji={pet.emoji}
+                onBack={() => { go("companion"); setTab("companion"); }}
+                onOpenConversation={(id) => { setChatSeedText(""); setLetterReplyBody(""); setSeedConvId(id); go("chat"); setTab("companion"); }} />
             )}
             {screen === "voice-call" && (
               <VoiceCall petName={pet.name} petEmoji={pet.emoji}
@@ -431,7 +440,7 @@ export default function App() {
                   go("scene-play");
                   setTab("scene");
                 }}
-                onReplyLetter={(letter) => { setChatSeedText(""); setLetterReplyBody(letter?.body ?? ""); go("chat"); setTab("companion"); }} />
+                onReplyLetter={(letter) => { setSeedConvId(null); setChatSeedText(""); setLetterReplyBody(letter?.body ?? ""); go("chat"); setTab("companion"); }} />
             )}
             {screen === "task-detail" && <TaskDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
             {screen === "storage-detail" && <StorageDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
@@ -480,7 +489,7 @@ export default function App() {
 
           <ModeSheet visible={showMode} onClose={() => setShowMode(false)}
             onSleepDump={() => { setDumpSeedText(""); setShowMode(false); go("sleep-dump"); }}
-            onChat={(m) => { setChatSeedText(""); setLetterReplyBody(""); setChatMode(m); setShowMode(false); go("chat"); }} />
+            onChat={(m) => { setSeedConvId(null); setChatSeedText(""); setLetterReplyBody(""); setChatMode(m); setShowMode(false); go("chat"); }} />
           </>
           )}
       </AppShell>

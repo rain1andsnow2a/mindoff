@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # 阶跃接入
     stepfun_api_key: str = ""
-    stepfun_base_url: str = "https://api.stepfun.com/v1"
+    stepfun_base_url: str = "https://api.stepfun.com/step_plan/v1"
     stepfun_ws_base: str = "wss://api.stepfun.com/v1"
 
     # 模型默认值
