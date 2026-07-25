@@ -124,16 +124,20 @@ export function CompanionIdle({ onChat, onVoiceChat, onVoiceCall, onModeSheet, o
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
-export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", seedConversationId = null, initialText = "" }: {
+export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", seedConversationId = null, initialText = "", letterContext = "" }: {
   onBack: () => void; petName: string; petEmoji: string;
-  mode?: string; seedConversationId?: number | null; initialText?: string;
+  mode?: string; seedConversationId?: number | null; initialText?: string; letterContext?: string;
 }) {
   const night = useNight();
   const C = palette(night);
   const [input, setInput] = useState(initialText);
-  const [messages, setMessages] = useState([
-    { role: "agent", text: "嗯，我在。今天有什么想聊的吗？" },
-  ]);
+  const [messages, setMessages] = useState(
+    letterContext
+      ? [{ role: "agent", text: letterContext }]   // 回信场景：先把这封信作为它刚说的话显示
+      : [{ role: "agent", text: "嗯，我在。今天有什么想聊的吗？" }]
+  );
+  // 回信场景：首条用户消息需把这封信作为上下文带给后端（只带一次）
+  const letterRepliedRef = useRef(false);
   const [thinking, setThinking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   // 首次发送时才创建会话（避免进屏就产生空会话）；回信场景直接复用已有会话
@@ -146,6 +150,12 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
     setInput("");
     setMessages(m => [...m, { role: "user", text }]);
     setThinking(true);
+    // 回信场景：首条用户消息把这封信作为上下文带给后端，让宠物基于信回应（信只带一次、不显示在气泡里）。
+    let sendText = text;
+    if (letterContext && !letterRepliedRef.current) {
+      letterRepliedRef.current = true;
+      sendText = `（我在回复你刚写给我的信：「${letterContext}」）\n${text}`;
+    }
     // 首个 token 到达前只显示"•••"占位泡；到达后再追加 assistant 泡逐 token 填充，
     // 避免出现「空泡 + 思考泡」两个气泡（DAY-201）。
     let started = false;
@@ -161,7 +171,7 @@ export function CompanionChat({ onBack, petName, petEmoji, mode = "free_chat", s
       }
       const convId = convIdRef.current;
       if (convId == null) throw new Error("会话创建失败");
-      await streamChatReply(convId, text, (delta) => {
+      await streamChatReply(convId, sendText, (delta) => {
         setThinking(false);
         setMessages(m => {
           if (!started) {

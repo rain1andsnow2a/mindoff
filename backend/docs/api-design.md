@@ -135,6 +135,29 @@
 | PATCH | `/scenes/{id}` ★ | 补充细节（标题/设定） |
 | DELETE | `/scenes/{id}` ★ | 删除 |
 | GET | `/scenes/templates` ★ | 内置模板（深夜通话/家中餐桌/离开的路上；对齐前端卡片） |
+| POST | `/scenes/parse` ★ | **场景整理**：自由描述 → 结构化字段（不落库），供确认页回读 |
+| POST | `/scenes/parse-role` ★ | **角色整理**：对 TA 的介绍 → 行为倾向列表（不落库） |
+
+**POST `/scenes/parse`** — 请求 `{text}`（用户口述/输入的那段话，1–2000 字）。
+响应：
+
+```json
+{"title":"学校门口叫住朋友","place":"学校门口","people":"朋友","relation":"朋友",
+ "counterpart_action":"准备打车离开",
+ "counterpart_traits":["平时比较敏感","生气后假装不在意","希望对方先道歉"],
+ "counterpart_traits_text":"平时比较敏感、生气后假装不在意、希望对方先道歉",
+ "intent":"想把她叫住","parsed":true,"missing":[],
+ "items":[{"key":"place","label":"地点","value":"学校门口"}, ...]}
+```
+
+- `items` 是「场景整理」卡片的渲染顺序（地点/人物/对方当前行动/对方性格/你想尝试），前端直接遍历。
+- **用户没提到的字段返回空串并计入 `missing`，服务端绝不编造**；`missing` 由服务端按实际内容重算，不信模型自报。
+- `parsed=false` 表示 LLM 不可用、字段是退化结果，前端应提示用户手填。
+- 伦理红线：`counterpart_traits` 只写可观察的行为倾向，不贴人格标签、不做诊断（AGENTS.md §4）。
+
+**POST `/scenes/parse-role`** — 请求 `{name, relation, desc, extra_traits}`，
+响应 `{"traits":["说话直，不擅长表达关心", ...],"parsed":true}`（最多 5 条，每条 ≤24 字）。
+`desc` 为空时直接回落 `extra_traits`（通常来自 `/scenes/parse` 的结果），不调 LLM。
 
 ### 7.3 场景体验 Scene Play ★（视觉小说互动）— ✅ 已实现
 | 方法 | 路径 | 说明 |
@@ -205,6 +228,81 @@
 
 ---
 
+## 10. 偏好设置 Preferences ★ — ✅ 已实现
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/preferences` ★ | 读取（不存在时按默认创建） |
+| PATCH | `/preferences` ★ | 部分修改 |
+| POST | `/preferences/location` ★ | 上报最近一次模糊位置 `{lat, lon, city}`（只存最近一次，不存轨迹） |
+
+基础字段：`proactive_enabled`（同步写 TrustState，信任门控读那边）、`proactive_frequency`
+（安静/温和/活跃）、`sleep_reminder_time`、`keep_raw_dump`、`ephemeral_ttl_days`（1–30）、
+`font_size`、`companion_tone`、`reduce_transparency`。
+
+主动触发（信号融合引擎）字段：
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `proactive_schedule_times` | `["08:00","15:00","20:00"]` | 定时陪伴窗口，1–6 个 `HH:MM`，±6min 容差命中 |
+| `quiet_hours_start` / `end` | `23:00` / `07:00` | 安静时段；只有定时类信号能突破 |
+| `is_muted` | false | 临时静音，所有主动触达一律不发 |
+| `scheduled_checkin_enabled` | true | 定时陪伴开关 |
+| `holiday_greeting_enabled` | true | 节假日祝福开关 |
+| `motion_detection_enabled` | true | 运动/速度采集开关 |
+| `driving_alert_enabled` | true | 驾车陪伴开关 |
+| `weather_alert_enabled` | true | 恶劣天气关心开关 |
+| `usage_anomaly_enabled` | true | 手机使用异常关心开关 |
+| `max_daily_triggers` | 6 | 每日主动触达硬上限（1–12，所有信号合计） |
+| `driving_mode_active` | false | **只读**，由 `/signals/motion` 回写 |
+| `last_motion_signal_at` | null | **只读**，最近一次速度上报时间 |
+
+## 10.1 主动触发信号 Signals ★ — ✅ 已实现
+
+非日记类主动触发（多维信号融合引擎）。链路：
+**检测器 → 融合评分 → AI 决策网关 → 投递事件**。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/signals/motion` ★ | 批量上报速度样本，命中驾车即时走一轮决策 |
+| POST | `/signals/usage` ★ | 上报手机使用日摘要（同一本地日期覆盖） |
+| POST | `/signals/tick` ★ | 手动跑一轮当前用户的检测+决策（调试/演示） |
+| GET | `/signals/deliveries` ★ | 轮询待投递主动消息（`?status=pending\|delivered\|all`） |
+| POST | `/signals/deliveries/{id}/ack` ★ | 消费完确认，避免重复展示 |
+| GET | `/signals/events` ★ | 最近信号事件（含 evidence + final_score），排查「为什么发了/没发」 |
+| GET | `/signals/decisions` ★ | 最近 AI 决策日志（allow/suppress + 理由） |
+
+**六类信号**（`app/services/signals/detectors.py`）：
+
+| 类型 | 维度 | 触发条件 | 权重 | 冷却 |
+|---|---|---|---:|---:|
+| `scheduled` | 时间 | 命中用户配置的定时窗口 ±6min | 0.8 | 120min |
+| `holiday` | 日期 | 法定节假日首日 09:00 / 节前最后工作日 18:00 | 1.0 | 12h |
+| `driving` | 定位 | 速度 ≥30km/h 持续 ≥2min（基础分 ×0.6 折扣） | 0.9 | 15min |
+| `weather` | 定位 | 恶劣天气 / ≥35℃ / ≤0℃（白天 7–21 点） | 0.8 | 6h |
+| `location_change` | 定位 | 上报城市与上次不同（首次只落基线不打扰） | 0.6 | 12h |
+| `usage_anomaly` | 手机使用 | 夜间>60min / 屏幕时间>7日均值1.5倍 / 拿起>2倍 / 单社交App>120min | 0.5 | 120min |
+
+**融合规则**（`app/services/signals/fusion.py`）：
+`最终得分 = 基础分 × 类型权重 × 新鲜度衰减`（5min 内满分，之后 30min 线性衰减到 0），
+≥0.4 才进 AI 决策。
+
+> ⚠️ 改权重或改检测器基础分前先算乘积：`基础分 × 权重 < 0.4` 的信号永远不会触发，
+> 只会在 `signal_events` 里堆 pending 直到过期。例如天气的中雨（0.45×0.8=0.36）
+> 就是被有意过滤掉的——不为一场中雨打扰用户。
+
+安全约束：每日上限、安静时段（仅定时类可突破）、
+深夜保护（本地 00:00–06:00 仅 score>0.8）、分类型开关、全局静音；
+同一用户每轮最多触发一次，其余标 processed。
+
+**投递通道**：`bubble`（桌宠气泡）/ `letter`（额外落一封 `type=proactive` 的信箱来信）/
+`voice`（气泡+语音，payload 带 `speak_text`；驾车场景强制此通道且文案硬截断 40 字）/ `silent`。
+
+**调度**：`main.py` 的 `_proactive_signal_scheduler` 每 5 分钟跑一轮 `runner.run_tick_all`；
+速度样本保留 30 天，由 `_motion_cleanup_scheduler` 每天清理。
+
+> 日记/图片驱动的触发（情绪突变 VAD 向量、极端关键词、日记事件）**未迁移**，不在本节范围。
+
 ## 11. 与 AI 网关的分工（已建）
 
 | 场景 | 走哪条 |
@@ -222,6 +320,6 @@
   纯字段更新用 `PATCH`。想统一成 `PATCH status` 可调。
 - 🔵 **对话与倾倒边界（我的默认）**：睡前倾倒是独立 `POST /brain-dumps`，也接受
   `conversationId` 把一段对话喂进来；两者并存不互斥。
-- ✅ **检索 = 纯本地无向量**（对齐 hermes-agent 架构）：已移除 RAG P2（DashScope embedding /
+- ✅ **检索 = 纯本地无向量**：已移除 RAG P2（DashScope embedding /
   qwen3-rerank / Zilliz）。召回靠 context_builder 的结构化分层 + 关键词/实体匹配，
   做梦聚类走纯 entity 交集——私密内容从此没有任何外发路径。

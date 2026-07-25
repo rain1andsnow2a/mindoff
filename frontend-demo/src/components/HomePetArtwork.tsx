@@ -36,6 +36,8 @@ export function HomePetArtwork({
 }: HomePetArtworkProps) {
   const night = useNight();
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
+  // 所有帧（idle + groom）一次性挂载、靠 opacity 切换，避免切 Image source 触发重解码闪烁
+  const frames = useMemo(() => (artwork ? [artwork.idle, ...artwork.groom] : []), [artwork]);
   const [assetsReady, setAssetsReady] = useState(false);
   const [animationFailed, setAnimationFailed] = useState(false);
   const [staticFailed, setStaticFailed] = useState(false);
@@ -110,14 +112,11 @@ export function HomePetArtwork({
     return <PetPlaceholder size={size} emoji={fallbackEmoji} />;
   }
 
-  const source = frameIndex >= 0 ? artwork.groom[frameIndex] : artwork.idle;
-  const onImageError = () => {
-    if (frameIndex >= 0) {
-      setAnimationFailed(true);
-      setFrameIndex(-1);
-    } else {
-      setStaticFailed(true);
-    }
+  // frameIndex: -1=idle → frames[0]；k≥0=groom 第 k 帧 → frames[k+1]
+  const activeFrame = frameIndex >= 0 ? frameIndex + 1 : 0;
+  const onFrameError = (index: number) => {
+    if (index === 0) setStaticFailed(true);              // idle 底图坏 → 退占位
+    else { setAnimationFailed(true); setFrameIndex(-1); } // 动画帧坏 → 停动画留 idle
   };
 
   return (
@@ -141,13 +140,28 @@ export function HomePetArtwork({
             : "rgba(246,231,168,0.14)",
         }}
       />
-      <Image
-        source={source}
-        resizeMode="contain"
-        onError={onImageError}
-        accessibilityIgnoresInvertColors
-        style={{ width: size * 1.42, height: size * 1.42 }}
-      />
+      {/* 所有帧叠放常驻，只切 opacity（不切 source）：彻底消除逐帧重解码闪烁；
+          fadeDuration=0 关掉 Android Image 默认淡入（另一处闪烁来源）。 */}
+      <View style={{ width: size * 1.42, height: size * 1.42 }}>
+        {frames.map((src, i) => (
+          <Image
+            key={i}
+            source={src}
+            resizeMode="contain"
+            fadeDuration={0}
+            onError={() => onFrameError(i)}
+            accessibilityIgnoresInvertColors
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              opacity: i === activeFrame ? 1 : 0,
+            }}
+          />
+        ))}
+      </View>
     </View>
   );
 }

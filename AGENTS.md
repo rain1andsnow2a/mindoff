@@ -13,7 +13,11 @@
 | `theater/` | three.js 重演剧场场景库（六个预置场景），详见 `theater/README.md` |
 | `mindoff-proto/` | 前端 HTML 原型（4-Tab IA，Vite 原型；`npm run dev`） |
 | `frontend-demo/` | React Native / Expo 移植版（`npm run web` 浏览器预览 / `npm run android`），详见 `frontend-demo/README.md` |
+| `deploy/` | 后端 Docker 部署（`deploy.py` 一键装 Docker/同步/重建；`docker-compose.yml`） |
 | `references/` | 参考架构文档 |
+
+线上后端：`http://223.109.142.152:8000`（容器 `mindoff-backend`）。前端默认连它，
+本地联调在 `frontend-demo/.env` 写 `EXPO_PUBLIC_API_BASE`。
 
 ## 常用命令
 

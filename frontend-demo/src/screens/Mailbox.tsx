@@ -934,7 +934,7 @@ function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter,
 export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, onToast, onPlayScene, petName = "你的伙伴" }: {
   onTaskDetail: () => void;
   onStorageDetail: () => void;
-  onReplyLetter: () => void;
+  onReplyLetter: (letter: { title: string; body: string } | null) => void;
   onToast?: (msg: string) => void;
   /** 接受场景邀请后进入片场演绎（sceneId + 预设剧场 id，dynamic_image 时 theaterId 为 null） */
   onPlayScene?: (sceneId: number, theaterId: string | null) => void;
@@ -1111,7 +1111,7 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
         {sec === 0 && (
           <DailyLetterView letters={letters} petName={petName} letterState={letterState}
             onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
-            onAckLetter={handleAckLetter} onReply={onReplyLetter}
+            onAckLetter={handleAckLetter} onReply={() => onReplyLetter(activeLetter ? { title: activeLetter.title, body: activeLetter.body } : null)}
             onEnterScene={handleEnterScene} entering={enteringScene} />
         )}
         {sec === 2 && (

@@ -86,14 +86,56 @@ def _repair(text: str) -> str:
     return "".join(out)
 
 
+def _first_object(text: str) -> str:
+    """扫出第一个「括号配对完整」的 JSON 对象。
+
+    应对模型在 JSON 后面又追加一段（实测 image prompts 报的 "Extra data"）：
+    此时首尾花括号切片会横跨两个对象，反而更糟。跳过字符串内的括号。
+    """
+    depth = 0
+    start = -1
+    in_str = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start != -1:
+                return text[start: i + 1]
+    return ""
+
+
 def _parse_json(raw: str) -> dict:
-    """从模型输出里抠出 JSON 对象。依次尝试：原样 → 截取花括号 → 修复。"""
+    """从模型输出里抠出 JSON 对象。
+
+    依次尝试：原样 → 第一个配对完整的对象 → 首尾花括号切片 → 修复裸引号/尾随逗号。
+    """
     text = _strip_fence(raw)
     candidates = [text]
+
+    first = _first_object(text)
+    if first:
+        candidates.append(first)
+
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end > start:
         candidates.append(text[start: end + 1])
-    candidates.append(_repair(candidates[-1]))
+
+    # 修复只对「最像 JSON」的那个候选做，避免在原始噪声上瞎改
+    candidates.append(_repair(first or (candidates[-1] if candidates else text)))
 
     last_err: Exception | None = None
     for cand in candidates:
@@ -325,6 +367,60 @@ def _fallback_parse(narration: str) -> dict:
         for key, label in PARSE_FIELD_LABELS
     ]
     return result
+
+
+# ─── 角色整理（把"介绍一下 TA"抽成行为倾向）───────────────────────────────────
+
+_ROLE_SYSTEM = """你是 MindOff「片场」的场记。用户刚用大白话介绍了场景里的另一个人，
+你要整理成「在这场对话中，TA 会怎么表现」的几条行为倾向，回读给用户确认。
+
+硬规则（违反即错误输出）：
+- 只能改写用户说过的内容，**不许补充用户没提的性格**。
+- 只写可观察的行为倾向（"生气后会假装不在意""很少先开口道歉"），
+  **绝不贴人格标签**（不许出现"回避型""讨好型""自恋"等）、不做心理诊断、不用医疗化表达。
+- 每条 ≤ 20 字，用第三人称，共 2-5 条。用户说得少就少给几条，不要凑数。
+
+只输出 JSON：{"traits": ["行为倾向", "..."]}""" + _JSON_RULE
+
+
+def parse_role(
+    *, name: str | None = None, relation: str | None = None,
+    desc: str | None = None, extra_traits: list[str] | None = None,
+) -> dict:
+    """把用户对角色的口述整理成行为倾向列表。
+
+    返回 {"traits": [...], "parsed": bool}。desc 为空时直接回落到 extra_traits
+    （通常是场景整理阶段已抽到的对方行为倾向），不调用 LLM。
+    """
+    base = [str(t).strip()[:24] for t in (extra_traits or []) if str(t).strip()]
+    text = (desc or "").strip()
+    if not text:
+        return {"traits": base[:5], "parsed": False}
+
+    payload = {
+        "称呼": (name or "TA").strip(),
+        "关系": (relation or "").strip(),
+        "用户的介绍": text,
+        "此前已整理到的行为倾向": base,
+    }
+    try:
+        data = _invoke_json(
+            [SystemMessage(content=_ROLE_SYSTEM),
+             HumanMessage(content=json.dumps(payload, ensure_ascii=False))],
+            temperature=0.3,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[theater] parse_role fallback: %s", e)
+        return {"traits": (base or [text[:24]])[:5], "parsed": False}
+
+    traits: list[str] = []
+    for t in (data.get("traits") or []):
+        cleaned = _clean(t, 24)
+        if cleaned and cleaned not in traits:
+            traits.append(cleaned)
+    if not traits:
+        return {"traits": (base or [text[:24]])[:5], "parsed": False}
+    return {"traits": traits[:5], "parsed": True}
 
 
 _IMG_PROMPT_SYSTEM = """你是 galgame 美术指导。根据一段场景种子，输出两段中文文生图 prompt。规则：

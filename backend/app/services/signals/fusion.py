@@ -45,10 +45,15 @@ from app.services.signals.detectors import (
 logger = logging.getLogger(__name__)
 
 # 类型权重：安全/用户自设 > 环境 > 轻度关怀
+#
+# 注意与 AI_SCORE_THRESHOLD 的配合：基础分 × 权重 必须 ≥ 0.4 才可能进决策。
+# weather 权重定 0.8，是为了让 35℃ 高温（0.55）、0℃ 以下（0.5）、大风/中度霾（0.5）
+# 这类"值得提一句"的天气能过线（0.5×0.8=0.40），而中雨/雾（0.45×0.8=0.36）继续被过滤——
+# 不值得为一场中雨打扰用户。改这两个数前先算一遍乘积。
 TYPE_WEIGHTS: dict[str, float] = {
     SIGNAL_HOLIDAY: 1.0,
     SIGNAL_DRIVING: 0.9,
-    SIGNAL_WEATHER: 0.7,
+    SIGNAL_WEATHER: 0.8,
     SIGNAL_LOCATION_CHANGE: 0.6,
     SIGNAL_USAGE_ANOMALY: 0.5,
     SIGNAL_SCHEDULED: 0.8,
@@ -286,6 +291,7 @@ def process_pending(
     )
     summary["signals"] = len(events)
     if not events:
+        summary["reason"] = "没有待处理信号"
         return summary
 
     # 全局开关 / 用户总开关 / 静音：全部过期

@@ -18,6 +18,25 @@ uv run uvicorn app.main:app --reload   # 默认 http://127.0.0.1:8000
 
 启动时自动 `create_all` 建表（dev）；生产走 Alembic：`uv run alembic upgrade head`。
 
+## 线上部署（Docker）
+
+线上实例：`http://223.109.142.152:8000`（容器 `mindoff-backend`，见 `../deploy/`）。
+
+```bash
+# 仓库根目录，密码只从环境变量读、不入库
+$env:MINDOFF_SSH_PASSWORD='...'
+uv run --with paramiko python deploy/deploy.py --step all     # docker→sync→up→status
+uv run --with paramiko python deploy/deploy.py --step sync    # 只同步代码
+uv run --with paramiko python deploy/deploy.py --step up      # 重建容器
+```
+
+服务器上看日志：`cd /opt/mindoff && docker compose logs -f backend`。
+SQLite 与静态文件在命名卷 `mindoff_mindoff-data` / `mindoff_mindoff-static`，重建容器不丢。
+首次启动由 `docker-entrypoint.sh` 用 `create_all` 落基线并 `alembic stamp head`，
+之后每次启动跑 `alembic upgrade head`。
+
+⚠️ 当前是 HTTP 明文、8000 端口对公网开放、注册接口无限制，仅适合演示，别放真实用户数据。
+
 ## 业务接口一览（/api/v1）
 
 | 资源 | 路径 | 状态 |
@@ -30,7 +49,26 @@ uv run uvicorn app.main:app --reload   # 默认 http://127.0.0.1:8000
 | 信箱 | `/mailbox`、`/letters`、`/ephemeral`、`/treasures` | ✅ |
 | 桌宠 | `/pets[/presets|/active|/{id}]`（切换触发交接信） | ✅ |
 | 交接信 | `/handoffs[/{id}]`（只读） | ✅ |
-| 片场 | `/candidates`、`/scenes`（含 templates/plays/calibrate/settlement） | ✅ |
+| 片场 | `/candidates`、`/scenes`（含 templates/parse/parse-role/plays/calibrate/settlement） | ✅ |
+| 偏好 | `/preferences`（含定时窗口/安静时段/分信号开关/每日上限）、`/preferences/location` | ✅ |
+| 主动信号 | `/signals`（motion/usage/tick/deliveries/ack/events/decisions） | ✅ |
+
+### 主动触发信号（非日记类）
+
+时间窗口、法定节假日、定位（驾车/天气/城市变化）、手机使用异常六类信号，
+经融合引擎评分 → AI 决策网关 → 投递事件。详见 `docs/api-design.md §10.1`，
+实现在 `app/services/signals/`：
+
+| 文件 | 职责 |
+|---|---|
+| `date_context.py` | 内置国务院放假安排表（含调休），判工作日/周末/节假日/节前 |
+| `detectors.py` | 六类检测器，产出 0~1 基础分 + 证据 + 冷却 + 优先级 |
+| `context.py` | 决策上下文（本地时间/日期/天气/城市/运动/使用摘要/桌宠/表层素材） |
+| `decision.py` | AI 决策网关 allow/suppress + 投递方式，失败一律 suppress |
+| `fusion.py` | 归一化评分、冷却去重、每日上限、安静时段、深夜保护、投递 |
+| `runner.py` | 5 分钟调度入口 + 速度样本清理 |
+
+新年份的放假安排：往 `date_context.HOLIDAY_RANGES` / `MAKEUP_WORKDAYS` 各加一行即可。
 
 ## 验证（需先启动服务）
 
@@ -47,7 +85,12 @@ uv run python scripts/test_stores.py         # 五类存储（待办/小结/灵�
 uv run python scripts/handoff_smoke.py       # 交接信
 uv run python scripts/test_phase2.py         # 记忆 phase2（信箱交还）
 uv run python scripts/test_phase3.py         # 记忆 phase3（做梦 Agent）
+uv run python scripts/test_signals.py        # 主动触发信号（检测器+融合+HTTP 端到端）
+uv run python scripts/test_scene_parse.py    # 场景整理/角色整理（走 LLM、不编造、不贴标签）
 ```
+
+> `test_scene_parse.py` 默认打线上（`MINDOFF_API_BASE` 可覆盖成 `http://127.0.0.1:8000`）。
+> `test_signals.py` 含 service 层单测，需 `PYTHONPATH=.`。
 
 service 层测试（免启动服务，需 `PYTHONPATH=.`）：
 
@@ -75,7 +118,7 @@ uv run python scripts/test_ephemeral_weekly.py # 到期硬删（行+历史）+ �
 - 不向用户输出心理诊断/人格标签/冰山层名；深层假设一律不确定措辞 + provenance。
 - vulnerable/core 记忆默认 privacy=local，外发（同步/外部 Provider）必须过
   `app/services/privacy.py` 的 `can_send_external`。
-- **检索纯本地、无向量库**（hermes 式架构）：召回 = 结构化分层 + 关键词/实体匹配，
+- **检索纯本地、无向量库**：召回 = 结构化分层 + 关键词/实体匹配，
   做梦聚类 = 纯 entity 交集。私密内容没有任何外发路径。
 - 来信每天 ≤1–2 封；每周日 20:00（东八区）投一封周报（`type=weekly`，只取 surface 素材）。
 - 寄存 7 天（`inbox.EPHEMERAL_TTL_DAYS`）到期**硬删**：物理删记忆行 + 历史行，不留人物/地点/原话/事件

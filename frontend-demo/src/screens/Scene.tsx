@@ -14,11 +14,11 @@ import { CreamRipple, PrimaryBtn, SafeHeader } from "../components";
 import { GOLD_DEEP, palette, useNight } from "../theme";
 import { Scene3D } from "./Scene3D";
 import {
-  listSceneTemplates, listScenes, createScene,
+  listSceneTemplates, listScenes, createScene, parseSceneNarration, parseSceneRole,
   listCandidates, dismissCandidate, streamConfirmCandidate,
   getScene, streamSceneChoice, streamSceneCustom, calibrateScene, settleScene, absUrl,
 } from "../api";
-import type { SSEEvent } from "../api";
+import type { SSEEvent, SceneParseResult } from "../api";
 import { useVoiceInput } from "../useVoiceInput";
 import type { TheaterSceneId } from "../theater";
 
@@ -60,6 +60,174 @@ const BUILT_IN_SCENES: BuiltInScene[] = [
 ];
 
 type SceneSubState = "browsing" | "capturing" | "reviewing" | "setup";
+
+/** 角色设定三步的产物。失败重试时原样复用，避免用户重新填一遍。 */
+interface CharReady {
+  name: string;
+  relation: string;
+  desc: string;
+  adjusted: string;
+  traits: string[];
+}
+
+// ─── 搭建中覆盖层 ────────────────────────────────────────────────────────────
+
+// 后端建场景是「剧本 LLM + 背景图 + 立绘」串并行跑，实测 60–90s。
+// 与其干等，不如把后端真实在做的三件事分阶段说出来，让等待可预期。
+const BUILD_STAGES = [
+  { title: "在写这一幕的剧本…", hint: "把你说的场景改写成可以走进去的那一幕" },
+  { title: "在画场景的背景…", hint: "光线、时间、你站的那个位置" },
+  { title: "在画 TA 的样子…", hint: "只画一个轮廓，剩下的交给你的记忆" },
+];
+const STAGE_MS = 9000;
+
+/**
+ * 搭建中动画。用 RN 内置 Animated（本项目没装 reanimated，装它要改 babel + 重编原生包）。
+ * 三层动效：呼吸光环 + 扫光进度条 + 阶段文案淡入淡出。
+ */
+function BuildingStage() {
+  const night = useNight();
+  const C = palette(night);
+  const [stage, setStage] = useState(0);
+
+  const breathe = useRef(new Animated.Value(0)).current;   // 光环呼吸
+  const sweep = useRef(new Animated.Value(0)).current;     // 进度条扫光
+  const fade = useRef(new Animated.Value(1)).current;      // 文案淡入淡出
+
+  useEffect(() => {
+    const b = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(breathe, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    const s = Animated.loop(
+      Animated.timing(sweep, { toValue: 1, duration: 1600, easing: Easing.linear, useNativeDriver: true })
+    );
+    b.start();
+    s.start();
+    return () => { b.stop(); s.stop(); };
+  }, [breathe, sweep]);
+
+  // 阶段推进：淡出 → 换文案 → 淡入。最后一段停住不再轮播（避免显得像卡死循环）
+  useEffect(() => {
+    if (stage >= BUILD_STAGES.length - 1) return;
+    const timer = setTimeout(() => {
+      Animated.timing(fade, { toValue: 0, duration: 260, useNativeDriver: true }).start(() => {
+        setStage((s) => Math.min(s + 1, BUILD_STAGES.length - 1));
+        Animated.timing(fade, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+      });
+    }, STAGE_MS);
+    return () => clearTimeout(timer);
+  }, [stage, fade]);
+
+  const haloScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.28] });
+  const haloOpacity = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.16] });
+  const coreScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const BAR_W = 220;
+  const sweepX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-90, BAR_W] });
+  const current = BUILD_STAGES[stage];
+
+  return (
+    <View style={{
+      position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+      alignItems: "center", justifyContent: "center", gap: 22,
+      backgroundColor: night ? "rgba(28,24,20,0.90)" : "rgba(255,251,243,0.94)",
+    }}>
+      {/* 呼吸光环 */}
+      <View style={{ width: 128, height: 128, alignItems: "center", justifyContent: "center" }}>
+        <Animated.View style={{
+          position: "absolute", width: 128, height: 128, borderRadius: 64,
+          backgroundColor: "rgba(246,231,168,0.55)",
+          transform: [{ scale: haloScale }], opacity: haloOpacity,
+        }} />
+        <Animated.View style={{
+          width: 64, height: 64, borderRadius: 32,
+          backgroundColor: "rgba(246,231,168,0.85)",
+          borderWidth: 1.5, borderColor: "rgba(255,255,255,0.65)",
+          transform: [{ scale: coreScale }],
+        }} />
+      </View>
+
+      {/* 阶段文案 */}
+      <Animated.View style={{ alignItems: "center", gap: 8, opacity: fade, paddingHorizontal: 32 }}>
+        <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>{current.title}</Text>
+        <Text style={{ fontSize: 12, lineHeight: 18, textAlign: "center", color: C.muted }}>
+          {current.hint}
+        </Text>
+      </Animated.View>
+
+      {/* 扫光进度条 */}
+      <View style={{
+        width: BAR_W, height: 4, borderRadius: 2, overflow: "hidden",
+        backgroundColor: "rgba(91,79,62,0.10)",
+      }}>
+        <Animated.View style={{
+          width: 90, height: 4, borderRadius: 2,
+          backgroundColor: "rgba(196,149,58,0.55)",
+          transform: [{ translateX: sweepX }],
+        }} />
+      </View>
+
+      {/* 阶段小点 */}
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {BUILD_STAGES.map((_, i) => (
+          <View key={i} style={{
+            width: i === stage ? 16 : 6, height: 6, borderRadius: 3,
+            backgroundColor: i <= stage ? "rgba(196,149,58,0.55)" : "rgba(91,79,62,0.12)",
+          }} />
+        ))}
+      </View>
+
+      <Text style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+        第一次搭会慢一些，大概一分钟
+      </Text>
+    </View>
+  );
+}
+
+// ─── 搭建失败覆盖层 ──────────────────────────────────────────────────────────
+
+/** 失败时盖一层，而不是把用户甩回上一步——底下的角色设定还留着，重试即用原输入。 */
+function BuildFailed({ error, canRetry, onRetry, onDismiss }: {
+  error: string; canRetry: boolean; onRetry: () => void; onDismiss: () => void;
+}) {
+  const night = useNight();
+  const C = palette(night);
+  const rise = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(rise, { toValue: 1, duration: 280, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
+  }, [rise]);
+  const translateY = rise.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
+
+  return (
+    <View style={{
+      position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+      alignItems: "center", justifyContent: "center", paddingHorizontal: 28,
+      backgroundColor: night ? "rgba(28,24,20,0.88)" : "rgba(255,251,243,0.92)",
+    }}>
+      <Animated.View style={{
+        width: "100%", gap: 14, padding: 22, borderRadius: 22,
+        backgroundColor: "rgba(255,252,245,0.92)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
+        opacity: rise, transform: [{ translateY }],
+      }}>
+        <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>没搭起来</Text>
+        <Text style={{ fontSize: 13, lineHeight: 20, color: C.text2 }}>{error}</Text>
+        <Text style={{ fontSize: 12, color: C.muted }}>
+          你刚才填的都还在，重试不用重新说一遍。
+        </Text>
+        <View style={{ gap: 8, marginTop: 4 }}>
+          {canRetry ? <PrimaryBtn onClick={onRetry} full>再试一次</PrimaryBtn> : null}
+          <Pressable onPress={onDismiss} style={{ paddingVertical: 12, alignItems: "center" }}>
+            <Text style={{ fontSize: 13, color: C.muted }}>回去改一改</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
 
 // ─── Scene Portal ────────────────────────────────────────────────────────────
 
@@ -224,42 +392,97 @@ function SceneNarrationCapture({ onBack, onConfirm }: {
 
 // ─── Summary Preview ─────────────────────────────────────────────────────────
 
-function SceneSummaryPreview({ onBack, onConfirm }: {
-  onBack: () => void; onConfirm: () => void;
+function SceneSummaryPreview({ narration, onBack, onConfirm }: {
+  narration: string;
+  onBack: () => void;
+  onConfirm: (parsed: SceneParseResult) => void;
 }) {
   const night = useNight();
   const C = palette(night);
-  const items = [
-    { label: "地点", value: "学校门口" },
-    { label: "人物", value: "朋友" },
-    { label: "对方当前行动", value: "准备打车离开" },
-    { label: "对方性格", value: "敏感、表面冷淡、希望对方先行动" },
-    { label: "你想尝试", value: "叫住她并道歉" },
-  ];
+  const [parsed, setParsed] = useState<SceneParseResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // 进页面就把用户刚说的那段送去整理；失败给重试，不再显示写死的示例数据
+  const run = React.useCallback(() => {
+    setLoading(true);
+    setError("");
+    parseSceneNarration(narration)
+      .then((res) => setParsed(res))
+      .catch((e) => setError(e?.message ?? "整理失败，再试一次"))
+      .finally(() => setLoading(false));
+  }, [narration]);
+
+  useEffect(() => { run(); }, [run]);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <SafeHeader onBack={onBack} title="场景整理" />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <CreamRipple active />
+          <Text style={{ fontSize: 15, color: C.text2 }}>我在整理你刚说的…</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error || !parsed) {
+    return (
+      <View style={{ flex: 1 }}>
+        <SafeHeader onBack={onBack} title="场景整理" />
+        <View style={{ flex: 1, paddingHorizontal: 20, gap: 16, justifyContent: "center" }}>
+          <Text style={{ fontSize: 15, color: C.text, textAlign: "center" }}>{error || "整理失败"}</Text>
+          <PrimaryBtn onClick={run} full>再试一次</PrimaryBtn>
+          <Pressable onPress={onBack} style={{ paddingVertical: 12, alignItems: "center" }}>
+            <Text style={{ fontSize: 13, color: C.muted }}>回去重新说</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  const items = parsed.items ?? [];
+  const hasMissing = (parsed.missing?.length ?? 0) > 0;
+
   return (
     <View style={{ flex: 1 }}>
       <SafeHeader onBack={onBack} title="场景整理" />
       <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
         <View>
           <Text style={{ fontSize: 17, fontWeight: "500", marginBottom: 4, color: C.text }}>我整理了一下</Text>
-          <Text style={{ fontSize: 13, color: C.muted }}>有不准确的地方可以告诉我。</Text>
+          <Text style={{ fontSize: 13, color: C.muted }}>
+            {parsed.parsed ? "有不准确的地方可以告诉我。" : "我没太听清，下一步你可以自己补上。"}
+          </Text>
         </View>
         <View style={{
           borderRadius: 20, overflow: "hidden",
           backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
         }}>
           {items.map((item, i) => (
-            <View key={i} style={{
+            <View key={item.key ?? i} style={{
               flexDirection: "row", gap: 12, paddingHorizontal: 20, paddingVertical: 14,
               borderBottomWidth: i < items.length - 1 ? 1 : 0, borderBottomColor: "rgba(91,79,62,0.06)",
             }}>
               <Text style={{ fontSize: 12, width: 96, marginTop: 2, color: C.muted }}>{item.label}</Text>
-              <Text style={{ fontSize: 14, flex: 1, lineHeight: 20, color: C.text }}>{item.value}</Text>
+              {/* 用户没提到的字段留空，不编造内容 */}
+              <Text style={{
+                fontSize: 14, flex: 1, lineHeight: 20,
+                color: item.value ? C.text : C.placeholder,
+                fontStyle: item.value ? "normal" : "italic",
+              }}>
+                {item.value || "你没提到，下一步可以补充"}
+              </Text>
             </View>
           ))}
         </View>
+        {hasMissing ? (
+          <Text style={{ fontSize: 12, color: C.muted }}>
+            空着的部分不影响继续，进入下一步时可以补。
+          </Text>
+        ) : null}
         <View style={{ gap: 8, marginTop: "auto" }}>
-          <PrimaryBtn onClick={onConfirm} full>就是这样，继续</PrimaryBtn>
+          <PrimaryBtn onClick={() => onConfirm(parsed)} full>就是这样，继续</PrimaryBtn>
           <Pressable onPress={onBack} style={{ paddingVertical: 12, alignItems: "center" }}>
             <Text style={{ fontSize: 13, color: C.muted }}>有些地方不对，我重新说</Text>
           </Pressable>
@@ -271,26 +494,82 @@ function SceneSummaryPreview({ onBack, onConfirm }: {
 
 // ─── Character Setup（三步）───────────────────────────────────────────────────
 
-function CharacterSetupSheet({ scene, onBack, onReady }: {
-  scene: BuiltInScene | null; onBack: () => void;
-  onReady: (char: { name: string; relation: string; desc: string; adjusted: string }) => void;
+// step 2「正在整理 TA」：呼吸光点（等待中）+ 逐条淡入上浮（出结果），方案 B
+function BreathingDot() {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(v, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(v, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [v]);
+  return (
+    <Animated.View style={{
+      width: 9, height: 9, borderRadius: 5, backgroundColor: GOLD_DEEP,
+      transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.15] }) }],
+      opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+    }} />
+  );
+}
+
+function TraitRow({ text, index, last, color }: { text: string; index: number; last: boolean; color: string }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    // 逐条延迟浮现：像 TA 的样子一点点被想起来
+    Animated.timing(v, {
+      toValue: 1, duration: 420, delay: index * 300, easing: Easing.out(Easing.ease), useNativeDriver: true,
+    }).start();
+  }, [v]);
+  return (
+    <Animated.View style={{
+      flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingVertical: 12,
+      borderBottomWidth: last ? 0 : 1, borderBottomColor: "rgba(91,79,62,0.06)",
+      opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+    }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, marginTop: 6, backgroundColor: "rgba(196,149,58,0.55)" }} />
+      <Text style={{ fontSize: 14, lineHeight: 20, flex: 1, color }}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
+  scene: BuiltInScene | null;
+  /** 走「描述场景」路径时带上场景整理结果，用来预填称呼/关系/行为倾向 */
+  parsed?: SceneParseResult | null;
+  onBack: () => void;
+  onReady: (char: CharReady) => void;
 }) {
   const night = useNight();
   const C = palette(night);
   const [step, setStep] = useState(0);
-  const [name, setName] = useState("");
-  const [rel, setRel] = useState(scene?.relationships[0] ?? "");
+  const [name, setName] = useState(parsed?.people ?? "");
+  const [rel, setRel] = useState(parsed?.relation || scene?.relationships[0] || "");
   const [desc, setDesc] = useState("");
   const [adjusted, setAdjusted] = useState("");
   const [entryRipple, setEntryRipple] = useState(false);
+  // step 2 的行为倾向由后端整理（原来是写死的 mockTraits）
+  const [traits, setTraits] = useState<string[]>(parsed?.counterpart_traits ?? []);
+  const [traitsLoading, setTraitsLoading] = useState(false);
+  const [traitsError, setTraitsError] = useState("");
 
-  const mockTraits = [
-    `说话${scene?.id === "dinner-table" ? "直接，语气偏强势" : "温柔，但习惯绕弯"}`,
-    "关心你，但不擅长直接表达",
-    "遇到冲突时容易先防御",
-    "很少主动承认自己说重了",
-    "担心常常表现为批评",
-  ];
+  const buildTraits = React.useCallback(() => {
+    setTraitsLoading(true);
+    setTraitsError("");
+    parseSceneRole({
+      name, relation: rel, desc,
+      extra_traits: parsed?.counterpart_traits ?? [],
+    })
+      .then((res) => setTraits(res.traits ?? []))
+      .catch((e) => setTraitsError(e?.message ?? "整理失败"))
+      .finally(() => setTraitsLoading(false));
+  }, [name, rel, desc, parsed]);
+
+  const goStep2 = () => {
+    setStep(2);
+    buildTraits();
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -390,7 +669,7 @@ function CharacterSetupSheet({ scene, onBack, onReady }: {
                 </Pressable>
                 <Text style={{ fontSize: 11, color: C.muted }}>也可以说</Text>
               </View>
-              <PrimaryBtn onClick={() => setStep(2)} full>整理一下</PrimaryBtn>
+              <PrimaryBtn onClick={goStep2} full>整理一下</PrimaryBtn>
             </>
           )}
 
@@ -404,15 +683,22 @@ function CharacterSetupSheet({ scene, onBack, onReady }: {
                 borderRadius: 20, overflow: "hidden",
                 backgroundColor: "rgba(255,252,245,0.78)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
               }}>
-                {mockTraits.map((trait, i) => (
-                  <View key={i} style={{
-                    flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingVertical: 12,
-                    borderBottomWidth: i < mockTraits.length - 1 ? 1 : 0, borderBottomColor: "rgba(91,79,62,0.06)",
-                  }}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, marginTop: 6, backgroundColor: "rgba(196,149,58,0.55)" }} />
-                    <Text style={{ fontSize: 14, lineHeight: 20, flex: 1, color: C.text }}>{trait}</Text>
+                {traitsLoading ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 20, paddingVertical: 18 }}>
+                    <BreathingDot />
+                    <Text style={{ fontSize: 14, color: GOLD_DEEP }}>我在慢慢回想你说的 TA…</Text>
                   </View>
-                ))}
+                ) : traits.length === 0 ? (
+                  <View style={{ paddingHorizontal: 20, paddingVertical: 18 }}>
+                    <Text style={{ fontSize: 14, lineHeight: 20, color: C.muted }}>
+                      {traitsError || "你说得还不多，直接进入也可以，之后在场景里说「TA 不太像」就能校准。"}
+                    </Text>
+                  </View>
+                ) : (
+                  traits.map((trait, i) => (
+                    <TraitRow key={`${i}-${trait}`} text={trait} index={i} last={i === traits.length - 1} color={C.text} />
+                  ))
+                )}
               </View>
               <View>
                 <TextInput
@@ -434,7 +720,7 @@ function CharacterSetupSheet({ scene, onBack, onReady }: {
                     setEntryRipple(true);
                     setTimeout(() => {
                       setEntryRipple(false);
-                      onReady({ name: name || "TA", relation: rel, desc, adjusted });
+                      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits });
                     }, 380);
                   }} full>就是这样的，进入场景</PrimaryBtn>
                 </View>
@@ -481,6 +767,9 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   const [myScenes, setMyScenes] = useState<MyScene[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [narration, setNarration] = useState("");
+  const [parsedScene, setParsedScene] = useState<SceneParseResult | null>(null);
+  // 失败重试用：记住上一次角色设定的结果，重试时不用让用户重新填
+  const [pendingChar, setPendingChar] = useState<CharReady | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
 
@@ -539,16 +828,26 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   // 角色设定完成 → 真实生成开场，拿到 scene_id 进入演练
   // 手动路径走 galgame：非流式 createScene(render_kind=dynamic_image)，后端并发生成背景图+立绘，
   // 进入 ScenePlay 后按 render_kind 渲染动态图场景（DAY-217）。
-  const handleCharReady = (char: { name: string; relation: string; desc: string; adjusted: string }) => {
-    if (generating) return;
+  //
+  // ⚠️ 失败时**不能**卸载 CharacterSetupSheet：它一卸载 step/输入全丢，用户会被莫名
+  // 甩回「谁在你面前」第一步。所以 generating/genError 都用覆盖层呈现（见下方 return）。
+  const buildScene = React.useCallback((char: CharReady) => {
     setGenerating(true);
     setGenError("");
+    // 字段优先用「场景整理」抽出来的真实内容；走内置模板路径时回落到模板标题
+    const p = parsedScene;
     const fields = {
-      title: selectedScene?.title ?? (char.name ? `和${char.name}的那一刻` : "那一刻"),
-      people: char.name + (char.relation ? `（${char.relation}）` : ""),
-      place: selectedScene?.title ?? "",
-      plot: [narration, char.desc].filter(Boolean).join("。"),
-      intent: char.adjusted || char.desc || "试着说出没说的话",
+      title: p?.title || selectedScene?.title || (char.name ? `和${char.name}的那一刻` : "那一刻"),
+      people: (char.name || p?.people || "TA") + (char.relation ? `（${char.relation}）` : ""),
+      place: p?.place || selectedScene?.title || "",
+      plot: [
+        narration,
+        p?.counterpart_action ? `此刻对方：${p.counterpart_action}` : "",
+        char.traits.length ? `对方会怎么表现：${char.traits.join("；")}` : "",
+        char.desc,
+        char.adjusted ? `补充：${char.adjusted}` : "",
+      ].filter(Boolean).join("。"),
+      intent: p?.intent || char.adjusted || char.desc || "试着说出没说的话",
       render_kind: "dynamic_image",
     };
     createScene(fields)
@@ -561,27 +860,54 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         setGenerating(false);
         setGenError(err?.message ?? "生成失败，再试一次");
       });
+  }, [parsedScene, selectedScene, narration, onPlay]);
+
+  const handleCharReady = (char: CharReady) => {
+    if (generating) return;
+    setPendingChar(char);   // 记下来，失败后可以原样重试，不用重新填
+    buildScene(char);
   };
 
-  if (generating) {
+  const retryBuild = () => {
+    if (pendingChar) buildScene(pendingChar);
+    else setGenError("");
+  };
+
+  // 覆盖层：搭建中 / 搭建失败。用 absolute 盖在内容之上，而不是 return 掉内容，
+  // 这样 CharacterSetupSheet 不会被卸载，用户填的称呼/介绍在失败后还在。
+  const overlay = generating ? (
+    <BuildingStage />
+  ) : genError ? (
+    <BuildFailed error={genError} canRetry={!!pendingChar}
+      onRetry={retryBuild} onDismiss={() => setGenError("")} />
+  ) : null;
+
+  if (subState === "capturing") {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <CreamRipple active />
-        <Text style={{ fontSize: 15, color: C.text2 }}>正在替你搭片场…</Text>
-        <Text style={{ fontSize: 12, color: C.muted }}>把场景和 TA 安排好，马上就好</Text>
+      <View style={{ flex: 1 }}>
+        <SceneNarrationCapture onBack={handleBack}
+          onConfirm={(text) => { setNarration(text); setSubState("reviewing"); }} />
+        {overlay}
       </View>
     );
   }
-
-  if (subState === "capturing") {
-    return <SceneNarrationCapture onBack={handleBack}
-      onConfirm={(text) => { setNarration(text); setSubState("reviewing"); }} />;
-  }
   if (subState === "reviewing") {
-    return <SceneSummaryPreview onBack={handleBack} onConfirm={() => setSubState("setup")} />;
+    return (
+      <View style={{ flex: 1 }}>
+        <SceneSummaryPreview narration={narration} onBack={handleBack}
+          onConfirm={(p) => { setParsedScene(p); setSubState("setup"); }} />
+        {overlay}
+      </View>
+    );
   }
   if (subState === "setup") {
-    return <CharacterSetupSheet scene={selectedScene} onBack={handleBack} onReady={handleCharReady} />;
+    return (
+      <View style={{ flex: 1 }}>
+        <CharacterSetupSheet scene={selectedScene} parsed={parsedScene}
+          onBack={handleBack} onReady={handleCharReady} />
+        {overlay}
+      </View>
+    );
   }
 
   return (
@@ -617,7 +943,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         >
           {templates.map((scene, i) => (
             <ScenePortal key={scene.id} scene={scene} index={i} scrollX={scrollX} isActive={activeIdx === i}
-              onEnter={() => { setSelectedScene(scene); setSubState("setup"); }} />
+              onEnter={() => { setSelectedScene(scene); setParsedScene(null); setSubState("setup"); }} />
           ))}
         </Animated.ScrollView>
         <View style={{ position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
@@ -690,9 +1016,14 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
           <Text style={{ fontSize: 12, textAlign: "center", marginBottom: 8, color: "#A26458" }}>{genError}</Text>
         )}
         <View style={{ height: 1, marginVertical: 24, backgroundColor: "rgba(91,79,62,0.08)" }} />
-        <CreateSceneEntry onStart={() => setSubState("capturing")} />
+        <CreateSceneEntry onStart={() => {
+          setSelectedScene(null);
+          setParsedScene(null);
+          setSubState("capturing");
+        }} />
       </View>
       </ScrollView>
+      {overlay}
     </View>
   );
 }

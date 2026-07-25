@@ -75,6 +75,29 @@ def parse_narration(
     return theater.parse_narration(body.text)
 
 
+class RoleParseIn(BaseModel):
+    name: str | None = Field(default=None, max_length=40)
+    relation: str | None = Field(default=None, max_length=20)
+    desc: str | None = Field(default=None, max_length=2000)
+    # 场景整理阶段已抽到的对方行为倾向，作为兜底/参考
+    extra_traits: list[str] | None = None
+
+
+@router.post("/parse-role")
+def parse_role(
+    body: RoleParseIn,
+    user: User = Depends(get_current_user),
+):
+    """把用户对场景中另一个人的口述，整理成「在这场对话中 TA 会怎么表现」。
+
+    产品红线：只写可观察的行为倾向，绝不贴人格标签、不做心理诊断（AGENTS.md 伦理红线）。
+    """
+    return theater.parse_role(
+        name=body.name, relation=body.relation,
+        desc=body.desc, extra_traits=body.extra_traits,
+    )
+
+
 # ─── 内部 ────────────────────────────────────────────────────────────────────
 
 def _get_owned(db: Session, user_id: int, scene_id: int) -> Scene:

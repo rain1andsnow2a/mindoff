@@ -124,6 +124,7 @@ export default function App() {
   const [dumpText, setDumpText] = useState("");
   const [dumpReceipt, setDumpReceipt] = useState<any>(null);
   const [chatSeedText, setChatSeedText] = useState("");
+  const [letterReplyBody, setLetterReplyBody] = useState("");  // 「回它一句」带上的来信正文，供宠物基于信回复
   const [dumpSeedText, setDumpSeedText] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fade = useRef(new Animated.Value(1)).current;
@@ -346,15 +347,15 @@ export default function App() {
             {screen === "companion" && (
               <CompanionIdle petName={pet.name} petEmoji={pet.emoji} petPresetId={pet.presetId}
                 night={night} onNightToggle={() => setNight(n => !n)}
-                onChat={() => go("chat")}
-                onVoiceChat={(text) => { setChatSeedText(text); go("chat"); }}
+                onChat={() => { setLetterReplyBody(""); go("chat"); }}
+                onVoiceChat={(text) => { setLetterReplyBody(""); setChatSeedText(text); go("chat"); }}
                 onVoiceCall={() => go("voice-call")}
                 onModeSheet={() => setShowMode(true)} />
             )}
             {screen === "chat" && (
               <CompanionChat petName={pet.name} petEmoji={pet.emoji} mode={chatMode}
-                initialText={chatSeedText}
-                onBack={() => { setChatSeedText(""); go("companion"); setTab("companion"); }} />
+                initialText={chatSeedText} letterContext={letterReplyBody}
+                onBack={() => { setChatSeedText(""); setLetterReplyBody(""); go("companion"); setTab("companion"); }} />
             )}
             {screen === "voice-call" && (
               <VoiceCall petName={pet.name} petEmoji={pet.emoji}
@@ -402,7 +403,7 @@ export default function App() {
                   go("scene-play");
                   setTab("scene");
                 }}
-                onReplyLetter={() => { go("chat"); setTab("companion"); }} />
+                onReplyLetter={(letter) => { setChatSeedText(""); setLetterReplyBody(letter?.body ?? ""); go("chat"); setTab("companion"); }} />
             )}
             {screen === "task-detail" && <TaskDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
             {screen === "storage-detail" && <StorageDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
@@ -450,7 +451,7 @@ export default function App() {
 
           <ModeSheet visible={showMode} onClose={() => setShowMode(false)}
             onSleepDump={() => { setDumpSeedText(""); setShowMode(false); go("sleep-dump"); }}
-            onChat={(m) => { setChatSeedText(""); setChatMode(m); setShowMode(false); go("chat"); }} />
+            onChat={(m) => { setChatSeedText(""); setLetterReplyBody(""); setChatMode(m); setShowMode(false); go("chat"); }} />
 
           {/* In-frame toast */}
           {toast && (

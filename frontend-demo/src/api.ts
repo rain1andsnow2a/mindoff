@@ -103,9 +103,21 @@ function extractDetail(data: any): string | null {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
-async function rawFetch(method: Method, path: string, body?: unknown): Promise<Response> {
+/** 普通接口超时。AI 重活（生图/剧本/整理）必须显式传更长的值，否则会被误判成断网。 */
+const DEFAULT_TIMEOUT_MS = 15000;
+/** 纯 LLM 文本（场景整理/角色整理）：一次调用几秒到几十秒。 */
+export const LLM_TIMEOUT_MS = 90000;
+/** LLM + 文生图（建场景要并发出两张图）：实测 60–90s，留足余量。 */
+export const IMAGE_TIMEOUT_MS = 240000;
+
+async function rawFetch(
+  method: Method,
+  path: string,
+  body?: unknown,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     return await fetch(`${API_BASE}${path}`, {
       method,
@@ -116,7 +128,11 @@ async function rawFetch(method: Method, path: string, body?: unknown): Promise<R
       body: body != null ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
-  } catch {
+  } catch (e: any) {
+    // 超时（AbortError）和真正的网络错误要分开说，否则用户以为是断网
+    if (e?.name === "AbortError") {
+      throw new ApiError(`等太久了（超过 ${Math.round(timeoutMs / 1000)} 秒），再试一次`);
+    }
     throw new ApiError("连接不上服务器，检查下网络或后端地址");
   } finally {
     clearTimeout(timer);
@@ -142,13 +158,14 @@ async function request<T = any>(
   method: Method,
   path: string,
   body?: unknown,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
   _retried = false
 ): Promise<T> {
-  let res = await rawFetch(method, path, body);
+  let res = await rawFetch(method, path, body, timeoutMs);
 
   if (res.status === 401 && !_retried && _tokens?.refresh_token) {
     if (await tryRefresh()) {
-      res = await rawFetch(method, path, body);
+      res = await rawFetch(method, path, body, timeoutMs);
     } else {
       await clearTokens();
     }
@@ -167,7 +184,8 @@ async function request<T = any>(
 }
 
 const get = <T = any>(p: string) => request<T>("GET", p);
-const post = <T = any>(p: string, b?: unknown) => request<T>("POST", p, b);
+const post = <T = any>(p: string, b?: unknown, timeoutMs?: number) =>
+  request<T>("POST", p, b, timeoutMs);
 const patch = <T = any>(p: string, b?: unknown) => request<T>("PATCH", p, b);
 const put = <T = any>(p: string, b?: unknown) => request<T>("PUT", p, b);
 const del = <T = any>(p: string) => request<T>("DELETE", p);
@@ -280,11 +298,22 @@ export interface SceneParseResult {
   items: { key: string; label: string; value: string }[];
 }
 export const parseSceneNarration = (text: string) =>
-  post<SceneParseResult>("/api/v1/scenes/parse", { text });
+  post<SceneParseResult>("/api/v1/scenes/parse", { text }, LLM_TIMEOUT_MS);
+
+/** 「TA 在这场对话中」：把用户对角色的介绍整理成行为倾向（只写行为，不贴人格标签）。 */
+export const parseSceneRole = (b: {
+  name?: string;
+  relation?: string;
+  desc?: string;
+  extra_traits?: string[];
+}) => post<{ traits: string[]; parsed: boolean }>("/api/v1/scenes/parse-role", b, LLM_TIMEOUT_MS);
 
 export const listScenes = () => get("/api/v1/scenes");
 export const getScene = (id: number) => get(`/api/v1/scenes/${id}`);
-/** 非流即时建场景（方案B 一键进入用）：可带 theater_id，返回含 scene_id/theater_id 的 SceneOut。 */
+/** 非流即时建场景（方案B 一键进入用）：可带 theater_id，返回含 scene_id/theater_id 的 SceneOut。
+ *
+ * render_kind=dynamic_image 时后端要跑「剧本 LLM + 两张文生图」，实测 60–90s，
+ * 所以走 IMAGE_TIMEOUT_MS（默认 15s 会直接超时，把用户踢回角色设定第一步，别改回去）。 */
 export const createScene = (fields: {
   title?: string;
   people?: string;
@@ -296,7 +325,8 @@ export const createScene = (fields: {
 }) =>
   post<{ id: number; theater_id: string | null; render_kind: string; [k: string]: any }>(
     "/api/v1/scenes",
-    fields
+    fields,
+    IMAGE_TIMEOUT_MS
   );
 export const updateScene = (id: number, b: any) => patch(`/api/v1/scenes/${id}`, b);
 export const listCandidates = () => get("/api/v1/candidates");
