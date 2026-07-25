@@ -1,16 +1,98 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Image,
+  Platform,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ImageStyle,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 
 import { useReducedMotion } from "../accessibility";
 import { useTheme } from "../theme";
+
+// ─── SVG Grain 纹理（base64 内联，无网络开销）──────────────────────────────────
+const GRAIN_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='150' height='150' filter='url(%23n)' opacity='0.026'/%3E%3C/svg%3E`;
+
+// ─── GlassSurface：毛玻璃容器 ────────────────────────────────────────────────
+type GlassSurfaceProps = {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  /** BlurView intensity (0-100)，默认 8 */
+  intensity?: number;
+};
+
+export function GlassSurface({ children, style, intensity = 8 }: GlassSurfaceProps) {
+  const theme = useTheme();
+  // Web 端 BlurView 使用 CSS backdrop-filter；原生使用 expo-blur
+  return (
+    <BlurView
+      intensity={intensity}
+      tint={theme.isNight ? "dark" : "light"}
+      style={[{ overflow: "hidden" }, style as ViewStyle]}
+    >
+      <View
+        style={{
+          backgroundColor: theme.isNight
+            ? "rgba(50,46,56,0.55)"
+            : "rgba(255,252,245,0.55)",
+        }}
+      >
+        {children}
+      </View>
+    </BlurView>
+  );
+}
+
+// ─── GrainTexture：纸张纹理叠加层 ─────────────────────────────────────────────
+type GrainTextureProps = {
+  style?: StyleProp<ImageStyle>;
+};
+
+export function GrainTexture({ style }: GrainTextureProps) {
+  const theme = useTheme();
+  const reducedMotion = useReducedMotion();
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+
+  useEffect(() => {
+    // 仅在原生端读取 AccessibilityInfo
+    if (Platform.OS === "web") return;
+    try {
+      const { AccessibilityInfo } = require("react-native");
+      AccessibilityInfo.isReduceTransparencyEnabled?.()
+        .then((v: boolean) => setReduceTransparency(v))
+        .catch(() => {});
+    } catch {
+      // 非关键
+    }
+  }, []);
+
+  if (reducedMotion || reduceTransparency) return null;
+
+  return (
+    <Image
+      source={{ uri: GRAIN_SVG }}
+      resizeMode="repeat"
+      fadeDuration={0}
+      style={[
+        {
+          position: "absolute",
+          inset: 0,
+          opacity: theme.isNight ? 0.015 : 0.025,
+          pointerEvents: "none",
+        } as ImageStyle,
+        style,
+      ]}
+    />
+  );
+}
 
 const DAY_ORBS = [
   { c: "#F6E7A8", x: 8, y: -8, s: 72, o: 0.5 },

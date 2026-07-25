@@ -10,6 +10,7 @@ import { Film, Mail, MessageCircle, User } from "lucide-react-native";
 
 import { useTheme } from "../theme";
 import { iconSizes, spacing, touchTarget } from "../tokens";
+import { GlassSurface } from "./effects";
 
 export type AppTab = "companion" | "mailbox" | "scene" | "profile";
 
@@ -43,7 +44,7 @@ function NavigationItem({
   const selectedBackground = theme.isNight
     ? "rgba(232, 211, 139, 0.20)"
     : theme.colors.accentSoft;
-  const selectedForeground = theme.isNight ? "#E8D38B" : "#6E5A28";
+  const selectedForeground = theme.isNight ? "#E8D38B" : theme.colors.accent;
   const selectedBorder = theme.isNight
     ? "rgba(232, 211, 139, 0.24)"
     : "rgba(224, 193, 84, 0.30)";
@@ -114,35 +115,38 @@ export function BottomNavigation({ active, onChange }: NavigationProps) {
   const theme = useTheme();
 
   return (
-    <View
-      accessibilityRole="tablist"
+    <GlassSurface
       style={{
         position: "absolute",
         left: spacing[3],
         right: spacing[3],
         bottom: spacing[2],
-        minHeight: 68,
-        padding: spacing[1],
-        flexDirection: "row",
-        alignItems: "center",
-        borderRadius: theme.radii.card,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.surface,
-        ...theme.shadows.soft,
       }}
     >
-      {items.map(({ id, icon, label }) => (
-        <NavigationItem
-          key={id}
-          active={active === id}
-          compact
-          icon={icon}
-          label={label}
-          onPress={() => onChange(id)}
-        />
-      ))}
-    </View>
+      <View
+        accessibilityRole="tablist"
+        style={{
+          minHeight: 68,
+          padding: spacing[1],
+          flexDirection: "row",
+          alignItems: "center",
+          borderRadius: theme.radii.card,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        }}
+      >
+        {items.map(({ id, icon, label }) => (
+          <NavigationItem
+            key={id}
+            active={active === id}
+            compact
+            icon={icon}
+            label={label}
+            onPress={() => onChange(id)}
+          />
+        ))}
+      </View>
+    </GlassSurface>
   );
 }
 

@@ -27,6 +27,7 @@ import {
 
 import {
   CompanionAvatar,
+  GlassSurface,
   IconButton,
   ListItem,
   MessageBubble,
@@ -381,56 +382,55 @@ export function CompanionIdle({
           gap: theme.spacing[3],
         }}
       >
-        <View
-          style={{
-            flex: 1,
-            minHeight: 54,
-            flexDirection: "row",
-            alignItems: "center",
-            paddingLeft: theme.spacing[5],
-            paddingRight: theme.spacing[1],
-            borderRadius: theme.radii.pill,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.surfaceElevated,
-            ...theme.shadows.soft,
-          }}
-        >
-          <Pressable
-            accessibilityLabel="打开文字聊天"
-            accessibilityRole="button"
-            onPress={onChat}
-            style={{ flex: 1, justifyContent: "center", alignSelf: "stretch" }}
+        <GlassSurface style={{ flex: 1, borderRadius: theme.radii.pill }}>
+          <View
+            style={{
+              minHeight: 54,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingLeft: theme.spacing[5],
+              paddingRight: theme.spacing[1],
+              borderRadius: theme.radii.pill,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
           >
-            <Text
-              style={[
-                theme.typography.textStyles.body,
-                { color: theme.colors.placeholder },
-              ]}
+            <Pressable
+              accessibilityLabel="打开文字聊天"
+              accessibilityRole="button"
+              onPress={onChat}
+              style={{ flex: 1, justifyContent: "center", alignSelf: "stretch" }}
             >
-              说点什么…
-            </Text>
-          </Pressable>
-          <IconButton
-            accessibilityLabel={voice.isRecording ? "停止录音" : "语音输入"}
-            disabled={voice.transcribing}
-            selected={voice.isRecording}
-            icon={
-              voice.transcribing ? (
-                <ActivityIndicator color={theme.colors.accent} size="small" />
-              ) : voice.isRecording ? (
-                <Square
-                  color={theme.colors.accent}
-                  fill={theme.colors.accent}
-                  size={15}
-                />
-              ) : (
-                <Mic color={theme.colors.accent} size={19} />
-              )
-            }
-            onPress={voice.isRecording ? voice.stop : voice.start}
-          />
-        </View>
+              <Text
+                style={[
+                  theme.typography.textStyles.body,
+                  { color: theme.colors.placeholder },
+                ]}
+              >
+                说点什么…
+              </Text>
+            </Pressable>
+            <IconButton
+              accessibilityLabel={voice.isRecording ? "停止录音" : "语音输入"}
+              disabled={voice.transcribing}
+              selected={voice.isRecording}
+              icon={
+                voice.transcribing ? (
+                  <ActivityIndicator color={theme.colors.accent} size="small" />
+                ) : voice.isRecording ? (
+                  <Square
+                    color={theme.colors.accent}
+                    fill={theme.colors.accent}
+                    size={15}
+                  />
+                ) : (
+                  <Mic color={theme.colors.accent} size={19} />
+                )
+              }
+              onPress={voice.isRecording ? voice.stop : voice.start}
+            />
+          </View>
+        </GlassSurface>
         <IconButton
           accessibilityLabel="选择陪伴模式"
           icon={<Plus color={theme.colors.accent} size={22} />}
@@ -894,75 +894,77 @@ export function CompanionChat({
           ) : null}
         </ScrollView>
 
-        <View
-          style={{
-            marginBottom: Platform.OS === "ios" ? theme.spacing[5] : theme.spacing[4],
-            minHeight: 52,
-            maxHeight: 120,
-            flexDirection: "row",
-            alignItems: "flex-end",
-            gap: theme.spacing[2],
-            paddingLeft: theme.spacing[4],
-            paddingRight: theme.spacing[1],
-            paddingVertical: theme.spacing[1],
-            borderRadius: theme.radii.card,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.surfaceElevated,
-            ...theme.shadows.soft,
-          }}
-        >
-          <TextInput
-            accessibilityLabel="聊天内容"
-            multiline
-            onChangeText={setInput}
-            onSubmitEditing={send}
-            placeholder="说点什么…"
-            placeholderTextColor={theme.colors.placeholder}
-            selectionColor={theme.colors.accent}
-            style={[
-              theme.typography.textStyles.body,
-              {
-                flex: 1,
-                maxHeight: 104,
-                minHeight: 44,
-                paddingVertical: 10,
-                color: theme.colors.textPrimary,
-                outlineWidth: 0,
-              } as any,
-            ]}
-            value={input}
-          />
-          {input.trim() ? (
-            <IconButton
-              accessibilityLabel="发送"
-              disabled={thinking}
-              icon={<Send color={theme.colors.accent} size={18} />}
-              onPress={send}
-              selected
+        <GlassSurface style={{
+          marginBottom: Platform.OS === "ios" ? theme.spacing[5] : theme.spacing[4],
+          borderRadius: theme.radii.card,
+        }}>
+          <View
+            style={{
+              minHeight: 52,
+              maxHeight: 120,
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: theme.spacing[2],
+              paddingLeft: theme.spacing[4],
+              paddingRight: theme.spacing[1],
+              paddingVertical: theme.spacing[1],
+              borderRadius: theme.radii.card,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
+          >
+            <TextInput
+              accessibilityLabel="聊天内容"
+              multiline
+              onChangeText={setInput}
+              onSubmitEditing={send}
+              placeholder="说点什么…"
+              placeholderTextColor={theme.colors.placeholder}
+              selectionColor={theme.colors.accent}
+              style={[
+                theme.typography.textStyles.body,
+                {
+                  flex: 1,
+                  maxHeight: 104,
+                  minHeight: 44,
+                  paddingVertical: 10,
+                  color: theme.colors.textPrimary,
+                  outlineWidth: 0,
+                } as any,
+              ]}
+              value={input}
             />
-          ) : (
-            <IconButton
-              accessibilityLabel={voice.isRecording ? "停止录音" : "语音输入"}
-              disabled={voice.transcribing}
-              selected={voice.isRecording}
-              icon={
-                voice.transcribing ? (
-                  <ActivityIndicator color={theme.colors.accent} size="small" />
-                ) : voice.isRecording ? (
-                  <Square
-                    color={theme.colors.accent}
-                    fill={theme.colors.accent}
-                    size={15}
-                  />
-                ) : (
-                  <Mic color={theme.colors.accent} size={18} />
-                )
-              }
-              onPress={voice.isRecording ? voice.stop : voice.start}
-            />
-          )}
-        </View>
+            {input.trim() ? (
+              <IconButton
+                accessibilityLabel="发送"
+                disabled={thinking}
+                icon={<Send color={theme.colors.accent} size={18} />}
+                onPress={send}
+                selected
+              />
+            ) : (
+              <IconButton
+                accessibilityLabel={voice.isRecording ? "停止录音" : "语音输入"}
+                disabled={voice.transcribing}
+                selected={voice.isRecording}
+                icon={
+                  voice.transcribing ? (
+                    <ActivityIndicator color={theme.colors.accent} size="small" />
+                  ) : voice.isRecording ? (
+                    <Square
+                      color={theme.colors.accent}
+                      fill={theme.colors.accent}
+                      size={15}
+                    />
+                  ) : (
+                    <Mic color={theme.colors.accent} size={18} />
+                  )
+                }
+                onPress={voice.isRecording ? voice.stop : voice.start}
+              />
+            )}
+          </View>
+        </GlassSurface>
       </View>
     </KeyboardAvoidingView>
   );

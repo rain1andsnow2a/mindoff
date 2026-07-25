@@ -10,31 +10,67 @@ import {
 
 import { useTheme } from "../theme";
 import { spacing, touchTarget } from "../tokens";
+import { GrainTexture } from "./effects";
+
+type CardVariant = "default" | "elevated" | "emphasized";
 
 type CardProps = {
   children: React.ReactNode;
+  /** 卡片变体：default（白底无阴影）、elevated（白底+弱阴影）、emphasized（强调背景） */
+  variant?: CardVariant;
+  /** @deprecated 使用 variant="emphasized" 代替 */
   emphasized?: boolean;
+  /** 是否叠加 grain 纹理 */
+  grainy?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
 export function Card({
   children,
-  emphasized = false,
+  variant,
+  emphasized: _emphasizedDeprecated = false,
+  grainy = false,
   onPress,
   style,
 }: CardProps) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
+
+  const resolvedVariant: CardVariant = variant ?? (_emphasizedDeprecated ? "emphasized" : "default");
+
+  const variantStyle: ViewStyle = resolvedVariant === "emphasized"
+    ? {
+        borderColor: theme.colors.accentSoft,
+        backgroundColor: theme.colors.accentSoft,
+      }
+    : resolvedVariant === "elevated"
+    ? {
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+        ...theme.shadows.soft,
+      }
+    : {
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface,
+      };
+
   const baseStyle: ViewStyle = {
     padding: spacing[5],
     borderRadius: theme.radii.card,
     borderWidth: 1,
-    borderColor: emphasized ? theme.colors.accentSoft : theme.colors.border,
-    backgroundColor: emphasized ? theme.colors.accentSoft : theme.colors.surface,
+    overflow: "hidden",
+    ...variantStyle,
   };
 
-  if (!onPress) return <View style={[baseStyle, style]}>{children}</View>;
+  const content = (
+    <>
+      {grainy && <GrainTexture />}
+      {children}
+    </>
+  );
+
+  if (!onPress) return <View style={[baseStyle, style]}>{content}</View>;
 
   return (
     <Pressable
@@ -44,12 +80,12 @@ export function Card({
       onPress={onPress}
       style={({ pressed }) => [
         baseStyle,
-        hovered && !emphasized ? { backgroundColor: theme.colors.surfaceHover } : null,
+        hovered && resolvedVariant === "default" ? { backgroundColor: theme.colors.surfaceHover } : null,
         { opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.99 : 1 }] },
         style,
       ]}
     >
-      {children}
+      {content}
     </Pressable>
   );
 }

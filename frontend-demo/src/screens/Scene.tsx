@@ -525,47 +525,6 @@ function SceneSummaryPreview({ narration, onBack, onConfirm }: {
 
 // ─── Character Setup（三步）───────────────────────────────────────────────────
 
-// step 2「正在整理 TA」：呼吸光点（等待中）+ 逐条淡入上浮（出结果），方案 B
-function BreathingDot() {
-  const theme = useTheme();
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(v, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [v]);
-  return (
-    <Animated.View style={{
-      width: 9, height: 9, borderRadius: 5, backgroundColor: theme.colors.accent,
-      transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.15] }) }],
-      opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
-    }} />
-  );
-}
-
-function TraitRow({ text, index, last, color }: { text: string; index: number; last: boolean; color: string }) {
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    // 逐条延迟浮现：像 TA 的样子一点点被想起来
-    Animated.timing(v, {
-      toValue: 1, duration: 420, delay: index * 300, easing: Easing.out(Easing.ease), useNativeDriver: true,
-    }).start();
-  }, [v]);
-  return (
-    <Animated.View style={{
-      flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingVertical: 12,
-      borderBottomWidth: last ? 0 : 1, borderBottomColor: "rgba(91,79,62,0.06)",
-      opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
-    }}>
-      <View style={{ width: 6, height: 6, borderRadius: 3, marginTop: 6, backgroundColor: "rgba(196,149,58,0.55)" }} />
-      <Text style={{ fontSize: 14, lineHeight: 20, flex: 1, color }}>{text}</Text>
-    </Animated.View>
-  );
-}
-
 function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
   scene: BuiltInScene | null;
   /** 走「描述场景」路径时带上场景整理结果，用来预填称呼/关系/行为倾向 */
@@ -574,32 +533,33 @@ function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
   onReady: (char: CharReady) => void;
 }) {
   const { theme, C } = useSceneSurface();
-  const [step, setStep] = useState(0);
   const [name, setName] = useState(parsed?.people ?? "");
   const [rel, setRel] = useState(parsed?.relation || scene?.relationships[0] || "");
   const [desc, setDesc] = useState("");
   const [adjusted, setAdjusted] = useState("");
   const [entryRipple, setEntryRipple] = useState(false);
-  // step 2 的行为倾向由后端整理（原来是写死的 mockTraits）
-  const [traits, setTraits] = useState<string[]>(parsed?.counterpart_traits ?? []);
-  const [traitsLoading, setTraitsLoading] = useState(false);
-  const [traitsError, setTraitsError] = useState("");
 
-  const buildTraits = React.useCallback(() => {
-    setTraitsLoading(true);
-    setTraitsError("");
+  // 静默请求后端整理 TA 的行为倾向（不阻塞进入，traits 在搭建时一并使用）
+  const traitsRef = React.useRef<string[]>(parsed?.counterpart_traits ?? []);
+  const traitsFiredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (traitsFiredRef.current) return;
+    if (!name && !desc) return;
+    traitsFiredRef.current = true;
     parseSceneRole({
       name, relation: rel, desc,
       extra_traits: parsed?.counterpart_traits ?? [],
     })
-      .then((res) => setTraits(res.traits ?? []))
-      .catch((e) => setTraitsError(e?.message ?? "整理失败"))
-      .finally(() => setTraitsLoading(false));
+      .then((res) => { traitsRef.current = res.traits ?? []; })
+      .catch(() => { /* 静默失败，不影响进入 */ });
   }, [name, rel, desc, parsed]);
 
-  const goStep2 = () => {
-    setStep(2);
-    buildTraits();
+  const handleEnter = () => {
+    setEntryRipple(true);
+    setTimeout(() => {
+      setEntryRipple(false);
+      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits: traitsRef.current });
+    }, 380);
   };
 
   return (
@@ -620,147 +580,83 @@ function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
             }}>
             <ChevronLeft size={16} color={C.text2} />
           </Pressable>
-          <View style={{ flex: 1, flexDirection: "row", justifyContent: "center", gap: 6 }}>
-            {[0, 1, 2].map(i => (
-              <View key={i} style={{
-                height: 4, width: 32, borderRadius: 2,
-                backgroundColor: i <= step ? "rgba(196,149,58,0.65)" : "rgba(91,79,62,0.12)",
-              }} />
-            ))}
-          </View>
-          <View style={{ width: 32 }} />
+          <View style={{ flex: 1 }} />
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
-          {step === 0 && (
-            <>
-              <View>
-                <Text style={{ fontSize: 20, fontWeight: "500", marginBottom: 6, color: C.text }}>这个场景里，谁在你面前？</Text>
-                <Text style={{ fontSize: 13, color: C.muted }}>不需要真实姓名，用你习惯的称呼。</Text>
-              </View>
-              <View style={{ gap: 12 }}>
-                <TextInput
-                  value={name} onChangeText={setName}
-                  placeholder="比如：妈妈、她、老朋友…" placeholderTextColor={C.placeholder}
-                  style={{
-                    paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 15,
-                    backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", color: "#484145",
-                  }}
-                />
-                <View>
-                  <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>关系</Text>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {(scene?.relationships ?? ["朋友", "家人", "恋人", "同事"]).map(r => (
-                      <Pressable key={r} onPress={() => setRel(r)}
-                        style={{
-                          paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                          backgroundColor: rel === r ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
-                          borderWidth: rel === r ? 1.5 : 1,
-                          borderColor: rel === r ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
-                        }}>
-                        <Text style={{ fontSize: 13, color: C.text }}>{r}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              </View>
-              <View style={{ marginTop: 16 }}>
-                <Button onPress={() => setStep(1)} fullWidth disabled={!rel}>继续</Button>
-              </View>
-            </>
-          )}
+          {/* 第一步：谁在你面前 */}
+          <View>
+            <Text style={{ fontSize: 20, fontWeight: "500", marginBottom: 6, color: C.text }}>这个场景里，谁在你面前？</Text>
+            <Text style={{ fontSize: 13, color: C.muted }}>不需要真实姓名，用你习惯的称呼就好。</Text>
+          </View>
 
-          {step === 1 && (
-            <>
-              <View>
-                <Text style={{ fontSize: 20, fontWeight: "500", marginBottom: 6, color: C.text }}>
-                  像向一个没见过 TA 的朋友那样，介绍一下 TA。
-                </Text>
-                <Text style={{ fontSize: 13, color: C.muted }}>
-                  TA 平时怎么说话？遇到冲突时会怎样？有什么话总是不愿意直接说？
-                </Text>
-              </View>
-              <TextInput
-                value={desc} onChangeText={setDesc}
-                placeholder={`比如：${name || "她"}平时说话比较直，不太表达关心，但其实很在意我…`}
-                placeholderTextColor={C.placeholder}
-                multiline
-                style={{
-                  minHeight: 120, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 14, lineHeight: 22,
-                  backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
-                  color: "#484145", textAlignVertical: "top",
-                }}
-              />
-              <View style={{ alignItems: "center", gap: 8 }}>
-                <Pressable style={{
-                  width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-                  backgroundColor: "rgba(246,231,168,0.72)", borderWidth: 2, borderColor: "rgba(255,255,255,0.55)",
-                }}>
-                  <Mic size={18} color={theme.colors.accent} />
-                </Pressable>
-                <Text style={{ fontSize: 11, color: C.muted }}>也可以说</Text>
-              </View>
-              <Button onPress={goStep2} fullWidth>整理一下</Button>
-            </>
-          )}
+          <TextInput
+            value={name} onChangeText={setName}
+            placeholder="比如：妈妈、她、老朋友…" placeholderTextColor={C.placeholder}
+            style={{
+              paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 15,
+              backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", color: "#484145",
+            }}
+          />
 
-          {step === 2 && (
-            <>
-              <View>
-                <Text style={{ fontSize: 13, marginBottom: 2, color: C.muted }}>根据你说的，</Text>
-                <Text style={{ fontSize: 20, fontWeight: "500", color: C.text }}>{name || "TA"}，在这场对话中：</Text>
-              </View>
-              <View style={{
-                borderRadius: 20, overflow: "hidden",
-                backgroundColor: "rgba(255,252,245,0.78)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
-              }}>
-                {traitsLoading ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 20, paddingVertical: 18 }}>
-                    <BreathingDot />
-                    <Text style={{ fontSize: 14, color: theme.colors.accent }}>我在慢慢回想你说的 TA…</Text>
-                  </View>
-                ) : traits.length === 0 ? (
-                  <View style={{ paddingHorizontal: 20, paddingVertical: 18 }}>
-                    <Text style={{ fontSize: 14, lineHeight: 20, color: C.muted }}>
-                      {traitsError || "你说得还不多，直接进入也可以，之后在场景里说「TA 不太像」就能校准。"}
-                    </Text>
-                  </View>
-                ) : (
-                  traits.map((trait, i) => (
-                    <TraitRow key={`${i}-${trait}`} text={trait} index={i} last={i === traits.length - 1} color={C.text} />
-                  ))
-                )}
-              </View>
-              <View>
-                <TextInput
-                  value={adjusted} onChangeText={setAdjusted}
-                  placeholder="有一点不像？补充一句…" placeholderTextColor={C.placeholder}
+          <View>
+            <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>关系</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {(scene?.relationships ?? ["朋友", "家人", "恋人", "同事"]).map(r => (
+                <Pressable key={r} onPress={() => setRel(r)}
                   style={{
-                    paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, fontSize: 14,
-                    backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", color: "#484145",
-                  }}
-                />
-                <Text style={{ fontSize: 11, marginTop: 12, textAlign: "center", color: C.muted }}>
-                  人物设定仅用于本次场景，离开后会清除。
-                </Text>
-              </View>
-              <View style={{ gap: 8, marginTop: 8 }}>
-                <View>
-                  <CreamRipple active={entryRipple} />
-                  <Button onPress={() => {
-                    setEntryRipple(true);
-                    setTimeout(() => {
-                      setEntryRipple(false);
-                      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits });
-                    }, 380);
-                  }} fullWidth>就是这样的，进入场景</Button>
-                </View>
-                <Pressable onPress={() => setStep(1)} style={{ paddingVertical: 12, alignItems: "center" }}>
-                  <Text style={{ fontSize: 13, color: C.muted }}>有一点不像，重新描述</Text>
+                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
+                    backgroundColor: rel === r ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
+                    borderWidth: rel === r ? 1.5 : 1,
+                    borderColor: rel === r ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
+                  }}>
+                  <Text style={{ fontSize: 13, color: C.text }}>{r}</Text>
                 </Pressable>
-              </View>
-            </>
-          )}
+              ))}
+            </View>
+          </View>
+
+          {/* 第二步：介绍一下 TA */}
+          <View style={{ marginTop: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: C.text }}>
+              像向一个没见过 TA 的朋友那样，介绍一下 TA。
+            </Text>
+            <Text style={{ fontSize: 13, color: C.muted }}>
+              TA 平时怎么说话？遇到冲突时会怎样？想到什么说什么，不用很准确。
+            </Text>
+          </View>
+
+          <TextInput
+            value={desc} onChangeText={setDesc}
+            placeholder={`比如：${name || "她"}平时说话比较直，不太表达关心，但其实很在意我…`}
+            placeholderTextColor={C.placeholder}
+            multiline
+            style={{
+              minHeight: 100, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 14, lineHeight: 22,
+              backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+              color: "#484145", textAlignVertical: "top",
+            }}
+          />
+
+          {/* 可选：补充校准 */}
+          <TextInput
+            value={adjusted} onChangeText={setAdjusted}
+            placeholder="还有什么想补充的？（可选）" placeholderTextColor={C.placeholder}
+            style={{
+              paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, fontSize: 14,
+              backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", color: "#484145",
+            }}
+          />
+
+          <View style={{ gap: 8, marginTop: 8 }}>
+            <View>
+              <CreamRipple active={entryRipple} />
+              <Button onPress={handleEnter} fullWidth>进入场景</Button>
+            </View>
+            <Text style={{ fontSize: 11, textAlign: "center", color: C.muted }}>
+              人物设定仅用于本次场景，离开后会清除。进入后觉得 TA 不太像，随时可以校准。
+            </Text>
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -1238,13 +1134,24 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
           <Text style={{ fontSize: 13, fontWeight: "500", color: "rgba(255,255,255,0.9)" }}>{sceneName}</Text>
           <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{charName}</Text>
         </View>
-        <Pressable onPress={onEnd}
-          style={{
-            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-            backgroundColor: "rgba(255,252,245,0.22)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)",
-          }}>
-          <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.72)" }}>离开</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable onPress={() => phase !== "busy" && setShowAdjust(true)}
+            disabled={phase === "busy"}
+            style={{
+              paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+              backgroundColor: "rgba(255,252,245,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.28)",
+              opacity: phase === "busy" ? 0.4 : 1,
+            }}>
+            <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>TA不太像</Text>
+          </Pressable>
+          <Pressable onPress={onEnd}
+            style={{
+              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+              backgroundColor: "rgba(255,252,245,0.22)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)",
+            }}>
+            <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.72)" }}>离开</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Character（box-none：空白区手势穿透到底层 Scene3D，可拖动转视角；角色/按钮本身仍可点）
@@ -1259,7 +1166,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
       {/* playing / busy：电影字幕层（半透明渐变，尽量露出背后的 3D 舞台） */}
       {(phase === "playing" || phase === "busy") && (
         <LinearGradient
-          colors={["transparent", "rgba(20,14,10,0.5)", "rgba(20,14,10,0.9)"]}
+          colors={["transparent", "rgba(20,14,10,0.25)", "rgba(20,14,10,0.55)"]}
           style={{ paddingTop: 72, paddingHorizontal: 16, paddingBottom: 14, zIndex: 10 }}>
           {/* 旁白 / 对白：限高，可下拉滚动看全文 */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
@@ -1274,7 +1181,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
               </View>
             )}
           </View>
-          <ScrollView style={{ maxHeight: 148 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+          <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
             <Text style={{ fontSize: 15, lineHeight: 24, color: "rgba(255,255,255,0.95)" }}>
               {isStreaming ? streamText : (latestBeat?.text ?? "……")}
             </Text>
@@ -1292,17 +1199,17 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
                   <Text style={{ fontSize: 13, lineHeight: 19, color: "#FFFFFF" }}>{choice.label}</Text>
                 </Pressable>
               ))}
-              {/* 第三项：自己说（点开展开输入行） */}
+              {/* 第三项：自己说（与预设选项同等视觉权重） */}
               {!showCustom ? (
                 <Pressable onPress={() => setShowCustom(true)}
                   style={{
                     flexDirection: "row", alignItems: "center", gap: 7,
                     paddingVertical: 11, paddingHorizontal: 15, borderRadius: 16,
-                    borderWidth: 1, borderColor: "rgba(255,255,255,0.3)", borderStyle: "dashed",
-                    backgroundColor: "rgba(255,252,245,0.06)",
+                    borderWidth: 1, borderColor: "rgba(255,255,255,0.24)",
+                    backgroundColor: "rgba(246,231,168,0.14)",
                   }}>
-                  <Edit3 size={13} color="rgba(255,255,255,0.72)" />
-                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.72)" }}>自己说……</Text>
+                  <Edit3 size={13} color="rgba(255,255,255,0.78)" />
+                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.82)" }}>自己说……</Text>
                 </Pressable>
               ) : (
                 <View style={{
