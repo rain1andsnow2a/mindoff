@@ -492,3 +492,62 @@
 - 手机导航：底部导航。
 - 动效：克制、柔和。
 - 推进方式：设计基础先行，陪伴模块作为首个完整样板，逐组验证和确认。
+
+## 14. 已实施记录（2026-07-25 · 分支 `refactor/frontend-visual-v2`）
+
+以下设计与交互原则已在本文指导下实施并提交，后续开发应保持一致性。
+
+### 14.1 强调色统一
+
+日间模式的通用交互强调色已统一为暖金体系：
+
+- `accent: "#B8860B"`（暖金棕）— 用于文字、图标、焦点等前景强调
+- `accentSurface: "#F6E7A8"`（奶油鹅黄）— 用于按钮实底、选中背景等承载面
+- `textOnAccent: "#4B463F"` — accentSurface 上的文字前景
+- 底部导航和侧栏的选中态使用此体系，不再使用砖红或暗红
+
+**规则**：新组件和页面迁移使用 `theme.colors.accent` / `accentSurface` / `textOnAccent`，不自行定义强调色。
+
+### 14.2 玻璃质感（GlassSurface）
+
+关键半透明面板使用 `BlurView`（expo-blur）叠加暖色半透明层，逼近 Proto 的 glass morphism 效果。
+
+- `GlassSurface` 组件位于 `design-system/components/effects.tsx`
+- 已应用于：底部导航栏、陪伴首页输入框、聊天输入框
+- **规则**：页面级输入区域优先使用 `GlassSurface`，不自行拼接模糊与半透明
+- **约束**：low intensity (8–12) + 半透明色叠加，避免 Android 模糊性能问题
+
+### 14.3 纸张纹理（GrainTexture）
+
+卡片可叠加微弱 SVG 噪点纹理，营造"纸质感"。
+
+- `GrainTexture` 组件位于 `design-system/components/effects.tsx`
+- `Card` 组件的 `grainy` prop 可直接启用
+- 已应用于：珍藏卡（KeepsakeArtifact）、信纸（LetterPaper）
+- **规则**：珍藏、信纸、结算卡等"值得停留"的内容卡片应启用 grain
+- **约束**：受 reduced motion / reduce transparency 设置控制，性能开销极低
+
+### 14.4 Card 变体
+
+`Card` 组件正式支持三种变体：
+
+| 变体 | 用途 |
+|---|---|
+| `default` | 普通内容容器，白底无阴影 |
+| `elevated` | 重要卡片，白底 + 极弱阴影 |
+| `emphasized` | 强调卡片，暖背景（替代旧 `emphasized` prop） |
+
+### 14.5 片场角色设定 — 单页对话式
+
+角色设定从三步填表（名字→描述→traits 确认）改为单页对话式：
+
+- 姓名 + 关系 + 描述 + 可选补充在同一页面
+- 行为倾向（traits）静默请求后端，不阻塞进入
+- 移除了渐入动画 traits 列表和等待步骤
+- 保留 `adjusted` 字段作为可选"还有什么想补充的"输入
+
+### 14.6 片场演绎体验
+
+- **字幕渐变透明度**：从 90% 减至 55%，让 3D 剧场背景更可见
+- **"TA 不太像"常驻**：演绎中顶部栏始终显示校准入口，无需暂停
+- **"自己说"视觉权重**：从虚线幽灵按钮提升为与预设选项同等的实底选项
