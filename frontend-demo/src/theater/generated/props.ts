@@ -516,6 +516,240 @@ function teacup(p: Params) {
   return markShadows(g);
 }
 
+// ─── 街道 / 校门件 ─────────────────────────────────────────────────
+
+/** 沥青路面：沿 X 轴的深色长条 + 可选中线虚线（路向用 rotY 旋转）。 */
+function road(p: Params) {
+  const g = new THREE.Group();
+  const w = numOf(p.width, 8), len = numOf(p.length, 40);
+  const surface = new THREE.Mesh(new THREE.PlaneGeometry(len, w),
+    new THREE.MeshStandardMaterial({ color: hexNum(p.color, 0x3a3d42), roughness: 1 }));
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = 0.01;
+  surface.receiveShadow = true;
+  g.add(surface);
+  const dashMat = new THREE.MeshBasicMaterial({ color: hexNum(p.line, 0xd8c86a) });
+  for (let i = 0; i < Math.floor(len / 3); i++) {
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.18), dashMat);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(-len / 2 + 1 + i * 3, 0.02, 0);
+    g.add(dash);
+  }
+  return g;
+}
+
+/** 斑马线：一排白色横条。 */
+function crosswalk(p: Params) {
+  const g = new THREE.Group();
+  const bars = Math.max(3, Math.round(numOf(p.bars, 6)));
+  const mat = new THREE.MeshBasicMaterial({ color: hexNum(p.color, 0xe8e6e0) });
+  for (let i = 0; i < bars; i++) {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 3), mat);
+    bar.rotation.x = -Math.PI / 2;
+    bar.position.set(-bars * 0.35 + i * 0.7, 0.02, 0);
+    g.add(bar);
+  }
+  return g;
+}
+
+/** 校门：两根门柱 + 顶部横梁 + 横匾（校门意象）。 */
+function schoolGate(p: Params) {
+  const g = new THREE.Group();
+  const pillarMat = flatMat(hexNum(p.color, 0x9a8a72), 0.9);
+  const w = numOf(p.width, 4), h = numOf(p.height, 3);
+  const mkPillar = (x: number) => {
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(0.5, h, 0.5), pillarMat);
+    pil.position.set(x, h / 2, 0);
+    pil.castShadow = true;
+    return pil;
+  };
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.5, 0.4), pillarMat);
+  beam.position.y = h + 0.1;
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.45, 0.06),
+    new THREE.MeshStandardMaterial({ color: hexNum(p.sign, 0x8a2a2a), roughness: 0.6 }));
+  sign.position.set(0, h + 0.1, 0.24);
+  g.add(mkPillar(-w / 2), mkPillar(w / 2), beam, sign);
+  return g;
+}
+
+/** 栏杆/围栏：立柱 + 上下两道横杆。 */
+function railing(p: Params) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: hexNum(p.color, 0x8a8f96), roughness: 0.5, metalness: 0.4 });
+  const len = numOf(p.length, 6), h = numOf(p.height, 1.0);
+  const posts = Math.max(2, Math.round(len / 1.2));
+  for (let i = 0; i < posts; i++) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, h, 6), mat);
+    post.position.set(-len / 2 + i * (len / (posts - 1)), h / 2, 0);
+    g.add(post);
+  }
+  [h * 0.95, h * 0.5].forEach((y) => {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, 0.05), mat);
+    rail.position.set(0, y, 0);
+    g.add(rail);
+  });
+  return g;
+}
+
+/** 单栋楼：低多边形楼体 + 正面窗格阵列（前景建筑，如教学楼）。 */
+function building(p: Params) {
+  const g = new THREE.Group();
+  const w = numOf(p.width, 5), h = numOf(p.height, 8), d = numOf(p.depth, 4);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), flatMat(hexNum(p.color, 0xb8a894), 1));
+  body.position.y = h / 2;
+  body.castShadow = true;
+  g.add(body);
+  const winMat = new THREE.MeshBasicMaterial({ color: hexNum(p.window, 0x8fb0d8) });
+  const cols = Math.max(2, Math.floor(w / 1.2)), rows = Math.max(2, Math.floor(h / 1.6));
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7), winMat);
+      win.position.set(
+        -w / 2 + 0.8 + (c * (w - 1.6)) / Math.max(1, cols - 1),
+        1 + (r * (h - 1.6)) / Math.max(1, rows - 1),
+        d / 2 + 0.01,
+      );
+      g.add(win);
+    }
+  }
+  return g;
+}
+
+// ─── 城市设施件 ───────────────────────────────────────────────
+
+/** 公交站台：顶棚 + 立柱 + 长椅 + 站牌（等待/告别场景）。 */
+function busStop(p: Params) {
+  const g = new THREE.Group();
+  const mat = flatMat(hexNum(p.color, 0x6a7078), 0.6);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.12, 1.3), mat);
+  roof.position.y = 2.4;
+  g.add(roof);
+  ([-1.4, 1.4] as const).forEach((x) => {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), mat);
+    post.position.set(x, 1.2, -0.5);
+    g.add(post);
+  });
+  const seatMat = flatMat(hexNum(p.seat, 0x8a7f70), 0.8);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.08, 0.4), seatMat);
+  seat.position.set(0, 0.45, -0.4);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.4, 0.06), seatMat);
+  back.position.set(0, 0.72, -0.6);
+  g.add(seat, back);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.2, 8), mat);
+  pole.position.set(1.9, 1.1, 0.5);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.05),
+    new THREE.MeshStandardMaterial({ color: hexNum(p.sign, 0x3a6ea8), roughness: 0.6 }));
+  board.position.set(1.9, 2.0, 0.5);
+  g.add(pole, board);
+  return markShadows(g);
+}
+
+/** 低多边形小车：车身 + 车厢 + 四轮 + 车头灯；params.drive 开启则缓慢驶过并循环。 */
+function car(p: Params) {
+  const g = new THREE.Group();
+  const inner = new THREE.Group();
+  const bodyMat = flatMat(hexNum(p.color, 0x7a8a9a), 0.5);
+  const lower = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.6, 1.5), bodyMat);
+  lower.position.y = 0.55;
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.6, 1.35), bodyMat);
+  cabin.position.set(-0.2, 1.05, 0);
+  inner.add(lower, cabin);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.8 });
+  ([[-1.1, 0.75], [1.1, 0.75], [-1.1, -0.75], [1.1, -0.75]] as const).forEach(([x, z]) => {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.24, 12), wheelMat);
+    wheel.rotation.x = Math.PI / 2;
+    wheel.position.set(x, 0.3, z);
+    inner.add(wheel);
+  });
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xfff2c8, fog: false });
+  ([-0.55, 0.55] as const).forEach((z) => {
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), headMat);
+    head.position.set(1.72, 0.6, z);
+    inner.add(head);
+  });
+  markShadows(inner);
+  g.add(inner);
+  if (p.drive) {
+    const span = numOf(p.driveSpan, 24), speed = numOf(p.driveSpeed, 2.2);
+    g.userData.update = (t: number) => { inner.position.x = ((t * speed) % span) - span / 2; };
+  }
+  return g;
+}
+
+/** 电话亭：红框 + 半透玻璃 + 顶牌 + 暖色内光（深夜通话意象）。 */
+function phoneBooth(p: Params) {
+  const g = new THREE.Group();
+  const frameMat = flatMat(hexNum(p.color, 0x9a3b3b), 0.5);
+  const w = 0.95, h = 2.4, d = 0.95;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, d), frameMat);
+  base.position.y = 0.06;
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.18, d + 0.1), frameMat);
+  roof.position.y = h;
+  g.add(base, roof);
+  ([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).forEach(([sx, sz]) => {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.08), frameMat);
+    post.position.set(sx * (w / 2 - 0.04), h / 2, sz * (d / 2 - 0.04));
+    g.add(post);
+  });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xbfe0e8, roughness: 0.1, transparent: true, opacity: 0.22 });
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.14, h - 0.4), glassMat);
+  front.position.set(0, h / 2, d / 2 - 0.02);
+  const left = front.clone(); left.rotation.y = Math.PI / 2; left.position.set(-w / 2 + 0.02, h / 2, 0);
+  const right = left.clone(); right.position.x = w / 2 - 0.02;
+  g.add(front, left, right);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, 0.28, d + 0.12),
+    new THREE.MeshBasicMaterial({ color: hexNum(p.sign, 0xffcf8a), fog: false }));
+  sign.position.y = h - 0.16;
+  g.add(sign);
+  const light = new THREE.PointLight(0xffd9a0, 1.1, 4, 1.6);
+  light.position.set(0, h - 0.5, 0);
+  g.add(light);
+  return g;
+}
+
+/** 自动贩卖机：机体 + 自发光面板 + 出货口 + 微光溢出（夜里氛围）。 */
+function vendingMachine(p: Params) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.7), flatMat(hexNum(p.body, 0x2c3a44), 0.6));
+  body.position.y = 1.0;
+  body.castShadow = true;
+  const panelColor = hexNum(p.color, 0x6fd0e0);
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.4), new THREE.MeshBasicMaterial({ color: panelColor, fog: false }));
+  panel.position.set(0, 1.2, 0.36);
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.05), flatMat(0x14181c, 0.8));
+  slot.position.set(0, 0.5, 0.36);
+  g.add(body, panel, slot);
+  const light = new THREE.PointLight(panelColor, 0.6, 3, 1.5);
+  light.position.set(0, 1.2, 0.7);
+  g.add(light);
+  return g;
+}
+
+/** 户外咖啡桌：圆桌面 + 支柱 + 底盘。 */
+function cafeTable(p: Params) {
+  const g = new THREE.Group();
+  const mat = flatMat(hexNum(p.color, 0x8a7a5a), 0.8);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 20), mat);
+  top.position.y = 0.72;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.72, 8), mat);
+  pole.position.y = 0.36;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.05, 16), mat);
+  base.position.y = 0.03;
+  g.add(top, pole, base);
+  return markShadows(g);
+}
+
+/** 遮阳伞：伞杆 + 八角伞面。 */
+function parasol(p: Params) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 8), flatMat(0x8a7a5a, 0.8));
+  pole.position.y = 1.2;
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.5, 8), flatMat(hexNum(p.color, 0xcf7a5a), 1));
+  canopy.position.y = 2.35;
+  g.add(pole, canopy);
+  return markShadows(g);
+}
+
 /** 零件注册表：type → 构造器。 */
 const PROP_BUILDERS: Record<string, (p: Params) => THREE.Object3D> = {
   pineTree, rock, bush, chair, table, bench, crate, rug, wall,
@@ -524,8 +758,12 @@ const PROP_BUILDERS: Record<string, (p: Params) => THREE.Object3D> = {
   water, bed, cityscape, platform, train, airportSeats, departureBoard,
   // 氛围动画
   rain, stringLights, fireflies,
-  // 情感锤点小物
+  // 情感锚点小物
   emptyChair, photoFrame, teacup,
+  // 街道 / 校门
+  road, crosswalk, schoolGate, railing, building,
+  // 城市设施
+  busStop, car, phoneBooth, vendingMachine, cafeTable, parasol,
 };
 
 /** 所有可用零件 type，供 LLM prompt / 校验使用。 */

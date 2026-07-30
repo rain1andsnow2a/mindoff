@@ -27,6 +27,10 @@ ALLOWED_PROPS = {
     "rain", "stringLights", "fireflies",
     # 情感锚点小物
     "emptyChair", "photoFrame", "teacup",
+    # 街道 / 校门
+    "road", "crosswalk", "schoolGate", "railing", "building",
+    # 城市设施
+    "busStop", "car", "phoneBooth", "vendingMachine", "cafeTable", "parasol",
 }
 ALLOWED_TIME = {"day", "dusk", "night"}
 ALLOWED_MODE = {"indoor", "outdoor"}
@@ -66,6 +70,10 @@ SPEC_SYSTEM_PROMPT = """\
 - 零件数量 3~10 个；人物 1~2 个，正好对应用户描述里的人。
 - 颜色用低饱和、柔和的色，贴合治愈氛围；夜晚偏冷、白天偏暖。
 - 只摆放能体现「地点 + 氛围」的关键件，不要堆砌。宁少勿多、宁简勿写实。
+- 画街道/校门/小区等室外城市场景时，优先用 road（路面）、crosswalk（斑马线）、schoolGate（校门）、
+  railing（围栏）、building（楼）、streetlight（路灯）搭出基本环境，再放人物。
+- 等车/告别用 busStop；路上可放 car（想要驶过就 params.drive=true）；深夜街角用 phoneBooth、
+  vendingMachine 增氛围；咖啡店/户外座位用 cafeTable + parasol。
 - 若信息不足以判断室内外/时段，就选最贴合情绪的合理默认。
 """
 

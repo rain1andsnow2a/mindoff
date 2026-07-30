@@ -3,13 +3,13 @@
  * 创建流程（口述→整理→角色设定）以子状态在本组件内切换，搭建中/失败用覆盖层呈现。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, Text, View } from "react-native";
-import { ChevronLeft } from "lucide-react-native";
+import { Animated, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ChevronLeft, Trash2 } from "lucide-react-native";
 import {
   Button, Card, PageContainer, PageHeader, useResponsive,
 } from "../../design-system";
 import {
-  listSceneTemplates, listScenes, createScene,
+  listSceneTemplates, listScenes, createScene, deleteScene,
   listCandidates, dismissCandidate, streamConfirmCandidate,
 } from "../../api";
 import type { SceneParseResult } from "../../api";
@@ -56,6 +56,23 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
     listCandidates()
       .then((list) => setCandidates(Array.isArray(list) ? list : []))
       .catch(() => {});
+
+  // 删除已生成的场景（长按触发，二次确认）；成功后从列表移除。
+  const handleDeleteScene = (s: MyScene) => {
+    Alert.alert("删除这个场景？", `「${s.title}」删除后无法恢复。`, [
+      { text: "取消", style: "cancel" },
+      {
+        text: "删除", style: "destructive",
+        onPress: () => {
+          setMyScenes((prev) => prev.filter((x) => x.id !== s.id));
+          deleteScene(s.id).catch(() => {
+            // 失败则拉回最新列表（避免假删）
+            listScenes().then((list) => setMyScenes(Array.isArray(list) ? list : [])).catch(() => {});
+          });
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     listSceneTemplates()
@@ -242,7 +259,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
           <View style={{ marginBottom: theme.spacing[5] }}>
             <Text style={[theme.typography.textStyles.sectionTitle, { marginBottom: theme.spacing[3], color: C.text }]}>我的场景</Text>
             {myScenes.map(s => (
-              <Pressable key={s.id} onPress={() => onPlay(s.id)}
+              <Pressable key={s.id} onPress={() => onPlay(s.id)} onLongPress={() => handleDeleteScene(s)}
                 style={({ pressed }) => [{
                   padding: theme.spacing[4], borderRadius: theme.radii.card, marginBottom: theme.spacing[2], flexDirection: "row", alignItems: "center",
                   backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
@@ -254,6 +271,11 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
                     {s.status === "settled" ? "已结算" : `进行中 · 第 ${s.turn} 轮`}
                   </Text>
                 </View>
+                {/* 删除：点按也可删（含二次确认），与长按等效 */}
+                <Pressable onPress={() => handleDeleteScene(s)} hitSlop={10}
+                  style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
+                  <Trash2 size={15} color={C.muted} />
+                </Pressable>
                 <ChevronLeft size={15} color={C.muted} style={{ transform: [{ rotate: "180deg" }] }} />
               </Pressable>
             ))}

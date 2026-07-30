@@ -317,6 +317,8 @@ export const parseSceneRole = (b: {
 
 export const listScenes = () => get("/api/v1/scenes");
 export const getScene = (id: number) => get(`/api/v1/scenes/${id}`);
+/** 删除场景（仅属主，后端 204）。 */
+export const deleteScene = (id: number) => del<void>(`/api/v1/scenes/${id}`);
 /** 非流即时建场景（方案B 一键进入用）：可带 theater_id，返回含 scene_id/theater_id 的 SceneOut。
  *
  * render_kind=dynamic_image 时后端要跑「剧本 LLM + 两张文生图」，实测 60–90s，

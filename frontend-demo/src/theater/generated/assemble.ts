@@ -27,12 +27,12 @@ const TIME_PRESETS: Record<TimeOfDay, {
     ambient: { color: 0x33415e, intensity: 0.7 }, dir: { color: 0x8fa8d8, intensity: 0.5, pos: [20, 35, 25] },
   },
   dusk: {
-    sky: { top: 0x2a2542, bottom: 0x9a5a4a }, ground: 0x3a3330,
-    ambient: { color: 0x5a4a55, intensity: 0.8 }, dir: { color: 0xffb27a, intensity: 0.8, pos: [-25, 18, 20] },
+    sky: { top: 0x2a2542, bottom: 0x9a5a4a }, ground: 0x47403a,
+    ambient: { color: 0x6a5a62, intensity: 1.2 }, dir: { color: 0xffc48c, intensity: 1.15, pos: [-25, 18, 20] },
   },
   day: {
     sky: { top: 0x8fb3e0, bottom: 0xe6eef6 }, ground: 0x8a9a78,
-    ambient: { color: 0xffffff, intensity: 0.75 }, dir: { color: 0xfff2d8, intensity: 0.95, pos: [18, 32, 22] },
+    ambient: { color: 0xffffff, intensity: 1.1 }, dir: { color: 0xfff2d8, intensity: 1.3, pos: [18, 32, 22] },
   },
 };
 
