@@ -285,6 +285,8 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
   const [desc, setDesc] = useState("");
   const [adjusted, setAdjusted] = useState("");
   const [entryRipple, setEntryRipple] = useState(false);
+  // 渲染方式：默认生成式 3D（方案 A），可切回图片 galgame
+  const [renderKind, setRenderKind] = useState<"generated_3d" | "dynamic_image">("generated_3d");
 
   // 静默请求后端整理 TA 的行为倾向（不阻塞进入，traits 在搭建时一并使用）
   const traitsRef = React.useRef<string[]>(parsed?.counterpart_traits ?? []);
@@ -309,7 +311,7 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
     if (enterTimer.current) clearTimeout(enterTimer.current);
     enterTimer.current = setTimeout(() => {
       setEntryRipple(false);
-      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits: traitsRef.current });
+      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits: traitsRef.current, renderKind });
     }, 380);
   };
 
@@ -400,6 +402,23 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
           />
 
           <View style={{ gap: 8, marginTop: 8 }}>
+            {/* 渲染方式选择：3D 场景（生成式低多边形）/ 图片场景（galgame） */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {([["generated_3d", "3D 场景"], ["dynamic_image", "图片场景"]] as const).map(([k, label]) => {
+                const on = renderKind === k;
+                return (
+                  <Pressable key={k} onPress={() => setRenderKind(k)}
+                    style={{
+                      flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center",
+                      backgroundColor: on ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
+                      borderWidth: on ? 1.5 : 1,
+                      borderColor: on ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
+                    }}>
+                    <Text style={{ fontSize: 13, fontWeight: on ? "600" : "400", color: on ? paperColors.ink : paperColors.sub }}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View>
               <CreamRipple active={entryRipple} />
               <Button onPress={handleEnter} fullWidth>进入场景</Button>

@@ -105,8 +105,8 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   };
 
   // 角色设定完成 → 真实生成开场，拿到 scene_id 进入演练
-  // 手动路径走 galgame：非流式 createScene(render_kind=dynamic_image)，后端并发生成背景图+立绘，
-  // 进入 ScenePlay 后按 render_kind 渲染动态图场景（DAY-217）。
+  // 渲染方式由用户在设定页选择（char.renderKind）：generated_3d 生成式 3D / dynamic_image 图片 galgame，
+  // 后端据此产 SceneSpec 或背景图+立绘，进入 ScenePlay 后按 render_kind 渲染。
   //
   // ⚠️ 失败时**不能**卸载 CharacterSetupSheet：它一卸载 step/输入全丢，用户会被莫名
   // 甩回「谁在你面前」第一步。所以 generating/genError 都用覆盖层呈现（见下方 return）。
@@ -127,7 +127,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
         char.adjusted ? `补充：${char.adjusted}` : "",
       ].filter(Boolean).join("。"),
       intent: p?.intent || char.adjusted || char.desc || "试着说出没说的话",
-      render_kind: "dynamic_image",
+      render_kind: char.renderKind,
     };
     createScene(fields)
       .then((scene) => {

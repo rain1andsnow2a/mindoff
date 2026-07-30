@@ -30,11 +30,13 @@ class Scene(Base):
     history: Mapped[list | None] = mapped_column(JSON, nullable=True)   # [{turn, choice}]
     turn: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    # 渲染方式：preset_3d 走前端预置 Three.js 舞台；dynamic_image 走动态 galgame（背景图+立绘）
+    # 渲染方式：preset_3d 走前端预置 Three.js 舞台；dynamic_image 走动态 galgame（背景图+立绘）；
+    # generated_3d 走生成式 3D（LLM 产 SceneSpec，前端 assembleScene 拼装低多边形场景）
     render_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="preset_3d")
     theater_id: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 预置舞台 id（后端正式持有）
     bg_image: Mapped[str | None] = mapped_column(String(255), nullable=True)   # /static 相对 URL
     characters: Mapped[list | None] = mapped_column(JSON, nullable=True)       # [{name, sprite_url}]
+    scene_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)       # generated_3d 的 SceneSpec（env/props/characters/lighting/camera）
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

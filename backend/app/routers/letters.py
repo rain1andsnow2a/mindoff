@@ -228,9 +228,15 @@ def accept_scene_invite(
         intent=seed.get("intent") or None,
     )
 
-    # 动态 galgame：从 seed 生成背景 + 立绘（失败降级为无图，前端兜底渐变背景）
+    # 渲染分流：generated_3d 产 SceneSpec（失败降级 galgame）；dynamic_image 生成背景+立绘
     bg_image: str | None = None
     characters: list | None = None
+    scene_spec: dict | None = None
+    if render_kind == "generated_3d":
+        from app.services.scene_spec import generate_scene_spec
+        scene_spec = generate_scene_spec(seed)
+        if scene_spec is None:
+            render_kind = "dynamic_image"  # 降级：spec 生成失败
     if render_kind == "dynamic_image":
         bg_image, characters = _gen_scene_images(
             title=seed.get("title") or letter.title,
@@ -251,10 +257,11 @@ def accept_scene_invite(
         choices=opening["choices"],
         history=[],
         turn=0,
-        render_kind=render_kind if render_kind in ("preset_3d", "dynamic_image") else "dynamic_image",
+        render_kind=render_kind if render_kind in ("preset_3d", "dynamic_image", "generated_3d") else "dynamic_image",
         theater_id=theater_id,
         bg_image=bg_image,
         characters=characters,
+        scene_spec=scene_spec,
     )
     db.add(scene)
     db.commit()

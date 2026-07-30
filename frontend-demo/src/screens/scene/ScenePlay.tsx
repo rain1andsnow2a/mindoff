@@ -203,6 +203,8 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const speakers = new Set((scene?.beats ?? []).map(b => b.speaker).filter(s => s && s !== "旁白"));
   const charName = speakers.size > 0 ? Array.from(speakers)[0] : (scene?.title ?? "TA");
   const isDynamic = scene?.render_kind === "dynamic_image";
+  // 生成式 3D：后端下发 scene_spec，前端 assembleScene 拼装低多边形场景
+  const genSpec = scene?.render_kind === "generated_3d" ? scene?.scene_spec ?? null : null;
   const bgImageUrl = isDynamic ? absUrl(scene?.bg_image) : null;
   const spriteUrl = isDynamic ? absUrl(scene?.characters?.[0]?.sprite_url) : null;
   const spriteCharName = scene?.characters?.[0]?.name;
@@ -284,9 +286,11 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* 场景背景：动态 galgame 用背景图（随回合更新，crossfade 切换），否则预置 3D 舞台 */}
+      {/* 场景背景：动态 galgame 用背景图（随回合更新，crossfade 切换）；生成式 3D 用 SceneSpec 拼装；否则预置 3D 舞台 */}
       {isDynamic ? (
         <DynamicBackground url={bgImageUrl} reducedMotion={reducedMotion} />
+      ) : genSpec ? (
+        <Scene3D spec={genSpec} />
       ) : (
         <Scene3D sceneId={effectiveTheater} />
       )}

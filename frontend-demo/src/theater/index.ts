@@ -13,6 +13,12 @@ import type { TheaterScene, TheaterSceneId } from "./types";
 
 export type { TheaterScene, TheaterSceneId, TheaterCamera } from "./types";
 
+// 生成式场景（方案 A）：LLM 产 SceneSpec → assembleScene 拼装；PROP_TYPES 供 prompt/校验。
+export { assembleScene } from "./generated/assemble";
+export { buildProp, PROP_TYPES } from "./generated/props";
+export { SCENE_SAMPLES } from "./generated/samples";
+export type { SceneSpec, SceneEnv, PropInstance, CharacterInstance } from "./generated/spec";
+
 export const THEATER_SCENES: Record<TheaterSceneId, () => TheaterScene> = {
   campsite: campsite.create,
   bedroom: bedroomWindow.create,

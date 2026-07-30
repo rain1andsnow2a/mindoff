@@ -4,7 +4,7 @@
 - 分析源：当天（东八区）的实时语音通话转写（Conversation mode=voice_call）。
 - LLM 一次性产出结构化推荐 JSON：是否值得推荐、场景种子（人物/地点/剧情/意图）、
   与 6 个预置 three.js 场景的语义匹配结果。
-- confidence >= 0.6 且 theater_id 合法 → render_kind=preset_3d；否则 dynamic_image。
+- confidence >= 0.6 且 theater_id 合法 → render_kind=preset_3d；否则 generated_3d（生成式 3D）。
 - 无通话 / LLM 判定不值得 / LLM 调用失败 → 不推荐（返回 None）。
 
 信件落库与 accept 接口在 DAY-206 实现；本模块只负责「分析 + 出推荐」。
@@ -141,7 +141,8 @@ def _parse_recommend(raw: str) -> dict[str, Any] | None:
     if theater_id is not None and confidence >= CONFIDENCE_THRESHOLD:
         render_kind = "preset_3d"
     else:
-        render_kind = "dynamic_image"
+        # 不命中 6 个预置舞台时，走生成式 3D（LLM 产 SceneSpec）；接受邀请/建场景时若 spec 失败再降级 galgame
+        render_kind = "generated_3d"
         theater_id = None
 
     people = parsed.get("people")

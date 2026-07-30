@@ -73,6 +73,7 @@ class SceneOut(BaseModel):
     theater_id: str | None = None
     bg_image: str | None = None
     characters: list | None = None
+    scene_spec: dict | None = None  # generated_3d 的 SceneSpec（前端 assembleScene 拼装）
 
     model_config = {"from_attributes": True}
 
@@ -98,11 +99,14 @@ def _persist_opening(
     render_kind: str | None = None,
     bg_image: str | None = None,
     characters: list | None = None,
+    scene_spec: dict | None = None,
 ) -> Scene:
-    # render_kind="dynamic_image" 时走 galgame（背景图+立绘），不绑定预置 3D 舞台；
+    # render_kind="dynamic_image" 走 galgame（背景图+立绘）；generated_3d 走生成式 3D（存 scene_spec）；
     # 否则按预置舞台归一化为 preset_3d。
     if render_kind == "dynamic_image":
         rk, tid = "dynamic_image", None
+    elif render_kind == "generated_3d" and scene_spec:
+        rk, tid = "generated_3d", None
     else:
         rk, tid = _resolve_theater(theater_id)
     s = Scene(
@@ -119,6 +123,7 @@ def _persist_opening(
         theater_id=tid,
         bg_image=bg_image,
         characters=characters,
+        scene_spec=scene_spec,
     )
     db.add(s)
     db.commit()
@@ -241,15 +246,31 @@ def create_scene(
         # （失败降级为无图，前端兜底渐变背景，绝不阻断建场景）。
         bg_image: str | None = None
         characters: list | None = None
+        scene_spec: dict | None = None
         if body.render_kind == "dynamic_image":
             bg_image, characters = gen_scene_images(
                 title=body.title, people=body.people, place=body.place,
                 plot=body.plot, intent=body.intent, setting=opening.get("setting"),
             )
+        elif body.render_kind == "generated_3d":
+            # 生成式 3D：LLM 产 SceneSpec；失败则降级为 galgame 图（绝不阻断建场景）
+            from app.services.scene_spec import generate_scene_spec
+            scene_spec = generate_scene_spec({
+                "title": body.title, "people": [body.people] if body.people else [],
+                "place": body.place, "plot": body.plot, "intent": body.intent,
+            })
+            if scene_spec is None:
+                bg_image, characters = gen_scene_images(
+                    title=body.title, people=body.people, place=body.place,
+                    plot=body.plot, intent=body.intent, setting=opening.get("setting"),
+                )
+        effective_kind = body.render_kind
+        if body.render_kind == "generated_3d" and scene_spec is None:
+            effective_kind = "dynamic_image"
         return _persist_opening(
             db, user.id, opening, None,
-            theater_id=body.theater_id, render_kind=body.render_kind,
-            bg_image=bg_image, characters=characters,
+            theater_id=body.theater_id, render_kind=effective_kind,
+            bg_image=bg_image, characters=characters, scene_spec=scene_spec,
         )
 
     uid = user.id

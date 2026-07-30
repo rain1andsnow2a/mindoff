@@ -18,12 +18,14 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { View, PanResponder } from "react-native";
 import { Canvas, useFrame } from "@react-three/fiber/native";
 import * as THREE from "three";
-import { THEATER_SCENES } from "../theater";
-import type { TheaterSceneId } from "../theater";
+import { THEATER_SCENES, assembleScene } from "../theater";
+import type { SceneSpec, TheaterSceneId } from "../theater";
 
 interface Scene3DProps {
-  /** theater 场景 id（campsite / bedroom / seaside / dining / airport / station）。 */
-  sceneId: TheaterSceneId;
+  /** theater 预置场景 id（campsite / bedroom / seaside / dining / airport / station）。 */
+  sceneId?: TheaterSceneId;
+  /** 生成式场景规格（LLM 产出的 SceneSpec）；提供时优先于 sceneId。 */
+  spec?: SceneSpec;
 }
 
 /** 用户操作累计的视角增量（方位角/极角，弧度）+ 相机半径倍率。ref 直传渲染帧，不触发 re-render。 */
@@ -41,9 +43,12 @@ function disposeObject(root: THREE.Object3D) {
   });
 }
 
-function TheaterStage({ sceneId, orbit }: { sceneId: TheaterSceneId; orbit: React.MutableRefObject<Orbit> }) {
-  // 场景只构建一次（或切换场景时重建），每帧只调 update(t)。
-  const scene = useMemo(() => THEATER_SCENES[sceneId](), [sceneId]);
+function TheaterStage({ sceneId, spec, orbit }: { sceneId?: TheaterSceneId; spec?: SceneSpec; orbit: React.MutableRefObject<Orbit> }) {
+  // 场景只构建一次（或切换场景时重建），每帧只调 update(t)。spec 优先，兼容预置 id。
+  const scene = useMemo(
+    () => (spec ? assembleScene(spec) : THEATER_SCENES[sceneId ?? "dining"]()),
+    [sceneId, spec]
+  );
 
   useEffect(() => {
     return () => disposeObject(scene.group);
@@ -82,7 +87,7 @@ function TheaterStage({ sceneId, orbit }: { sceneId: TheaterSceneId; orbit: Reac
 
 // ─── 导出组件 ──────────────────────────────────────────────────────────────────
 
-export function Scene3D({ sceneId }: Scene3DProps) {
+export function Scene3D({ sceneId, spec }: Scene3DProps) {
   const orbit = useRef<Orbit>({ az: 0, polar: 0, scale: 1 });
   // g.dx/g.dy 是自手势起点的累计位移，记录上一帧值以取相对增量，避免每次 move 累加爆冲。
   const last = useRef({ dx: 0, dy: 0 });
@@ -145,7 +150,7 @@ export function Scene3D({ sceneId }: Scene3DProps) {
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
       >
-        <TheaterStage sceneId={sceneId} orbit={orbit} />
+        <TheaterStage sceneId={sceneId} spec={spec} orbit={orbit} />
       </Canvas>
     </View>
   );

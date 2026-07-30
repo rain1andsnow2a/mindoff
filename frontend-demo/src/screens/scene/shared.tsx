@@ -5,7 +5,7 @@ import React from "react";
 import { Text, View } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 import { IconButton, useTheme } from "../../design-system";
-import type { TheaterSceneId } from "../../theater";
+import type { SceneSpec, TheaterSceneId } from "../../theater";
 
 /** 片场内部沿用的紧凑色名（C.*）+ night 标记。 */
 export function useSceneSurface() {
@@ -87,6 +87,8 @@ export interface CharReady {
   desc: string;
   adjusted: string;
   traits: string[];
+  /** 渲染方式：generated_3d 生成式 3D / dynamic_image 图片 galgame。 */
+  renderKind: "generated_3d" | "dynamic_image";
 }
 
 // ─── 场景详情类型（ScenePlay / SceneEnd 共用）─────────────────────────────────
@@ -102,4 +104,5 @@ export interface SceneDetail {
   theater_id?: string | null;
   bg_image?: string | null;
   characters?: SceneCharacter[] | null;
+  scene_spec?: SceneSpec | null;   // generated_3d：前端 Scene3D 据此拼装
 }

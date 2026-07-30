@@ -24,6 +24,7 @@ import {
 import { SceneEnd, ScenePlay, SceneScreen } from "./src/screens/Scene";
 import { PetChange, PetHandoff, ProfileScreen, MemoryScreen, MemoryReviewScreen, Preferences } from "./src/screens/Profile";
 import { AuthScreen } from "./src/screens/Auth";
+import { Scene3DPreview } from "./src/screens/Scene3DPreview";
 import {
   getActivePet, getPreferences, listHandoffs, listPets, listPetPresets,
   loadTokens, logout, setActivePet, Tokens, updatePreferences,
@@ -42,7 +43,7 @@ const SCREEN_IDS = [
   "scene", "scene-play", "scene-end",
   "profile", "pet-change", "pet-handoff",
   "memory-list", "memory-review",
-  "design-system",
+  "design-system", "scene3d-preview",
 ] as const;
 
 type Screen = (typeof SCREEN_IDS)[number];
@@ -109,7 +110,7 @@ const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_ty
 const FULL_SCREENS: Screen[] = [
   "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
   "task-detail", "storage-detail", "scene-play", "scene-end",
-  "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system",
+  "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system", "scene3d-preview",
 ];
 
 const PREFERENCE_DEFAULTS: Preferences = {
@@ -485,6 +486,7 @@ export default function App() {
               <MemoryReviewScreen onBack={() => { go("profile"); setTab("profile"); }} onToast={showToast} />
             )}
             {screen === "design-system" && <DesignSystemPreview />}
+            {screen === "scene3d-preview" && <Scene3DPreview />}
           </Animated.View>
 
           <ModeSheet visible={showMode} onClose={() => setShowMode(false)}
