@@ -25,8 +25,11 @@ def trigger_dream(
 
 
 @router.post("/dream-all")
-def trigger_dream_all(db: Session = Depends(get_db)):
-    """手动触发所有活跃用户的做梦（定时任务模拟）。"""
+def trigger_dream_all(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手动触发所有活跃用户的做梦（定时任务模拟）。需登录：避免匿名触发全量 LLM 作业。"""
     from app.graphs.dreaming import run_dreaming_all
 
     results = run_dreaming_all(db)

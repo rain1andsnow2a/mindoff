@@ -48,10 +48,14 @@ EVENING_SYSTEM_PROMPT = """\
 
 
 def _start_of_today_cst() -> datetime:
-    """东八区今天 00:00，转成带时区的 datetime（用于比较 created_at）。"""
+    """东八区今天 00:00，转 UTC 后返回。
+
+    created_at 以 UTC 存储，SQLite 对带时区 ISO 字符串是字典序比较、
+    不认偏移量，必须统一到 UTC 再比，否则跨日时段会多发/漏发。
+    """
     now_cst = datetime.now(CST)
     start_cst = now_cst.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start_cst
+    return start_cst.astimezone(timezone.utc)
 
 
 def _gather_material(db: Session, user_id: int) -> list[str]:

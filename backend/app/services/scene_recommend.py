@@ -73,8 +73,10 @@ RECOMMEND_SYSTEM_PROMPT = """\
 
 
 def _start_of_today_cst() -> datetime:
+    """东八区今天 00:00，转 UTC 后返回（created_at 以 UTC 存，SQLite 字典序比较不认偏移量）。"""
     now_cst = datetime.now(CST)
-    return now_cst.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_cst = now_cst.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_cst.astimezone(timezone.utc)
 
 
 def _gather_voice_transcript(db: Session, user_id: int) -> str:

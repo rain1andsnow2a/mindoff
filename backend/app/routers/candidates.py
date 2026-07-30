@@ -3,9 +3,9 @@
 候选 = memory_items 里 kind=片段、由倾倒提取产生（raw_ref 为空，排除原始倾倒 root 记录）、
 尚未确认（status 空/pending/candidate）的条目。产品 §4.4：候选当晚静默入草稿箱、次日提醒确认。
 
-确认后转为正式 scene 属于「片场」层，本轮只做状态流转（scene 生成留 TODO）。
+确认后生成正式片场场景：供给包（stage.supply，用户确认即显式授权深层记忆入剧本）
++ LLM 开场（theater）；生成成功后才置 confirmed，失败保持待确认可重试。
 """
-import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,6 +20,7 @@ from app.graphs import theater
 from app.models.memory import MemoryItem
 from app.models.scene import Scene
 from app.models.user import User
+from app.routers._common import sse as _sse
 from app.services import stage
 from app.services.memory_store import MemoryStore
 
@@ -27,10 +28,6 @@ router = APIRouter(prefix="/api/v1/candidates", tags=["candidates"])
 
 # 视为"待确认"的 status 值（None 表示提取时未显式赋状态）
 _PENDING = ("pending", "candidate")
-
-
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 class CandidateOut(BaseModel):
@@ -89,14 +86,16 @@ def confirm_candidate(
     `?stream=true` 时逐 token 揭幕开场（SSE：confirmed → token… → choices → done）。
     """
     frag = _get_owned(db, user.id, candidate_id)
-    MemoryStore(db).set_status(candidate_id, "confirmed", actor="user")
-    pkg = stage.supply(db, user.id, candidate_id)
+    # 用户点确认 = 显式授权相关深层记忆进入剧本生成（隐私闸门放行依据）
+    pkg = stage.supply(db, user.id, candidate_id, explicit_consent=True)
 
     if not stream:
         if pkg is None:
-            return {"id": candidate_id, "status": "confirmed", "scene": None,
-                    "note": "已确认，但供给包组装失败，暂未生成场景"}
+            return {"id": candidate_id, "status": frag.status or "pending", "scene": None,
+                    "note": "供给包组装失败，未生成场景；候选保持待确认可重试"}
+        # 先生成开场，成功后才置 confirmed：失败时候选不会卡在「已确认无场景」
         opening = theater.generate_opening(pkg)
+        MemoryStore(db).set_status(candidate_id, "confirmed", actor="user")
         scene = Scene(
             user_id=user.id, title=opening["title"], status="active",
             source_fragment_id=candidate_id, setting=opening["setting"],
@@ -119,7 +118,7 @@ def confirm_candidate(
     def gen():
         yield _sse("confirmed", {"candidate_id": candidate_id})
         if desc is None:
-            yield _sse("done", {"scene_id": None, "note": "供给失败，未生成场景"})
+            yield _sse("done", {"scene_id": None, "note": "供给失败，未生成场景；候选保持待确认"})
             return
         db2 = SessionLocal()
         try:
@@ -140,6 +139,8 @@ def confirm_candidate(
             db2.add(scene)
             db2.commit()
             db2.refresh(scene)
+            # 场景落库成功才置 confirmed；中途失败候选仍可重试
+            MemoryStore(db2).set_status(candidate_id, "confirmed", actor="user")
             yield _sse("done", {"scene_id": scene.id})
         finally:
             db2.close()

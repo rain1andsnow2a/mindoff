@@ -4,14 +4,14 @@ RN <-> 本网关 <-> 阶跃 realtime。网关注入鉴权，并在连上后自�
 session.update（桌宠人设 / 音色 / server_vad / pcm16）。RN 可再发 session.update
 覆盖（voice 除外，阶跃限制不可中途改）。
 
-session.instructions 优先使用当前主桌宠的 system_prompt；无桌宠或未鉴权时
-回退到全局默认。
+session.instructions 优先使用当前主桌宠的 system_prompt；无桌宠时回退全局默认。
+需携带 ?token=<access_token>；无效即 4401 关闭，不中继上游付费实时模型。
 """
 from fastapi import APIRouter, WebSocket
 
 from app.config import get_settings
-from app.core.security import decode_token
 from app.db import SessionLocal
+from app.deps import user_id_from_token
 from app.models.user import User
 from app.services.conversation_store import ConversationStore
 from app.services.pet_store import PetStore
@@ -19,21 +19,6 @@ from app.stepfun.constants import WS_REALTIME
 from app.stepfun.ws_relay import extract_transcript, relay
 
 router = APIRouter(prefix="/ai", tags=["realtime"])
-
-
-def _user_id_from_token(token: str | None) -> int | None:
-    """从 Bearer token 解析用户 id；失败返回 None。"""
-    if not token:
-        return None
-    if token.lower().startswith("bearer "):
-        token = token[7:]
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            return None
-        return int(payload["sub"])
-    except Exception:  # noqa: BLE001
-        return None
 
 
 def _active_pet(user_id: int | None):
@@ -77,13 +62,21 @@ def persist_voice_call(
 
 @router.websocket("/realtime")
 async def realtime(ws: WebSocket):
+    """实时通话中继：鉴权 -> 下发默认 session.update -> 双向转发，
+    通话结束后把转写落库为 voice_call 会话。"""
     await ws.accept()
+
+    # 强制鉴权：token 无效即拒绝中继，避免服务端 key 被匿名消耗
+    token = ws.query_params.get("token")
+    user_id = user_id_from_token(token)
+    if user_id is None:
+        await ws.close(code=4401)
+        return
+
     s = get_settings()
     url = f"{s.stepfun_ws_base.rstrip('/')}{WS_REALTIME}?model={s.step_realtime_model}"
 
-    # 优先用主桌宠人设；无法取得则回退全局默认
-    token = ws.query_params.get("token")
-    user_id = _user_id_from_token(token)
+    # 优先用主桌宠人设；无桌宠时回退全局默认
     pet_id, pet_prompt = _active_pet(user_id)
     instructions = pet_prompt or s.step_realtime_instructions
 
@@ -115,5 +108,4 @@ async def realtime(ws: WebSocket):
     try:
         await relay(ws, url, on_open=default_session, on_upstream_text=_capture)
     finally:
-        if user_id is not None:
-            persist_voice_call(user_id, transcript, pet_id=pet_id)
+        persist_voice_call(user_id, transcript, pet_id=pet_id)

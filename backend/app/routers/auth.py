@@ -138,7 +138,10 @@ def update_me(
 ):
     if body.display_name is not None:
         current.display_name = body.display_name
-    if body.email is not None:
+    if body.email is not None and body.email != current.email:
+        # 邮箱有唯一约束：先查重，避免 IntegrityError 直接 500
+        if db.scalar(select(User).where(User.email == body.email)):
+            raise HTTPException(status.HTTP_409_CONFLICT, "邮箱已被注册")
         current.email = body.email
     db.commit()
     db.refresh(current)

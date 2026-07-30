@@ -37,8 +37,13 @@ DEFAULT_TITLE = "该歇一歇了 🌙"
 
 
 def _start_of_today_cst() -> datetime:
-    """东八区今天 00:00（带时区，用于比较 created_at）。"""
-    return datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
+    """东八区今天 00:00，转 UTC 后返回。
+
+    created_at 以 UTC 存储，SQLite 对带时区 ISO 字符串是字典序比较、
+    不认偏移量，必须统一到 UTC 再比，否则 00:00–07:59 时段去重失效。
+    """
+    start_cst = datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_cst.astimezone(timezone.utc)
 
 
 def _already_sent_today(db: Session, user_id: int) -> bool:

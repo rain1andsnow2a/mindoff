@@ -3,7 +3,6 @@
 MVP：单场景单次体验（Scene 自带当前剧情状态），非流式。剧情生成/推进走 app/graphs/theater.py，
 结算回写复用 app/services/stage.py 的 settle。均按登录用户隔离。
 """
-import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,16 +16,13 @@ from app.deps import get_current_user
 from app.graphs import theater
 from app.models.scene import Scene
 from app.models.user import User
-from app.services import stage
+from app.routers._common import get_owned_scene as _get_owned, sse as _sse
+from app.services import scene_service
 from app.services.scene_images import gen_scene_images
 from app.services.scene_recommend import PRESET_THEATERS, detect_scene_intent
 from app.services.scene_turn_images import schedule_bg_regen
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
-
-
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -82,13 +78,6 @@ class SceneOut(BaseModel):
 
 
 # ─── 内部 ────────────────────────────────────────────────────────────────────
-
-def _get_owned(db: Session, user_id: int, scene_id: int) -> Scene:
-    s = db.get(Scene, scene_id)
-    if s is None or s.user_id != user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "场景不存在")
-    return s
-
 
 def _resolve_theater(theater_id: str | None) -> tuple[str, str | None]:
     """把入参 theater_id 归一化为 (render_kind, theater_id)。
@@ -157,27 +146,6 @@ def _play_id_match(s: Scene, play_id: str) -> bool:
     return play_id in (str(s.id), f"play-{s.id}")
 
 
-def _advance_scene(db: Session, s: Scene, choice_id: str) -> None:
-    """非流式：验证选项并用 theater.advance 推进一幕。"""
-    chosen = next((c for c in (s.choices or []) if str(c.get("id")) == choice_id), None)
-    if chosen is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
-    res = theater.advance(
-        {"setting": s.setting, "beats": s.beats, "history": s.history, "turn": s.turn},
-        chosen["label"],
-    )
-    s.turn = s.turn + 1
-    # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
-    s.beats = (s.beats or []) + res["beats"]
-    s.choices = res["choices"]
-    s.history = (s.history or []) + [{"turn": s.turn, "choice": chosen["label"]}]
-    db.commit()
-    db.refresh(s)
-    # DAY-229：galgame 场景推进后异步刷新背景图（旧图保留到新图就绪）
-    if not res.get("ended") and s.render_kind == "dynamic_image":
-        schedule_bg_regen(s.id)
-
-
 def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
     """流式推进的 SSE 生成器（被 /choices 与 /plays/{play_id}/choices 复用）。"""
     db2 = SessionLocal()
@@ -226,6 +194,7 @@ class PlayOut(BaseModel):
 
 @router.get("", response_model=list[SceneOut])
 def list_scenes(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """当前用户的全部场景，按 id 倒序（最新在前）。"""
     return list(db.scalars(
         select(Scene).where(Scene.user_id == user.id).order_by(Scene.id.desc())
     ).all())
@@ -368,7 +337,8 @@ def play_choose(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "无效的选项")
 
     if not stream:
-        _advance_scene(db, s, body.choice_id)
+        # 推进逻辑集中在 scene_service.advance（与 /scenes/{id}/choices 复用）
+        scene_service.advance(db, s, chosen["label"])
         return PlayOut(
             play_id=play_id, scene_id=s.id, status=s.status,
             turn=s.turn, node=_node(s),
@@ -396,8 +366,8 @@ def play_settle(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "体验不存在")
     if s.status == "settled":
         raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
-    result = stage.settle(
-        db, user.id,
+    result = scene_service.settle(
+        db, s, user.id,
         action_text=body.action_text,
         insight_text=body.insight_text,
         related_memory_ids=body.related_memory_ids,
@@ -405,14 +375,12 @@ def play_settle(
         keep=body.keep,
         card_text=body.card_text,
     )
-    s.status = "settled"
-    s.choices = []
-    db.commit()
     return {"play_id": play_id, "scene_id": s.id, "status": "settled", "settlement": result}
 
 
 @router.get("/{scene_id}", response_model=SceneOut)
 def get_scene(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """单个场景详情（含渲染字段）。非本人或不存在时 404。"""
     return _get_owned(db, user.id, scene_id)
 
 
@@ -439,20 +407,8 @@ def choose(
         label = chosen["label"]
 
     if not stream:
-        res = theater.advance(
-            {"setting": s.setting, "beats": s.beats, "history": s.history, "turn": s.turn},
-            label,
-        )
-        s.turn = s.turn + 1
-        # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
-        s.beats = (s.beats or []) + res["beats"]
-        s.choices = res["choices"]
-        s.history = (s.history or []) + [{"turn": s.turn, "choice": label}]
-        db.commit()
-        db.refresh(s)
-        # DAY-229：galgame 场景推进后异步刷新背景图（旧图保留到新图就绪）
-        if not res.get("ended") and s.render_kind == "dynamic_image":
-            schedule_bg_regen(s.id)
+        # 推进逻辑集中在 scene_service.advance（与 /plays/{id}/choices 复用）
+        scene_service.advance(db, s, label)
         return SceneOut.model_validate(s)
 
     turn = s.turn + 1
@@ -466,12 +422,12 @@ def choose(
 
 @router.post("/{scene_id}/settlement")
 def settle_scene(scene_id: int, body: SettlementIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """结束体验 → 结算卡。复用 stage.settle 回写（行动→待办、领悟→记忆、卡→珍藏/即焚）。"""
+    """结束体验 → 结算卡。复用 scene_service.settle 回写（行动→待办、领悟→记忆、卡→珍藏/即焚）。"""
     s = _get_owned(db, user.id, scene_id)
     if s.status == "settled":
         raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")
-    result = stage.settle(
-        db, user.id,
+    result = scene_service.settle(
+        db, s, user.id,
         action_text=body.action_text,
         insight_text=body.insight_text,
         related_memory_ids=body.related_memory_ids,
@@ -479,9 +435,6 @@ def settle_scene(scene_id: int, body: SettlementIn, user: User = Depends(get_cur
         keep=body.keep,
         card_text=body.card_text,
     )
-    s.status = "settled"
-    s.choices = []
-    db.commit()
     return {"scene_id": s.id, "status": "settled", "settlement": result}
 
 
@@ -514,6 +467,7 @@ def _fallback_key_quote(s: Scene) -> str:
 
 @router.delete("/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scene(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """删除场景（仅属主）。"""
     s = _get_owned(db, user.id, scene_id)
     db.delete(s)
     db.commit()

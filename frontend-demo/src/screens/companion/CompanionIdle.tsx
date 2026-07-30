@@ -1,0 +1,359 @@
+/**
+ * 陪伴首页：主桌宠立绘 + 语音/文字入口 + 邀请气泡 + 往日入口。
+ */
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Platform, Pressable, ActivityIndicator, Text, View } from "react-native";
+import { BookOpen, ChevronRight, Mic, Moon, Plus, Square, Sun } from "lucide-react-native";
+
+import {
+  GlassSurface,
+  IconButton,
+  PageContainer,
+  StatusDot,
+  useReducedMotion,
+  useResponsive,
+  useTheme,
+} from "../../design-system";
+import { getCompanionHome, listConversations } from "../../api";
+import { HomePetArtwork } from "../../components/HomePetArtwork";
+import { useVoiceInput } from "../../useVoiceInput";
+import { ConversationSummary, shortTitle } from "./shared";
+
+type CompanionIdleProps = {
+  night: boolean;
+  onChat: () => void;
+  onModeSheet: () => void;
+  onNightToggle: () => void;
+  onOpenJournal: () => void;
+  onResumeChat: (conversationId: number) => void;
+  onVoiceCall: () => void;
+  onVoiceChat: (text: string) => void;
+  petEmoji: string;
+  petName: string;
+  petPresetId: string | null;
+};
+
+/** 陪伴首页（桌宠主屏）。 */
+export function CompanionIdle({
+  night,
+  onChat,
+  onModeSheet,
+  onNightToggle,
+  onOpenJournal,
+  onResumeChat,
+  onVoiceCall,
+  onVoiceChat,
+  petEmoji,
+  petName,
+  petPresetId,
+}: CompanionIdleProps) {
+  const theme = useTheme();
+  const { isCompact, isExpanded } = useResponsive();
+  const reducedMotion = useReducedMotion();
+  const [bubbleVisible, setBubbleVisible] = useState(true);
+  const [statusText, setStatusText] = useState("在等你");
+  const [bubbleText, setBubbleText] = useState("今天怎么样？✨");
+  const [homePetName, setHomePetName] = useState<string | null>(null);
+  const [recentConv, setRecentConv] = useState<ConversationSummary | null>(null);
+  const [convCount, setConvCount] = useState(0);
+  const fade = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  const voice = useVoiceInput(onVoiceChat);
+
+  useEffect(() => {
+    getCompanionHome()
+      .then((home) => {
+        if (home?.status_text) setStatusText(home.status_text);
+        if (home?.pet?.name) setHomePetName(home.pet.name);
+        if (home?.invitation?.text) setBubbleText(home.invitation.text);
+        else if (home?.behavior) {
+          setBubbleText(`它正在${home.behavior}，去陪陪它？`);
+        }
+      })
+      .catch(() => {});
+    // 历史会话：决定「往日」胶囊与续聊气泡（列表按时间倒序，首条即最近一段）。
+    listConversations()
+      .then((list) => {
+        if (!Array.isArray(list) || list.length === 0) return;
+        setConvCount(list.length);
+        setRecentConv(list[0]);
+        // 若邀请气泡已自动收起，续聊气泡要重新亮出来（它是功能入口）。
+        setBubbleVisible(true);
+        fade.setValue(1);
+      })
+      .catch(() => {});
+  }, [fade]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      fade.setValue(1);
+    } else {
+      Animated.timing(fade, {
+        duration: theme.motion.durations.enter,
+        toValue: 1,
+        useNativeDriver: Platform.OS !== "web",
+      }).start();
+    }
+
+    // 有可续聊的会话时气泡常驻（承载「接着聊」入口）；否则保持几秒后自动收起的装饰行为。
+    if (recentConv) return;
+    const timer = setTimeout(() => {
+      if (reducedMotion) {
+        setBubbleVisible(false);
+        return;
+      }
+      Animated.timing(fade, {
+        duration: theme.motion.durations.exit,
+        toValue: 0,
+        useNativeDriver: Platform.OS !== "web",
+      }).start(() => setBubbleVisible(false));
+    }, 4200);
+
+    return () => clearTimeout(timer);
+  }, [fade, recentConv, reducedMotion, theme.motion.durations.enter, theme.motion.durations.exit]);
+
+  return (
+    <PageContainer
+      maxWidth={1040}
+      style={{
+        flex: 1,
+        paddingBottom: isExpanded ? theme.spacing[8] : 100,
+        paddingTop: isCompact ? theme.spacing[4] : theme.spacing[8],
+      }}
+    >
+      <View
+        style={{
+          alignItems: "center",
+          flexDirection: "row",
+          justifyContent: "space-between",
+        }}
+      >
+        <View>
+          <Text
+            style={[
+              theme.typography.textStyles.sectionTitle,
+              { color: theme.colors.textPrimary },
+            ]}
+          >
+            {homePetName ?? petName}
+          </Text>
+          <StatusDot label={statusText} />
+          {convCount > 0 ? (
+            <Pressable
+              accessibilityLabel={`查看往日，共 ${convCount} 段聊天`}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onOpenJournal}
+              style={({ pressed }) => ({
+                alignSelf: "flex-start",
+                marginTop: theme.spacing[2],
+                flexDirection: "row",
+                alignItems: "center",
+                gap: theme.spacing[1],
+                paddingHorizontal: theme.spacing[3],
+                paddingVertical: theme.spacing[1] + 2,
+                borderRadius: theme.radii.pill,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceElevated,
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.95 : 1 }],
+                ...theme.shadows.soft,
+              })}
+            >
+              <BookOpen size={14} color={theme.colors.accent} />
+              <Text
+                style={[
+                  theme.typography.textStyles.caption,
+                  { color: theme.colors.accent, fontWeight: "600" },
+                ]}
+              >
+                往日{" "}
+                <Text style={{ color: theme.colors.textMuted, fontWeight: "400" }}>
+                  {convCount}
+                </Text>
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <IconButton
+          accessibilityLabel={night ? "切换到日间模式" : "切换到夜间模式"}
+          icon={
+            night ? (
+              <Sun size={20} color={theme.colors.textSecondary} />
+            ) : (
+              <Moon size={20} color={theme.colors.textSecondary} />
+            )
+          }
+          onPress={onNightToggle}
+        />
+      </View>
+
+      <Pressable
+        accessibilityHint="进入实时语音陪伴"
+        accessibilityLabel={`和${homePetName ?? petName}说话`}
+        accessibilityRole="button"
+        onPress={onVoiceCall}
+        style={({ pressed }) => ({
+          flex: 1,
+          minHeight: 320,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: pressed ? 0.9 : 1,
+          transform: [{ scale: pressed ? 0.99 : 1 }],
+        })}
+      >
+        {bubbleVisible ? (
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: isCompact ? "8%" : "12%",
+              maxWidth: 360,
+              paddingHorizontal: theme.spacing[5],
+              paddingVertical: theme.spacing[3],
+              borderRadius: theme.radii.card,
+              borderBottomLeftRadius: theme.radii.control / 2,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.surfaceElevated,
+              opacity: fade,
+              transform: [
+                {
+                  translateY: fade.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [theme.motion.distances.standard, 0],
+                  }),
+                },
+              ],
+              ...theme.shadows.soft,
+            }}
+          >
+            {recentConv ? (
+              <Pressable
+                accessibilityLabel={`接着上次的聊天：${shortTitle(recentConv)}`}
+                accessibilityRole="button"
+                onPress={() => onResumeChat(recentConv.id)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
+              >
+                <Text
+                  style={[
+                    theme.typography.textStyles.body,
+                    { color: theme.colors.textPrimary },
+                  ]}
+                >
+                  {`上次你说「${shortTitle(recentConv)}」`}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 2,
+                    marginTop: theme.spacing[1],
+                  }}
+                >
+                  <Text
+                    style={[
+                      theme.typography.textStyles.caption,
+                      { color: theme.colors.accent, fontWeight: "600" },
+                    ]}
+                  >
+                    接着聊
+                  </Text>
+                  <ChevronRight size={12} color={theme.colors.accent} />
+                </View>
+              </Pressable>
+            ) : (
+              <Text
+                style={[
+                  theme.typography.textStyles.body,
+                  { color: theme.colors.textPrimary },
+                ]}
+              >
+                {bubbleText}
+              </Text>
+            )}
+          </Animated.View>
+        ) : null}
+        <HomePetArtwork
+          fallbackEmoji={petEmoji}
+          presetId={petPresetId}
+          size={isCompact ? 210 : 238}
+        />
+        <Text
+          style={[
+            theme.typography.textStyles.caption,
+            { marginTop: theme.spacing[5], color: theme.colors.textMuted },
+          ]}
+        >
+          轻触和它说话
+        </Text>
+      </Pressable>
+
+      <View
+        style={{
+          width: "100%",
+          maxWidth: 760,
+          alignSelf: "center",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.spacing[3],
+        }}
+      >
+        <GlassSurface style={{ flex: 1, borderRadius: theme.radii.pill }}>
+          <View
+            style={{
+              minHeight: 54,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingLeft: theme.spacing[5],
+              paddingRight: theme.spacing[1],
+              borderRadius: theme.radii.pill,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
+          >
+            <Pressable
+              accessibilityLabel="打开文字聊天"
+              accessibilityRole="button"
+              onPress={onChat}
+              style={{ flex: 1, justifyContent: "center", alignSelf: "stretch" }}
+            >
+              <Text
+                style={[
+                  theme.typography.textStyles.body,
+                  { color: theme.colors.placeholder },
+                ]}
+              >
+                说点什么…
+              </Text>
+            </Pressable>
+            <IconButton
+              accessibilityLabel={voice.isRecording ? "停止录音" : "语音输入"}
+              disabled={voice.transcribing}
+              selected={voice.isRecording}
+              icon={
+                voice.transcribing ? (
+                  <ActivityIndicator color={theme.colors.accent} size="small" />
+                ) : voice.isRecording ? (
+                  <Square
+                    color={theme.colors.accent}
+                    fill={theme.colors.accent}
+                    size={15}
+                  />
+                ) : (
+                  <Mic color={theme.colors.accent} size={19} />
+                )
+              }
+              onPress={voice.isRecording ? voice.stop : voice.start}
+            />
+          </View>
+        </GlassSurface>
+        <IconButton
+          accessibilityLabel="选择陪伴模式"
+          icon={<Plus color={theme.colors.accent} size={22} />}
+          onPress={onModeSheet}
+          selected
+        />
+      </View>
+    </PageContainer>
+  );
+}

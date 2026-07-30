@@ -10,6 +10,7 @@ export {
 export {
   darkColors,
   lightColors,
+  paperColors,
   typography,
   fontSizes,
   fontWeights,

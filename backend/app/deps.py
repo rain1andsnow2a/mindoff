@@ -17,6 +17,24 @@ from app.models.user import User
 _bearer = HTTPBearer(auto_error=True)
 
 
+def user_id_from_token(token: str | None) -> int | None:
+    """从裸 token（或 "Bearer xxx"）解析用户 id；无效返回 None。
+
+    WebSocket 无法用 HTTPBearer 依赖，网关 WS 端点用它做强制鉴权。
+    """
+    if not token:
+        return None
+    if token.lower().startswith("bearer "):
+        token = token[7:]
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            return None
+        return int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        return None
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),

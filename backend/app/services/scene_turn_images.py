@@ -42,14 +42,37 @@ def regenerate_turn_bg(scene_id: int) -> None:
             return
         prompt = build_turn_bg_prompt(sc)
         url = asyncio.run(generate_and_store(prompt, kind="bg"))
-        # 重新取出后再写，避免覆盖推进流程的并发更新
+        # 生图耗时 60–90s：重新取出并复查状态，避免写回已结算/已删除的场景
+        db.expire(sc)
+        sc = db.get(Scene, scene_id)
+        if sc is None or sc.status == "settled":
+            _remove_static_file(url)
+            return
+        old = sc.bg_image
         sc.bg_image = url
         db.commit()
+        # 旧背景文件已无引用，顺手清掉，避免 static 目录无限增长
+        if old and old != url:
+            _remove_static_file(old)
         log.info("[scene_turn_images] scene %s bg updated: %s", scene_id, url)
     except Exception as e:  # noqa: BLE001
         log.warning("[scene_turn_images] scene %s bg regen failed: %s", scene_id, e)
     finally:
         db.close()
+
+
+def _remove_static_file(url: str | None) -> None:
+    """把 /static 相对 URL 对应的本地文件删掉；路径不在 static 目录内或不存在则忽略。"""
+    from app.stepfun.image import STATIC_DIR
+
+    if not url or not url.startswith("/static/"):
+        return
+    try:
+        path = (STATIC_DIR / url[len("/static/"):]).resolve()
+        if path.is_relative_to(STATIC_DIR.resolve()) and path.is_file():
+            path.unlink()
+    except OSError as e:
+        log.warning("[scene_turn_images] remove %s failed: %s", url, e)
 
 
 def schedule_bg_regen(scene_id: int) -> None:

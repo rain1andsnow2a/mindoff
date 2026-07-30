@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.models.memory import MemoryItem
 from app.models.role_profile import RoleProfile
 from app.services.memory_store import MemoryStore
+from app.services.privacy import filter_for_external
 from app.services.treasure_store import TreasureStore
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,19 @@ def _utcnow() -> datetime:
 
 # ─── 供给 ──────────────────────────────────────────────────────────────────
 
-def supply(db: Session, user_id: int, segment_id: int) -> dict[str, Any] | None:
-    """组装片场供给包。片段不存在/不属于该用户/已遗忘时返回 None。"""
+def supply(
+    db: Session,
+    user_id: int,
+    segment_id: int,
+    *,
+    explicit_consent: bool = False,
+) -> dict[str, Any] | None:
+    """组装片场供给包。片段不存在/不属于该用户/已遗忘时返回 None。
+
+    隐私红线：deep_memories（vulnerable/core）会随供给包进入外部 LLM 的
+    剧本生成 prompt，默认过 filter_for_external 全部拦下；仅当用户显式
+    确认重演该片段（candidates confirm）时由调用方传 explicit_consent=True 放行。
+    """
     frag = MemoryStore(db).get(segment_id)
     if frag is None or frag.user_id != user_id or frag.is_forgotten:
         return None
@@ -65,7 +77,10 @@ def supply(db: Session, user_id: int, segment_id: int) -> dict[str, Any] | None:
     return {
         "fragment": frag,
         "roles": matched_roles,
-        "deep_memories": deep_memories,
+        # 外发闸门：无显式授权时 vulnerable/core 不出境（AGENTS.md 伦理红线）
+        "deep_memories": filter_for_external(
+            deep_memories, explicit_consent=explicit_consent
+        ),
     }
 
 

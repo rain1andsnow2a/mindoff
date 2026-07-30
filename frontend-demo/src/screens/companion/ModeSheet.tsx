@@ -1,0 +1,91 @@
+/**
+ * 模式选择：底部/侧栏浮层，选择「自由聊聊 / 一股脑倒 / 放不下的事 / 回看片段」。
+ */
+import React from "react";
+import { ScrollView, Text, View } from "react-native";
+import { ChevronRight } from "lucide-react-native";
+
+import { ListItem, ResponsiveOverlay, useTheme } from "../../design-system";
+
+type ModeSheetProps = {
+  onChat: (mode: string) => void;
+  onClose: () => void;
+  onSleepDump: () => void;
+  visible: boolean;
+};
+
+const modes = [
+  {
+    description: "随便聊点什么，没有主题",
+    icon: "☁️",
+    label: "自由聊聊",
+    mode: "free_chat",
+  },
+  {
+    description: "把今天的念头一次全说出来",
+    icon: "🌊",
+    label: "一股脑倒出来",
+    mode: "_dump",
+  },
+  {
+    description: "有什么在心里反复出现",
+    icon: "🪨",
+    label: "说件放不下的事",
+    mode: "hard_thing",
+  },
+  {
+    description: "回到某段记忆里看看",
+    icon: "📽️",
+    label: "回看一个片段",
+    mode: "review_fragment",
+  },
+];
+
+/** 陪伴模式选择浮层。 */
+export function ModeSheet({
+  onChat,
+  onClose,
+  onSleepDump,
+  visible,
+}: ModeSheetProps) {
+  const theme = useTheme();
+
+  return (
+    <ResponsiveOverlay onClose={onClose} title="想怎么聊？" visible={visible}>
+      <ScrollView
+        contentContainerStyle={{
+          gap: theme.spacing[1],
+          padding: theme.spacing[4],
+        }}
+      >
+        {modes.map((mode) => (
+          <ListItem
+            description={mode.description}
+            key={mode.mode}
+            leading={
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: theme.radii.control,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: theme.colors.accentSoft,
+                }}
+              >
+                <Text style={{ fontSize: 22 }}>{mode.icon}</Text>
+              </View>
+            }
+            onPress={() =>
+              mode.mode === "_dump" ? onSleepDump() : onChat(mode.mode)
+            }
+            title={mode.label}
+            trailing={
+              <ChevronRight color={theme.colors.textMuted} size={18} />
+            }
+          />
+        ))}
+      </ScrollView>
+    </ResponsiveOverlay>
+  );
+}

@@ -49,6 +49,8 @@ class Settings(BaseSettings):
 
     # 服务
     cors_origins: str = "*"
+    # 运行环境：dev / prod。prod 下禁止默认 JWT 密钥启动（main.py 校验）。
+    app_env: str = "dev"
 
     @property
     def auth_header(self) -> dict[str, str]:

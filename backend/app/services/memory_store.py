@@ -77,6 +77,7 @@ class MemoryStore:
     # ─── 读取 ──────────────────────────────────────────────────────────────
 
     def get(self, id: int) -> MemoryItem | None:
+        """按 id 取一条记忆（不过滤遗忘/版本）；不存在返回 None。"""
         return self._db.get(MemoryItem, id)
 
     # ─── 更新（版本链）────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ class MemoryStore:
     # ─── 查询 ──────────────────────────────────────────────────────────────
 
     def list_by_layer(self, user_id: int, layer: str, *, latest: bool = True) -> list[MemoryItem]:
+        """取用户某 layer（profile/state/episodic…）的未遗忘记忆；latest=True 只取最新版。"""
         stmt = select(MemoryItem).where(
             MemoryItem.user_id == user_id,
             MemoryItem.layer == layer,
@@ -176,6 +178,7 @@ class MemoryStore:
         return list(self._db.scalars(stmt).all())
 
     def list_by_kind(self, user_id: int, kind: str, *, latest: bool = True) -> list[MemoryItem]:
+        """取用户某 kind（待办/小结/片段…）的未遗忘记忆；latest=True 只取最新版。"""
         stmt = select(MemoryItem).where(
             MemoryItem.user_id == user_id,
             MemoryItem.kind == kind,
@@ -186,6 +189,7 @@ class MemoryStore:
         return list(self._db.scalars(stmt).all())
 
     def list_by_depth(self, user_id: int, depth: str, *, latest: bool = True) -> list[MemoryItem]:
+        """取用户某 depth（surface/personal/vulnerable/core）的未遗忘记忆；latest=True 只取最新版。"""
         stmt = select(MemoryItem).where(
             MemoryItem.user_id == user_id,
             MemoryItem.depth == depth,

@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.services.memory_store import MemoryStore
+from app.services.privacy import filter_for_cloud_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,9 @@ def build(
     seen_ids: set[int] = set()
 
     def _take(layer: str, items) -> None:
-        fresh = [m for m in items if m.id not in seen_ids]
+        # 隐私红线：上下文最终进入外部 LLM prompt，vulnerable/core 与即焚记忆不外发
+        safe = filter_for_cloud_prompt(list(items))
+        fresh = [m for m in safe if m.id not in seen_ids]
         seen_ids.update(m.id for m in fresh)
         sections.extend(_render(fresh, budgets.get(layer, (5, 400))))
 

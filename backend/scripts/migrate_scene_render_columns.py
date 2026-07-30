@@ -1,14 +1,11 @@
-"""一次性迁移：给已存在的 scenes 表补 DAY-209 渲染列。
+"""【已退役】一次性迁移：给已存在的 scenes 表补 DAY-209 渲染列。
 
-背景：dev 用 SQLite + create_all，create_all 只建新表、不会给旧表 ALTER 加列，
-所以早于 DAY-209 建的库缺 render_kind/theater_id/bg_image/characters 四列，
-dynamic_image galgame 落库会报错。本脚本按需补列，幂等可重复跑。
+⚠️ 正式迁移已纳入 alembic：backend/alembic/versions/013_scene_render_columns.py，
+生产/新环境请直接 `uv run alembic upgrade head`，不要再跑本脚本。
+仅保留给无法跑 alembic 的旧 dev 库应急（幂等，只 ADD COLUMN）。
 
 用法（在 backend 目录下）：
     uv run python scripts/migrate_scene_render_columns.py
-    # 或指定库： set DATABASE_URL=sqlite:///./mindoff.db && uv run python scripts/...
-
-只做 ADD COLUMN（非破坏性）：已存在的列自动跳过，不改数据、不删列。
 """
 from sqlalchemy import text
 

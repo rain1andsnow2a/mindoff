@@ -19,6 +19,7 @@ from app.graphs import theater
 from app.models.role_profile import RoleProfile
 from app.models.scene import Scene
 from app.models.user import User
+from app.routers._common import get_owned_scene as _get_owned
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 
@@ -100,13 +101,6 @@ def parse_role(
 
 # ─── 内部 ────────────────────────────────────────────────────────────────────
 
-def _get_owned(db: Session, user_id: int, scene_id: int) -> Scene:
-    s = db.get(Scene, scene_id)
-    if s is None or s.user_id != user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "场景不存在")
-    return s
-
-
 # ─── 细节补充 ─────────────────────────────────────────────────────────────────
 
 class ScenePatch(BaseModel):
@@ -121,6 +115,7 @@ def patch_scene(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """补充场景细节（标题/设定）；仅传入的字段被更新。非本人或不存在时 404。"""
     s = _get_owned(db, user.id, scene_id)
     if body.title is not None:
         s.title = body.title
@@ -145,6 +140,7 @@ def calibrate(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """「TA 不太像」校准：用户补一句 → 写入场景设定（影响后续剧情）+ upsert 角色档案。已结算场景 409。"""
     s = _get_owned(db, user.id, scene_id)
     if s.status == "settled":
         raise HTTPException(status.HTTP_409_CONFLICT, "场景已结算")

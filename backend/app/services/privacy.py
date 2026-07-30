@@ -39,6 +39,19 @@ def filter_for_external(
     return [i for i in items if can_send_external(i, explicit_consent=explicit_consent)]
 
 
+def filter_for_cloud_prompt(items: list[MemoryItem]) -> list[MemoryItem]:
+    """云端模型 prompt 前过滤：伦理红线——vulnerable/core 与即焚记忆不进外部 LLM。
+
+    与 can_send_external 的区别：同步/导出连 privacy=local（含 personal）都默认拦；
+    云端模型 prompt 是产品既定链路（桌宠对话/晚间来信），只拦红线深度与
+    burn_after_read。任何拼记忆进外部 LLM prompt 的路径都应先过这里。
+    """
+    return [
+        i for i in items
+        if i.depth not in EXTERNAL_FORBIDDEN_DEPTHS and i.privacy != "burn_after_read"
+    ]
+
+
 def burn_after_read(db: Session, memory_id: int, *, actor: str = "system") -> None:
     """阈后即焚：记忆被读取/交还后按策略遗忘（requirements 7.3）。"""
     MemoryStore(db).forget(memory_id, reason="burn_after_read", actor=actor)

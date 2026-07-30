@@ -35,6 +35,12 @@ export function wsUrl(path: string): string {
   return `${API_BASE.replace(/^http/, "ws")}${path}`;
 }
 
+/** 带鉴权的 WebSocket 地址：附加 ?token=<access_token>（后端 WS 强制校验，无效即 4401 关闭）。 */
+export function wsAuthUrl(path: string): string {
+  const t = _tokens?.access_token;
+  return t ? `${wsUrl(path)}?token=${encodeURIComponent(t)}` : wsUrl(path);
+}
+
 /** 把后端下发的 /static 相对路径拼成可访问的绝对 URL；已是 http(s) 则原样返回。 */
 export function absUrl(path?: string | null): string | null {
   if (!path) return null;

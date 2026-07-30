@@ -4,10 +4,12 @@
 """
 from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.deps import get_current_user
+from app.models.user import User
 from app.stepfun.client import chat_completion, chat_stream
 
 router = APIRouter(prefix="/ai", tags=["chat"])
@@ -36,7 +38,11 @@ def _payload(req: ChatRequest) -> dict[str, Any]:
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user: User = Depends(get_current_user)):
+    """代理阶跃 chat/completions（非流式直接返回，stream=True 时转 SSE）。
+
+    需登录：服务端注入 key，匿名开放会变成公网免费中继。
+    """
     payload = _payload(req)
     if not req.stream:
         return await chat_completion(payload)

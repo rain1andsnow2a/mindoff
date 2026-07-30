@@ -33,7 +33,9 @@ async def chat_stream(payload: dict[str, Any]) -> AsyncIterator[str]:
     """流式 chat：逐条 yield SSE data 内容（已去掉 'data:' 前缀，含结尾 '[DONE]'）。"""
     s = get_settings()
     body = {"model": s.step_text_model, **payload, "stream": True}
-    async with httpx.AsyncClient(timeout=None) as c:
+    # 必须设超时：上游挂起时 timeout=None 会让客户端 SSE 永久悬挂
+    timeout = httpx.Timeout(connect=10, read=120, write=30, pool=10)
+    async with httpx.AsyncClient(timeout=timeout) as c:
         async with c.stream(
             "POST", _url(CHAT_COMPLETIONS), headers=_headers(), json=body
         ) as r:

@@ -18,7 +18,7 @@ import {
 } from "mindoff-companion";
 import type { EventSubscription } from "expo-modules-core";
 
-import { createConversation, detectSceneIntent, getActivePet, streamChatReply, wsUrl } from "./api";
+import { createConversation, detectSceneIntent, getActivePet, streamChatReply, wsAuthUrl } from "./api";
 import type { IntentSeed } from "./api";
 import { speakReply, stopSpeaking } from "./speak";
 
@@ -219,10 +219,12 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       } catch {
         /* 无主桌宠也能聊 */
       }
-      const conv = await createConversation(petId, "free_chat");
+      // 以 voice_call 模式落库：夜间场景推荐管线只扫 voice_call 会话，
+      // 误用 free_chat 会让推荐永远空转（后端 scene_recommend 按 mode 过滤）。
+      const conv = await createConversation(petId, "voice_call");
       convIdRef.current = conv.id;
 
-      const ws = new WebSocket(wsUrl("/ai/stt/stream"));
+      const ws = new WebSocket(wsAuthUrl("/ai/stt/stream"));
       wsRef.current = ws;
 
       ws.onopen = async () => {

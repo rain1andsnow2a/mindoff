@@ -36,4 +36,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# ⚠️ 保持单 worker（uvicorn 默认）：main.py 的定时调度器挂在进程内，
+# 多 worker / 多副本会重复发晚间来信与周报。
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

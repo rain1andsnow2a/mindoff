@@ -43,6 +43,13 @@ from app.routers import (
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+# 生产环境安全底线：默认 JWT 密钥可伪造任意用户 token，禁止带它上线
+_DEFAULT_JWT_SECRET = "dev-only-change-me"
+if settings.app_env == "prod" and settings.jwt_secret == _DEFAULT_JWT_SECRET:
+    raise RuntimeError("APP_ENV=prod 时必须通过 .env 设置 JWT_SECRET（默认密钥可伪造 token）")
+if settings.jwt_secret == _DEFAULT_JWT_SECRET:
+    logging.getLogger(__name__).warning("[security] 正在使用默认 JWT 密钥，仅限本地开发")
+
 # 做梦 Agent 定时触发时间（默认凌晨 0 点，UTC）
 DREAM_HOUR = 0
 DREAM_MINUTE = 0
@@ -94,7 +101,8 @@ async def _dream_scheduler():
 
             db = SessionLocal()
             try:
-                results = run_dreaming_all(db)
+                # 同步 LLM 作业可能持续数分钟，必须丢到线程池，否则阻塞整个事件循环
+                results = await asyncio.to_thread(run_dreaming_all, db)
                 logger.info("[scheduler] dream done: %d users", len(results))
             except Exception as e:
                 logger.error("[scheduler] dream failed: %s", e)
@@ -107,7 +115,7 @@ async def _dream_scheduler():
 
         db = _SessionLocal()
         try:
-            results = run_scene_recommend_all(db)
+            results = await asyncio.to_thread(run_scene_recommend_all, db)
             n = sum(1 for r in results if r.get("recommended"))
             logger.info("[scheduler] scene recommend: %d recommended / %d users", n, len(results))
         except Exception as e:
@@ -131,7 +139,7 @@ async def _evening_letter_scheduler():
 
         db = SessionLocal()
         try:
-            results = run_evening_letters_all(db)
+            results = await asyncio.to_thread(run_evening_letters_all, db)
             sent = sum(1 for r in results if r.get("sent"))
             logger.info("[scheduler] evening letters: %d sent / %d users", sent, len(results))
         except Exception as e:
@@ -155,7 +163,7 @@ async def _weekly_report_scheduler():
 
         db = SessionLocal()
         try:
-            results = run_weekly_reports_all(db)
+            results = await asyncio.to_thread(run_weekly_reports_all, db)
             sent = sum(1 for r in results if r.get("sent"))
             logger.info("[scheduler] weekly reports: %d sent / %d users", sent, len(results))
         except Exception as e:
@@ -173,7 +181,11 @@ def _ensure_preference_location_columns() -> None:
     from sqlalchemy import inspect, text
     try:
         insp = inspect(engine)
-        if "user_preferences" not in insp.get_table_names():
+        names = insp.get_table_names()
+        # 生产（已跑 alembic）有 alembic_version 表，迁移由 alembic 统一管理，跳过本 dev shim
+        if "alembic_version" in names:
+            return
+        if "user_preferences" not in names:
             return
         existing = {c["name"] for c in insp.get_columns("user_preferences")}
         adds = {
@@ -230,11 +242,12 @@ async def _proactive_signal_scheduler():
 
 
 async def _motion_cleanup_scheduler():
-    """后台协程：每天清理超过 30 天的速度样本。"""
+    """后台协程：每天清理超过 30 天的速度样本，以及过期的 TTS 音频文件。"""
     while True:
         await asyncio.sleep(24 * 3600)
         from app.db import SessionLocal
         from app.services.signals.runner import cleanup_motion_samples
+        from app.services.static_cleanup import cleanup_tts_audio
 
         db = SessionLocal()
         try:
@@ -244,6 +257,13 @@ async def _motion_cleanup_scheduler():
             logger.error("[scheduler] motion cleanup failed: %s", e)
         finally:
             db.close()
+
+        try:
+            removed = await asyncio.to_thread(cleanup_tts_audio)
+            if removed:
+                logger.info("[scheduler] tts audio cleaned: %d files", removed)
+        except Exception as e:
+            logger.error("[scheduler] tts audio cleanup failed: %s", e)
 
 
 async def _bedtime_reminder_scheduler():
@@ -257,7 +277,7 @@ async def _bedtime_reminder_scheduler():
 
         db = SessionLocal()
         try:
-            results = run_due_bedtime_reminders(db)
+            results = await asyncio.to_thread(run_due_bedtime_reminders, db)
             if results:
                 logger.info("[scheduler] bedtime reminders: %d sent", len(results))
         except Exception as e:
@@ -272,7 +292,8 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _ensure_preference_location_columns()
     # 启动定时调度：做梦（0:00 UTC）+ 晚间来信（21:30 东八区）+ 周报（周日 20:00 东八区）
-    # + 主动信号扫描（每 5 分钟）+ 速度样本清理（每天）
+    # + 主动信号扫描（每 5 分钟）+ 速度样本/TTS 音频清理（每天）
+    # ⚠️ 这些调度器假设单 worker 单副本（uvicorn 默认）；多 worker 会重复发信。
     dream_task = asyncio.create_task(_dream_scheduler())
     evening_task = asyncio.create_task(_evening_letter_scheduler())
     weekly_task = asyncio.create_task(_weekly_report_scheduler())
@@ -302,7 +323,8 @@ _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] or
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=True,
+    # 通配符 origin 时不携带凭证：避免任意网页带用户凭证跨站调用
+    allow_credentials="*" not in _origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

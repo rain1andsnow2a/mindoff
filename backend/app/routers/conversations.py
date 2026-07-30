@@ -7,7 +7,8 @@
 - POST /conversations/{id}/messages  发消息 → 桌宠回应；?stream=true 走 SSE
 - GET  /conversations/{id}/messages  消息分页
 
-实时语音走 /ai/realtime（前端直连网关），不在此。
+实时语音：客户端走 WS /ai/stt/stream 转写后，以 mode=voice_call 建会话并在此发消息；
+/ai/realtime 中继链路则由网关旁路落库，不经过本路由。
 """
 import json
 from datetime import datetime

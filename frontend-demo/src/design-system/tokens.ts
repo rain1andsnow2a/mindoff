@@ -73,6 +73,23 @@ export type ColorTokens = {
   [Key in keyof typeof lightColors]: string;
 };
 
+/**
+ * 拟物「奶油纸面」文字色：信件/待办卡/珍藏卡等始终保持浅色纸面的表面上的文字，
+ * 日夜模式同值（纸面不随主题变暗，故不属于主题 ColorTokens，与「素材色」同类）。
+ * 内容强调色（音乐/场景类型色）与渐变属素材色，同样不放在主题 token 里。
+ */
+export const paperColors = {
+  ink:     "#484145", // 纸面主文字
+  ink2:    "#4D4249", // 信纸标题/主文字（偏暖）
+  body:    "#62575D", // 信纸正文
+  sub:     "#655D61", // 次级文字
+  sub2:    "#847D72", // 次级文字（暖调）
+  meta:    "#7E7479", // 日期/来源
+  meta2:   "#8C8187", // 信纸元信息
+  dim:     "#A39A9F", // 弱化/已完成/占位
+  goldInk: "#463F3C", // 奶油胶囊按钮文字
+} as const;
+
 export const fontSizes = {
   label: 12,
   caption: 13,
