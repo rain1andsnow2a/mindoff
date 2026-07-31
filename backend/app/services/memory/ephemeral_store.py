@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.memory import MemoryItem
-from app.services.memory_store import MemoryStore
-from app.services.treasure_store import TreasureStore
+from app.services.memory.memory_store import MemoryStore
+from app.services.companion.treasure_store import TreasureStore
 
 
 def list_ephemeral(db: Session, user_id: int, *, limit: int = 50) -> list[MemoryItem]:

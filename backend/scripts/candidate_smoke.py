@@ -10,7 +10,7 @@ import httpx
 
 from app.db import SessionLocal
 from app.models.memory import MemoryItem
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 BASE = f"http://127.0.0.1:{os.environ.get('MINDOFF_PORT', '8000')}/api/v1"
 

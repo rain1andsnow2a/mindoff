@@ -42,7 +42,7 @@ def trigger_evening_letter(
     db: Session = Depends(get_db),
 ):
     """手动触发当前用户的晚间来信（无需等 21:30）。"""
-    from app.services.evening_letter import generate_evening_letter
+    from app.services.mailbox.evening_letter import generate_evening_letter
 
     letter = generate_evening_letter(db, user.id)
     if letter is None:
@@ -61,7 +61,7 @@ def trigger_scene_recommend(
     db: Session = Depends(get_db),
 ):
     """手动触发当前用户的场景推荐分析（无需等夜间调度）。"""
-    from app.services.scene_recommend import analyze_for_user
+    from app.services.scene.scene_recommend import analyze_for_user
 
     rec = analyze_for_user(db, user.id)
     if rec is None:

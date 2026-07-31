@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.services.memory_store import MemoryStore
-from app.services.treasure_store import SOURCE_TYPES, TreasureStore
+from app.services.memory.memory_store import MemoryStore
+from app.services.companion.treasure_store import SOURCE_TYPES, TreasureStore
 
 router = APIRouter(prefix="/api/v1/treasures", tags=["treasures"])
 

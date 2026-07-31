@@ -20,9 +20,9 @@ from sqlalchemy.orm import Session
 
 from app.models.memory import MemoryItem
 from app.models.role_profile import RoleProfile
-from app.services.memory_store import MemoryStore
-from app.services.privacy import filter_for_external
-from app.services.treasure_store import TreasureStore
+from app.services.memory.memory_store import MemoryStore
+from app.services.memory.privacy import filter_for_external
+from app.services.companion.treasure_store import TreasureStore
 
 logger = logging.getLogger(__name__)
 

@@ -61,9 +61,9 @@ print("VALIDATION: illegal time/frequency/ttl/font 422 PASS")
 import sys
 sys.path.insert(0, ".")
 from app.db import SessionLocal
-from app.services import proactive
-from app.services.memory_store import MemoryStore
-from app.services.trust import get_or_create
+from app.services.companion import proactive
+from app.services.memory.memory_store import MemoryStore
+from app.services.pet.trust import get_or_create
 
 db = SessionLocal()
 MemoryStore(db).create(user_id=uid, layer="state", kind="待办", depth="surface",
@@ -95,7 +95,7 @@ print("PROACTIVE ON: restore PASS")
 r = httpx.patch(f"{B}/preferences", headers=H, timeout=30,
                 json={"ephemeral_ttl_days": 1})
 assert r.status_code == 200
-from app.services.preferences import ttl_days_for
+from app.services.infra.preferences import ttl_days_for
 db = SessionLocal()
 assert ttl_days_for(db, uid) == 1
 db.close()

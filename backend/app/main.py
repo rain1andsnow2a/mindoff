@@ -12,33 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import Base, engine
-from app.routers import (
-    auth,
-    brain_dumps,
-    candidates,
-    chat,
-    companion,
-    conversations,
-    debug,
-    ephemeral,
-    handoffs,
-    letters,
-    mailbox,
-    memory,
-    memory_review,
-    pets,
-    preferences,
-    realtime,
-    reminders,
-    role_profiles,
-    scenes,
-    signals,
-    stores,
-    stt,
-    theater_ext,
-    treasures,
-    weather,
-)
+from app.routers.ai import chat, realtime, stt
+from app.routers.scene import candidates, role_profiles, scenes, theater_ext
+from app.routers.mailbox import ephemeral, letters, mailbox, reminders, treasures
+from app.routers.companion import companion, conversations, handoffs, pets
+from app.routers.memory import brain_dumps, memory, memory_review, signals, stores
+from app.routers.system import auth, debug, preferences, weather
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -111,7 +90,7 @@ async def _dream_scheduler():
 
         # 做梦之后：夜间场景推荐（分析当天语音通话 → 信箱场景邀请）
         from app.db import SessionLocal as _SessionLocal
-        from app.services.scene_recommend import run_scene_recommend_all
+        from app.services.scene.scene_recommend import run_scene_recommend_all
 
         db = _SessionLocal()
         try:
@@ -135,7 +114,7 @@ async def _evening_letter_scheduler():
         await asyncio.sleep(wait_seconds)
 
         from app.db import SessionLocal
-        from app.services.evening_letter import run_evening_letters_all
+        from app.services.mailbox.evening_letter import run_evening_letters_all
 
         db = SessionLocal()
         try:
@@ -159,7 +138,7 @@ async def _weekly_report_scheduler():
         await asyncio.sleep(wait_seconds)
 
         from app.db import SessionLocal
-        from app.services.weekly_report import run_weekly_reports_all
+        from app.services.mailbox.weekly_report import run_weekly_reports_all
 
         db = SessionLocal()
         try:
@@ -247,7 +226,7 @@ async def _motion_cleanup_scheduler():
         await asyncio.sleep(24 * 3600)
         from app.db import SessionLocal
         from app.services.signals.runner import cleanup_motion_samples
-        from app.services.static_cleanup import cleanup_tts_audio
+        from app.services.infra.static_cleanup import cleanup_tts_audio
 
         db = SessionLocal()
         try:
@@ -273,7 +252,7 @@ async def _bedtime_reminder_scheduler():
     while True:
         await asyncio.sleep(60)
         from app.db import SessionLocal
-        from app.services.bedtime_reminder import run_due_bedtime_reminders
+        from app.services.mailbox.bedtime_reminder import run_due_bedtime_reminders
 
         db = SessionLocal()
         try:

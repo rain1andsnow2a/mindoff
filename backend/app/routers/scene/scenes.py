@@ -16,11 +16,11 @@ from app.deps import get_current_user
 from app.graphs import theater
 from app.models.scene import Scene
 from app.models.user import User
-from app.routers._common import get_owned_scene as _get_owned, sse as _sse
-from app.services import scene_service
-from app.services.scene_images import gen_scene_images
-from app.services.scene_recommend import PRESET_THEATERS, detect_scene_intent
-from app.services.scene_turn_images import schedule_bg_regen
+from app.routers.system._common import get_owned_scene as _get_owned, sse as _sse
+from app.services.scene import scene_service
+from app.services.scene.scene_images import gen_scene_images
+from app.services.scene.scene_recommend import PRESET_THEATERS, detect_scene_intent
+from app.services.scene.scene_turn_images import schedule_bg_regen
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 
@@ -254,7 +254,7 @@ def create_scene(
             )
         elif body.render_kind == "generated_3d":
             # 生成式 3D：LLM 产 SceneSpec；失败则降级为 galgame 图（绝不阻断建场景）
-            from app.services.scene_spec import generate_scene_spec
+            from app.services.scene.scene_spec import generate_scene_spec
             scene_spec = generate_scene_spec({
                 "title": body.title, "people": [body.people] if body.people else [],
                 "place": body.place, "plot": body.plot, "intent": body.intent,

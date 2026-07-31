@@ -38,7 +38,7 @@ assert r.status_code == 422
 import sys
 sys.path.insert(0, ".")
 from app.db import SessionLocal
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 db = SessionLocal()
 mem = MemoryStore(db).create(user_id=uid, layer="state", kind="灵感", depth="personal",
@@ -70,7 +70,7 @@ assert r.status_code == 422
 print("PREF validation: 422 PASS")
 
 # TTL 真正影响倾倒产物的 expires_at
-from app.services.preferences import ttl_days_for
+from app.services.infra.preferences import ttl_days_for
 db = SessionLocal()
 assert ttl_days_for(db, uid) == 1
 db.close()
@@ -93,7 +93,7 @@ assert 0.5 < delta_days < 1.1, f"TTL 应≈1 天，实际 {delta_days:.2f}"
 print(f"TTL effective: expires_at ~ {delta_days:.2f} days later PASS")
 
 # ─── DAY-192：来信回信端点 ────────────────────────────────────────────────────
-from app.services.letter_store import LetterStore
+from app.services.mailbox.letter_store import LetterStore
 db = SessionLocal()
 letter = LetterStore(db).create(user_id=uid, type="greeting", title="早安",
                                 body="昨晚的事我记着呢，今天慢慢来。", pet_id=None)

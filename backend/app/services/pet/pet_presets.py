@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from app.services.pet_prompts import BOBI_SYSTEM_PROMPT, MIRO_SYSTEM_PROMPT
+from app.services.pet.pet_prompts import BOBI_SYSTEM_PROMPT, MIRO_SYSTEM_PROMPT
 
 PET_PRESETS: list[dict] = [
     {

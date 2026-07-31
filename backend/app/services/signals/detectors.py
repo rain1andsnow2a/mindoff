@@ -353,7 +353,7 @@ class WeatherAlertDetector:
             return None
 
         try:
-            from app.services.weather import weather_service
+            from app.services.infra.weather import weather_service
 
             weather = weather_service.get_current_weather(float(pref.last_lat), float(pref.last_lon))
         except Exception as e:  # noqa: BLE001  天气失败不阻塞其它信号

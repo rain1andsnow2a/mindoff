@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.llm import get_chat_model
 from app.models.memory import DEPTH_DEFAULTS, MemoryItem
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +299,7 @@ def reconcile(state: DreamState, db: Session) -> dict[str, Any]:
 
 def forget(state: DreamState, db: Session) -> dict[str, Any]:
     """过期遗忘（复用 inbox.expire_ephemeral 逻辑）。"""
-    from app.services.inbox import expire_ephemeral
+    from app.services.mailbox.inbox import expire_ephemeral
     count = expire_ephemeral(db)
     logger.info("[dream] forget: %d expired", count)
     return {"forget_count": count}

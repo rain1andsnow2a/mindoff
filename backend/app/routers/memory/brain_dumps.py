@@ -15,9 +15,9 @@ from app.db import SessionLocal, get_db
 from app.deps import get_current_user
 from app.models.memory import MemoryItem
 from app.models.user import User
-from app.services.conversation_store import ConversationStore
-from app.services.dump_ingest import KIND_TO_OUTPUT, OUTPUT_KEYS, ingest_dump
-from app.services.memory_store import MemoryStore
+from app.services.companion.conversation_store import ConversationStore
+from app.services.memory.dump_ingest import KIND_TO_OUTPUT, OUTPUT_KEYS, ingest_dump
+from app.services.memory.memory_store import MemoryStore
 
 router = APIRouter(prefix="/api/v1/brain-dumps", tags=["brain-dumps"])
 

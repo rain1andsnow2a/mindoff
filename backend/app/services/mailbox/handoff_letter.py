@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.llm import get_chat_model
 from app.models.memory import Kind
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 logger = logging.getLogger(__name__)
 

@@ -20,9 +20,9 @@ from app.graphs import theater
 from app.models.memory import MemoryItem
 from app.models.scene import Scene
 from app.models.user import User
-from app.routers._common import sse as _sse
-from app.services import stage
-from app.services.memory_store import MemoryStore
+from app.routers.system._common import sse as _sse
+from app.services.scene import stage
+from app.services.memory.memory_store import MemoryStore
 
 router = APIRouter(prefix="/api/v1/candidates", tags=["candidates"])
 

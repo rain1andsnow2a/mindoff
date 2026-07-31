@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 from app.llm import get_chat_model
 from app.models.letter import Letter
 from app.models.memory import MemoryItem
-from app.services.letter_store import LetterStore
-from app.services.pet_store import PetStore
+from app.services.mailbox.letter_store import LetterStore
+from app.services.pet.pet_store import PetStore
 
 logger = logging.getLogger(__name__)
 

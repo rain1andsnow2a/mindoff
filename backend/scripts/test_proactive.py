@@ -8,8 +8,9 @@ import uuid
 from app.db import Base, SessionLocal, engine
 from app.models import trust_state  # noqa: F401  注册 metadata
 from app.models.user import User
-from app.services import proactive, trust
-from app.services.memory_store import MemoryStore
+from app.services.companion import proactive
+from app.services.pet import trust
+from app.services.memory.memory_store import MemoryStore
 
 Base.metadata.create_all(bind=engine)
 

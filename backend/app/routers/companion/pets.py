@@ -23,11 +23,11 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.pet import Pet
 from app.models.user import User
-from app.routers.handoffs import HandoffOut
-from app.services.handoff_letter import compose_handoff_letter
-from app.services.handoff_store import HandoffStore
-from app.services.pet_presets import PET_PRESETS, get_preset
-from app.services.pet_store import PetStore
+from app.routers.companion.handoffs import HandoffOut
+from app.services.mailbox.handoff_letter import compose_handoff_letter
+from app.services.pet.handoff_store import HandoffStore
+from app.services.pet.pet_presets import PET_PRESETS, get_preset
+from app.services.pet.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/pets", tags=["pets"])
 

@@ -208,8 +208,8 @@ def _deliver(
     letter_id: int | None = None
     if mode == "letter":
         try:
-            from app.services.letter_store import LetterStore
-            from app.services.pet_store import PetStore
+            from app.services.mailbox.letter_store import LetterStore
+            from app.services.pet.pet_store import PetStore
 
             pet = PetStore(db).get_active(user_id)
             letter = LetterStore(db).create(

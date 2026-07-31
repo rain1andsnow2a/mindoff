@@ -24,8 +24,8 @@ print("AUTH:", r.status_code, "uid=", uid)
 import sys
 sys.path.insert(0, ".")
 from app.db import SessionLocal
-from app.services.letter_store import LetterStore
-from app.services.memory_store import MemoryStore
+from app.services.mailbox.letter_store import LetterStore
+from app.services.memory.memory_store import MemoryStore
 
 db = SessionLocal()
 letter = LetterStore(db).create(

@@ -14,8 +14,8 @@ from app.db import Base, SessionLocal, engine
 from app.models import preference  # noqa: F401  注册模型
 from app.models.preference import UserPreference
 from app.models.user import User
-from app.services import dump_ingest
-from app.services.memory_store import MemoryStore
+from app.services.memory import dump_ingest
+from app.services.memory.memory_store import MemoryStore
 
 Base.metadata.create_all(bind=engine)
 

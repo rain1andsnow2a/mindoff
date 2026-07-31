@@ -23,10 +23,10 @@ from app.deps import get_current_user
 from app.graphs.companion import run_companion, stream_companion
 from app.models.conversation import ConversationMode
 from app.models.user import User
-from app.services.context_builder import build as build_memory_context
-from app.services.conversation_store import ConversationStore
-from app.services.memory_store import MemoryStore
-from app.services.pet_store import PetStore
+from app.services.memory.context_builder import build as build_memory_context
+from app.services.companion.conversation_store import ConversationStore
+from app.services.memory.memory_store import MemoryStore
+from app.services.pet.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
@@ -123,7 +123,7 @@ def _env_context(db: Session, user_id: int) -> str | None:
             parts.append(f"用户在{pref.last_city}")
         if pref and pref.last_lat is not None and pref.last_lon is not None:
             try:
-                from app.services.weather import weather_service
+                from app.services.infra.weather import weather_service
                 w = weather_service.get_current_weather(pref.last_lat, pref.last_lon)
                 cond, temp = w.get("condition"), w.get("temperature")
                 if cond:

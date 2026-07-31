@@ -18,9 +18,9 @@ from app.models import preference  # noqa: F401
 from app.models.letter import Letter
 from app.models.memory import MemoryHistory, MemoryItem
 from app.models.user import User
-from app.services import weekly_report
-from app.services.inbox import expire_ephemeral
-from app.services.memory_store import MemoryStore
+from app.services.mailbox import weekly_report
+from app.services.mailbox.inbox import expire_ephemeral
+from app.services.memory.memory_store import MemoryStore
 
 Base.metadata.create_all(bind=engine)
 

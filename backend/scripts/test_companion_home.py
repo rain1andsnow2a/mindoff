@@ -35,8 +35,8 @@ assert r.json()["pet"]["name"] == presets[0]["name"]
 import sys
 sys.path.insert(0, ".")
 from app.db import SessionLocal
-from app.services.letter_store import LetterStore
-from app.services.memory_store import MemoryStore
+from app.services.mailbox.letter_store import LetterStore
+from app.services.memory.memory_store import MemoryStore
 
 uid = httpx.get(f"{B}/users/me", headers=Ha).json()["id"]
 db = SessionLocal()

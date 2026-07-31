@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.services.letter_store import LETTER_TYPES, LetterStore
-from app.services.pet_store import PetStore
+from app.services.mailbox.letter_store import LETTER_TYPES, LetterStore
+from app.services.pet.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/letters", tags=["letters"])
 
@@ -50,7 +50,7 @@ def _require_letter(db: Session, user: User, letter_id: int):
 
 
 # 动态 galgame 配图生成已抽离到公共服务，letters/scenes 共用（DAY-215）。
-from app.services.scene_images import gen_scene_images as _gen_scene_images
+from app.services.scene.scene_images import gen_scene_images as _gen_scene_images
 
 
 @router.get("", response_model=list[LetterOut])
@@ -112,7 +112,7 @@ def ack_letter(
     回应经 run_companion（BASE_PERSONA + 桌宠 system_prompt 人格层）生成，
     与聊天同一套人格，不是通用文案。与 /reply 的区别：ack 不开会话、不留对话记录。
     """
-    from app.services.letter_ack import generate_ack_response
+    from app.services.mailbox.letter_ack import generate_ack_response
 
     letter = _require_letter(db, user, letter_id)
     LetterStore(db).mark_read(letter, True)
@@ -143,7 +143,7 @@ def reply_letter(
     """对一封来信回信：以信件内容为上下文开一段对话，持久化用户回信，
     并生成桌宠的第一句续写（非流式；前端之后可继续 streamChatReply）。"""
     from app.graphs.companion import run_companion
-    from app.services.conversation_store import ConversationStore
+    from app.services.companion.conversation_store import ConversationStore
 
     letter = _require_letter(db, user, letter_id)
     text = body.text.strip()
@@ -159,7 +159,7 @@ def reply_letter(
     store.add_message(conv.id, role="user", content=text)
 
     # 取来信关联桌宠或当前主桌宠的人设
-    from app.services.pet_store import PetStore
+    from app.services.pet.pet_store import PetStore
     pet = None
     if letter.pet_id is not None:
         pet = PetStore(db).get(user.id, letter.pet_id)
@@ -233,7 +233,7 @@ def accept_scene_invite(
     characters: list | None = None
     scene_spec: dict | None = None
     if render_kind == "generated_3d":
-        from app.services.scene_spec import generate_scene_spec
+        from app.services.scene.scene_spec import generate_scene_spec
         scene_spec = generate_scene_spec(seed)
         if scene_spec is None:
             render_kind = "dynamic_image"  # 降级：spec 生成失败

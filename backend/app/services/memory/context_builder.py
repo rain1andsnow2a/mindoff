@@ -16,8 +16,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.services.memory_store import MemoryStore
-from app.services.privacy import filter_for_cloud_prompt
+from app.services.memory.memory_store import MemoryStore
+from app.services.memory.privacy import filter_for_cloud_prompt
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ H = {"Authorization": f"Bearer {tok}"}
 import sys
 sys.path.insert(0, ".")
 from app.db import SessionLocal
-from app.services.letter_store import LetterStore
+from app.services.mailbox.letter_store import LetterStore
 
 ATTACH = {"label": "信里夹了一首歌", "title": "Bloom", "artist": "ODESZA",
           "reason": "旋律很慢，适合把今天一点点放下来。"}

@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.services import ephemeral_store
-from app.services.inbox import build_letters, build_today, expire_ephemeral
-from app.services.letter_store import LetterStore
-from app.services.treasure_store import TreasureStore
+from app.services.memory import ephemeral_store
+from app.services.mailbox.inbox import build_letters, build_today, expire_ephemeral
+from app.services.mailbox.letter_store import LetterStore
+from app.services.companion.treasure_store import TreasureStore
 
 router = APIRouter(prefix="/api/v1/mailbox", tags=["mailbox"])
 

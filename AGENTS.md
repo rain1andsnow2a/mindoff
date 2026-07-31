@@ -8,6 +8,7 @@
 | 目录 | 内容 |
 |---|---|
 | `backend/` | FastAPI + SQLite + LangGraph 后端（AI 网关 `/ai/*` + 业务层 `/api/v1/*`），详见 `backend/README.md` |
+| `backend/app/routers/`、`backend/app/services/` | 按业务域分子包（routers：`ai/ scene/ mailbox/ companion/ memory/ system/`；services：`scene/ mailbox/ pet/ memory/ companion/ signals/ infra/`），新模块归入对应域；导入用绝对路径 `app.services.<域>.X`，子包 `__init__.py` 只写职责说明、不做万能 re-export |
 | `backend/docs/api-design.md` | REST 接口契约（各节标注 ✅ 已实现 / 未实现） |
 | `.kiro/specs/memory-system/` | 双轴记忆系统 spec（requirements/design/tasks），Phase 0–6 已全部实现 |
 | `theater/` | three.js 重演剧场场景库（六个预置场景），详见 `theater/README.md` |
@@ -37,10 +38,10 @@ cd theater && npm run build                           # 产出单文件 dist/ind
 
 1. **dev 库 `backend/mindoff.db` 由 create_all 建**，不加列；改列手动 ALTER 或删库。
    模型/字段变更必须同步写 `backend/alembic/versions/` 迁移（revision id ≤ 32 字符）。
-2. 新模型注册 `backend/app/models/__init__.py`；新 router 挂载 `backend/app/main.py`。
+2. 新模型注册 `backend/app/models/__init__.py`；新 router / service 放进 `routers/` `services/` 对应业务域子包（无合适域再新建），新 router 还需在 `backend/app/main.py` 按域导入并 `include_router`。
 3. 所有业务接口必须 `Depends(get_current_user)` 做用户隔离，URL 不放 userId。
 4. 伦理红线：不诊断、不贴人格标签、不把推测当事实；vulnerable/core 记忆
-   默认 local 不外发（走 `app/services/privacy.py` 判定）。
+   默认 local 不外发（走 `app/services/memory/privacy.py` 判定）。
 5. `mindoff.db*`、`.env` 不入库（见 `.gitignore`）。
 
 ## 前端设计与迁移规则

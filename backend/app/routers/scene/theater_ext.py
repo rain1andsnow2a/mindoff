@@ -19,7 +19,7 @@ from app.graphs import theater
 from app.models.role_profile import RoleProfile
 from app.models.scene import Scene
 from app.models.user import User
-from app.routers._common import get_owned_scene as _get_owned
+from app.routers.system._common import get_owned_scene as _get_owned
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 

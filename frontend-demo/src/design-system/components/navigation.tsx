@@ -9,8 +9,7 @@ import {
 import { Film, Mail, MessageCircle, User } from "lucide-react-native";
 
 import { useTheme } from "../theme";
-import { iconSizes, spacing, touchTarget } from "../tokens";
-import { GlassSurface } from "./effects";
+import { iconSizes, spacing, touchTarget, zIndices } from "../tokens";
 
 export type AppTab = "companion" | "mailbox" | "scene" | "profile";
 
@@ -113,40 +112,54 @@ function NavigationItem({
 
 export function BottomNavigation({ active, onChange }: NavigationProps) {
   const theme = useTheme();
+  // 实心奶油舱：全宽贴底、完全不透明的 surface 面 + 顶部发丝线 + 上抛柔影。
+  // 不再用半透明 GlassSurface：Android 无 backdrop-blur，列表文字会直接穿透底栏。
+  const liftShadow: ViewStyle = Platform.select({
+    web: {
+      boxShadow: theme.isNight
+        ? "0 -8px 24px rgba(0,0,0,0.28)"
+        : "0 -8px 24px rgba(64,58,53,0.07)",
+    },
+    default: {
+      shadowColor: theme.isNight ? "#000000" : "#403A35",
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: theme.isNight ? 0.24 : 0.08,
+      shadowRadius: 12,
+      elevation: 10,
+    },
+  }) as ViewStyle;
 
   return (
-    <GlassSurface
+    <View
+      accessibilityRole="tablist"
       style={{
         position: "absolute",
-        left: spacing[3],
-        right: spacing[3],
-        bottom: spacing[2],
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: zIndices.navigation,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingTop: spacing[2],
+        paddingHorizontal: spacing[3],
+        paddingBottom: spacing[3],
+        backgroundColor: theme.colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        ...liftShadow,
       }}
     >
-      <View
-        accessibilityRole="tablist"
-        style={{
-          minHeight: 68,
-          padding: spacing[1],
-          flexDirection: "row",
-          alignItems: "center",
-          borderRadius: theme.radii.card,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-        }}
-      >
-        {items.map(({ id, icon, label }) => (
-          <NavigationItem
-            key={id}
-            active={active === id}
-            compact
-            icon={icon}
-            label={label}
-            onPress={() => onChange(id)}
-          />
-        ))}
-      </View>
-    </GlassSurface>
+      {items.map(({ id, icon, label }) => (
+        <NavigationItem
+          key={id}
+          active={active === id}
+          compact
+          icon={icon}
+          label={label}
+          onPress={() => onChange(id)}
+        />
+      ))}
+    </View>
   );
 }
 

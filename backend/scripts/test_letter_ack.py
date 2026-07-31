@@ -46,7 +46,7 @@ if not letters:
     print("\n没有来信 → 在服务器容器里生成一封晚间来信…")
     code = (
         "from app.db import SessionLocal; "
-        "from app.services.evening_letter import generate_evening_letter as g; "
+        "from app.services.mailbox.evening_letter import generate_evening_letter as g; "
         f"l=g(SessionLocal(), {uid}); print('letter_id=', l.id if l else None)"
     )
     client = paramiko.SSHClient()

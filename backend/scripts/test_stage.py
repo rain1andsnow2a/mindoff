@@ -8,9 +8,9 @@ import uuid
 from app.db import Base, SessionLocal, engine
 from app.models import role_profile  # noqa: F401  确保模型注册进 metadata
 from app.models.user import User
-from app.services import stage
-from app.services.inbox import build_today
-from app.services.memory_store import MemoryStore
+from app.services.scene import stage
+from app.services.mailbox.inbox import build_today
+from app.services.memory.memory_store import MemoryStore
 
 Base.metadata.create_all(bind=engine)  # dev 库对齐（role_profiles 新表）
 
@@ -110,7 +110,7 @@ print("SETTLE 角色笔记: 已追加 ✓")
 card = store.get(result["card_memory_id"])
 assert card.expires_at is None
 assert result["treasure_id"] is not None
-from app.services.treasure_store import TreasureStore
+from app.services.companion.treasure_store import TreasureStore
 treasure = TreasureStore(db).get(uid, result["treasure_id"])
 assert treasure is not None and treasure.content == "那句没说出口的话：妈，我需要的是你先信我一次。"
 print("SETTLE 珍藏卡: 长久保存（无 TTL）+ 已生成 Treasure ✓")
@@ -124,7 +124,7 @@ assert r2["treasure_id"] is None, "即焚卡不应生成 Treasure"
 # 手动把 expires_at 拨到过去，验证 expire 路径
 burn.expires_at = datetime.now(timezone.utc)
 db.commit()
-from app.services.inbox import expire_ephemeral
+from app.services.mailbox.inbox import expire_ephemeral
 expire_ephemeral(db)
 assert store.get(r2["card_memory_id"]) is None, "即焚卡到期应被物理删除"
 print("SETTLE 即焚卡: 到期遗忘，无 Treasure ✓")

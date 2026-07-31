@@ -20,7 +20,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.memory import Kind, MemoryItem
 from app.models.user import User
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 
 # ─── 共用输出 ────────────────────────────────────────────────────────────────

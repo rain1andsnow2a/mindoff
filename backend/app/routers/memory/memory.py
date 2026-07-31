@@ -12,7 +12,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.memory import Depth, Kind, Layer
 from app.models.user import User
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
 

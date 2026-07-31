@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.deps import get_current_user
 from app.models.user import User
-from app.services.weather import weather_service
+from app.services.infra.weather import weather_service
 
 router = APIRouter(prefix="/api/v1/weather", tags=["weather"])
 

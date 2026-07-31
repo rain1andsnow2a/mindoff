@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.memory import MemoryItem
-from app.services.trust import get_or_create
+from app.services.pet.trust import get_or_create
 
 logger = logging.getLogger(__name__)
 

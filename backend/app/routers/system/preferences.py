@@ -17,7 +17,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.preference import UserPreference
 from app.models.user import User
-from app.services import trust as trust_service
+from app.services.pet import trust as trust_service
 from app.services.signals.detectors import DEFAULT_SCHEDULE_TIMES
 
 router = APIRouter(prefix="/api/v1/preferences", tags=["preferences"])

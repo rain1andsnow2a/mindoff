@@ -77,12 +77,20 @@ const SESSION_UPDATE = {
           enable_itn: true,
         },
         // server_vad：threshold 越高越不灵敏（需更清晰人声才触发，抗风声/背景噪音）；
-        // silence_duration_ms 为判定「说完了」所需的静音时长，略放长避免噪音频繁误触发断句。
-        turn_detection: { type: "server_vad", silence_duration_ms: 1000, threshold: 0.72 },
+        // silence_duration_ms 为判定「说完了」所需的静音时长。这里配合下方 GRACE_MS 续说合并：
+        // VAD 先粗分句、客户端再等宽限窗确认是否真的说完，避免中途停顿被抢答。
+        turn_detection: { type: "server_vad", silence_duration_ms: 1200, threshold: 0.6 },
       },
     },
   },
 };
+
+/**
+ * 续说合并宽限窗（毫秒）：一句被 server_vad 判完后，先不马上回复，等这么久；
+ * 期间用户又开口（speech_started）就取消，把后续整句拼到前句，直到真正停够才回。
+ * 调大＝更不容易被打断但回复更慢；调小＝更跟手但更容易在停顿处抢答。
+ */
+const GRACE_MS = 1000;
 
 export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const [status, setStatus] = useState<CallStatus>("idle");
@@ -97,6 +105,9 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const convIdRef = useRef<number | null>(null);
   const closedRef = useRef(false);
   const turnIdRef = useRef(0);
+  // 续说合并：pendingRef 暂存已定稿但尚未发送的整句；graceTimerRef 是宽限窗计时器。
+  const pendingRef = useRef("");
+  const graceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 场景意图识别的序号：只认最新一句的结果，避免慢返回覆盖新意图。
   const intentSeqRef = useRef(0);
   // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
@@ -112,6 +123,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const cleanup = useCallback(() => {
     subRef.current?.remove();
     subRef.current = null;
+    if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+    pendingRef.current = "";
     void stopPcmCapture();
     const ws = wsRef.current;
     wsRef.current = null;
@@ -133,8 +146,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
 
   const dismissSuggestion = useCallback(() => setSceneSuggestion(null), []);
 
-  // 用户整句定稿 → 走带记忆的 chat，桌宠逐字回复
-  const handleUtterance = useCallback(
+  // 用户「整段说完」→ 走带记忆的 chat，桌宠逐字回复（由 queueUtterance 在宽限窗结束后调用）
+  const sendUtterance = useCallback(
     (text: string) => {
       const clean = text.trim();
       const convId = convIdRef.current;
@@ -188,6 +201,24 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
         });
     },
     [addTurn]
+  );
+
+  // 续说合并：完句先入 pending 并重置宽限窗；窗内无人再开口才真正发送。
+  const queueUtterance = useCallback(
+    (transcript: string) => {
+      const clean = transcript.trim();
+      if (!clean) return;
+      pendingRef.current = pendingRef.current ? pendingRef.current + clean : clean;
+      setLiveUser(pendingRef.current);
+      if (graceTimerRef.current) clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = setTimeout(() => {
+        graceTimerRef.current = null;
+        const merged = pendingRef.current;
+        pendingRef.current = "";
+        sendUtterance(merged);
+      }, GRACE_MS);
+    },
+    [sendUtterance]
   );
 
   const start = useCallback(async () => {
@@ -256,13 +287,15 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
         }
         switch (msg?.type) {
           case "input_audio_buffer.speech_started":
+            // 宽限窗内又开口 = 还没说完，撤销待发，等这段说完再拼接。
+            if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
             if (!closedRef.current) setStatus("listening");
             break;
           case "conversation.item.input_audio_transcription.delta":
-            if (typeof msg.text === "string") setLiveUser(msg.text);
+            if (typeof msg.text === "string") setLiveUser(pendingRef.current + msg.text);
             break;
           case "conversation.item.input_audio_transcription.completed":
-            handleUtterance(msg.transcript ?? "");
+            queueUtterance(msg.transcript ?? "");
             break;
           case "error":
             setError(msg?.error?.message || "识别出错了");
@@ -289,7 +322,7 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       cleanup();
       setStatus("error");
     }
-  }, [cleanup, handleUtterance, stop]);
+  }, [cleanup, queueUtterance, stop]);
 
   return {
     available: isPcmAvailable,

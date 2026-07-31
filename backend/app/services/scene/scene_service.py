@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.graphs import theater
 from app.models.scene import Scene
-from app.services import stage
-from app.services.scene_turn_images import schedule_bg_regen
+from app.services.scene import stage
+from app.services.scene.scene_turn_images import schedule_bg_regen
 
 
 def advance(db: Session, scene: Scene, label: str) -> dict[str, Any]:

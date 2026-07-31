@@ -13,8 +13,8 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.deps import user_id_from_token
 from app.models.user import User
-from app.services.conversation_store import ConversationStore
-from app.services.pet_store import PetStore
+from app.services.companion.conversation_store import ConversationStore
+from app.services.pet.pet_store import PetStore
 from app.stepfun.constants import WS_REALTIME
 from app.stepfun.ws_relay import extract_transcript, relay
 

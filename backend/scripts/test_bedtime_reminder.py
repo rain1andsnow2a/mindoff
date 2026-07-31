@@ -17,9 +17,9 @@ from app.models import preference  # noqa: F401
 from app.models.letter import Letter
 from app.models.preference import UserPreference
 from app.models.user import User
-from app.services import bedtime_reminder as br
-from app.services.pet_presets import get_preset
-from app.services.pet_store import PetStore
+from app.services.mailbox import bedtime_reminder as br
+from app.services.pet.pet_presets import get_preset
+from app.services.pet.pet_store import PetStore
 
 Base.metadata.create_all(bind=engine)
 CST = timezone(timedelta(hours=8))

@@ -10,8 +10,8 @@ import httpx
 from app.db import Base, SessionLocal, engine
 from app.models import trust_state, role_profile  # noqa: F401  注册 metadata
 from app.models.user import User
-from app.services import context_builder, privacy
-from app.services.memory_store import MemoryStore
+from app.services.memory import context_builder, privacy
+from app.services.memory.memory_store import MemoryStore
 
 Base.metadata.create_all(bind=engine)
 

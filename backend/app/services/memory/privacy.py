@@ -10,7 +10,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.models.memory import MemoryItem
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 # 默认禁止外发的深度（requirements 7.5）
 EXTERNAL_FORBIDDEN_DEPTHS = {"vulnerable", "core"}

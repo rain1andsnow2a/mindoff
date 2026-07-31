@@ -9,7 +9,7 @@ import uuid
 import httpx
 
 from app.db import SessionLocal
-from app.services.handoff_store import HandoffStore
+from app.services.pet.handoff_store import HandoffStore
 
 BASE = f"http://127.0.0.1:{os.environ.get('MINDOFF_PORT', '8000')}/api/v1"
 

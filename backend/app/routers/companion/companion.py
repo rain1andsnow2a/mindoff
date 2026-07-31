@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.services.inbox import build_today
-from app.services.letter_store import LetterStore
-from app.services.pet_store import PetStore
+from app.services.mailbox.inbox import build_today
+from app.services.mailbox.letter_store import LetterStore
+from app.services.pet.pet_store import PetStore
 
 router = APIRouter(prefix="/api/v1/companion", tags=["companion"])
 

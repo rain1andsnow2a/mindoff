@@ -93,7 +93,7 @@ def _weather_snapshot(pref: UserPreference) -> dict[str, Any] | None:
     if pref.last_lat is None or pref.last_lon is None:
         return None
     try:
-        from app.services.weather import weather_service
+        from app.services.infra.weather import weather_service
 
         return weather_service.get_current_weather(float(pref.last_lat), float(pref.last_lon))
     except Exception as e:  # noqa: BLE001
@@ -103,7 +103,7 @@ def _weather_snapshot(pref: UserPreference) -> dict[str, Any] | None:
 
 def _pet_snapshot(db: Session, user_id: int) -> dict[str, Any] | None:
     try:
-        from app.services.pet_store import PetStore
+        from app.services.pet.pet_store import PetStore
 
         pet = PetStore(db).get_active(user_id)
     except Exception as e:  # noqa: BLE001

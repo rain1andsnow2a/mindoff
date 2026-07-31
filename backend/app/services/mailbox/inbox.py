@@ -151,8 +151,8 @@ def build_letters(db: Session, user_id: int) -> list[dict[str, Any]]:
     """
     from datetime import timedelta
 
-    from app.services.letter_store import LetterStore
-    from app.services.pet_store import PetStore
+    from app.services.mailbox.letter_store import LetterStore
+    from app.services.pet.pet_store import PetStore
 
     today_start = _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 

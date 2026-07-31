@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.services import ephemeral_store
+from app.services.memory import ephemeral_store
 
 router = APIRouter(prefix="/api/v1/ephemeral", tags=["ephemeral"])
 

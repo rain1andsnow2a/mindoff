@@ -1,3 +1,3 @@
-from app.services.memory_store import MemoryStore
+from app.services.memory.memory_store import MemoryStore
 
 __all__ = ["MemoryStore"]

@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.graphs.extractor import run_extractor
 from app.models.preference import UserPreference
-from app.services import privacy
-from app.services.memory_store import MemoryStore
-from app.services.preferences import ttl_days_for
+from app.services.memory import privacy
+from app.services.memory.memory_store import MemoryStore
+from app.services.infra.preferences import ttl_days_for
 
 logger = logging.getLogger(__name__)
 
