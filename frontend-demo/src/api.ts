@@ -453,3 +453,15 @@ export async function sttOnce(
 /** 桌宠语音回复：文本 -> 阶跃 TTS，返回可播放的 {url}（失败时 url 为 null）。 */
 export const synthTts = (text: string, voice?: string) =>
   post<{ url: string | null }>("/ai/tts", { text, voice });
+
+/** 应用版本发布信息（公开接口，启动检查更新）。 */
+export interface AppVersionInfo {
+  latest: string;
+  min_supported: string;
+  apk_url: string;
+  size_mb: number | null;
+  changelog: string[];
+}
+
+/** 拉取最新版本信息（无需登录）；前端据此与本地包版本比较是否提示更新。 */
+export const getAppVersion = () => get<AppVersionInfo>("/api/v1/app/version");

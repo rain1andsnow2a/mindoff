@@ -3,7 +3,7 @@
  * 桌宠/设置/记忆已接 /api/v1；原型 mock 仅在离线或 dev bypass 时降级。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, StatusBar } from "react-native";
+import { Animated, Linking, StatusBar } from "react-native";
 import {
   AppShell,
   DesignSystemPreview,
@@ -30,6 +30,9 @@ import {
   loadTokens, logout, setActivePet, Tokens, updatePreferences,
 } from "./src/api";
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
+import { UpdateSheet } from "./src/components/UpdateSheet";
+import { checkForUpdate, ignoreUpdate } from "./src/updateCheck";
+import type { AppVersionInfo } from "./src/api";
 import { reportCurrentLocation } from "./src/location";
 import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
@@ -144,6 +147,8 @@ export default function App() {
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [sceneTheater, setSceneTheater] = useState<TheaterSceneId>("dining");
   const [toast, setToast] = useState<string | null>(null);
+  // 版本更新提示：启动检查到新版且未被忽略时，弹底部抽屉。
+  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
   const [dumpText, setDumpText] = useState("");
   const [dumpReceipt, setDumpReceipt] = useState<any>(null);
   const [chatSeedText, setChatSeedText] = useState("");
@@ -163,6 +168,12 @@ export default function App() {
         setTab("companion");
       }
     });
+  }, []);
+
+  // 启动时检查版本更新（公开接口，不依赖登录）；有新版且未忽略才弹。
+  useEffect(() => {
+    if (DEV_SCREEN) return;  // ?screen= 预览不打扰
+    checkForUpdate().then(setUpdateInfo);
   }, []);
 
   // 登录后：拉取当前桌宠 + 偏好；申请通知权限 + 开启来信轮询 + 拉起常驻陪伴前台服务。
@@ -495,6 +506,20 @@ export default function App() {
           </>
           )}
       </AppShell>
+      {updateInfo && (
+        <UpdateSheet
+          info={updateInfo}
+          onUpdate={() => {
+            void Linking.openURL(updateInfo.apk_url);
+            void ignoreUpdate(updateInfo.latest);
+            setUpdateInfo(null);
+          }}
+          onLater={() => {
+            void ignoreUpdate(updateInfo.latest);
+            setUpdateInfo(null);
+          }}
+        />
+      )}
     </NightCtx.Provider>
   );
 }

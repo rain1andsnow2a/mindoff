@@ -17,7 +17,7 @@ from app.routers.scene import candidates, role_profiles, scenes, theater_ext
 from app.routers.mailbox import ephemeral, letters, mailbox, reminders, treasures
 from app.routers.companion import companion, conversations, handoffs, pets
 from app.routers.memory import brain_dumps, memory, memory_review, signals, stores
-from app.routers.system import auth, debug, preferences, weather
+from app.routers.system import app_version, auth, debug, preferences, weather
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -370,6 +370,9 @@ app.include_router(debug.router)
 
 # 业务层：天气（环境上下文，供对话/主动感知）
 app.include_router(weather.router)
+
+# 系统：应用版本信息（公开，App 启动检查更新）
+app.include_router(app_version.router)
 
 
 @app.get("/health")
