@@ -39,7 +39,8 @@
       "package": "com.mindoff.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F3E9C9"
+        "backgroundImage": "./assets/icon-background.png",
+        "backgroundColor": "#EAFCA5"
       },
       "permissions": [
         "POST_NOTIFICATIONS",
