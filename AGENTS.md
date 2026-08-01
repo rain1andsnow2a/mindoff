@@ -1,4 +1,4 @@
-# AGENTS.md — MindOff
+# AGENTS.md — 喵灵（仓库/项目代号 MindOff）
 
 思绪托管 + 情感陪伴 App（AdventureX 黑客松项目）。一句话：把明天的事还给明天，
 把没闭环的过去在片场重演里了结。产品文档：`MindOff项目功能文档-精简版.md`。

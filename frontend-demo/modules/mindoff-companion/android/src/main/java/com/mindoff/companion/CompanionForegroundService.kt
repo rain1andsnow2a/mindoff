@@ -21,7 +21,7 @@ import android.os.Looper
 class CompanionForegroundService : Service() {
   private val handler = Handler(Looper.getMainLooper())
   private var startedAtMs = 0L
-  private var petName = "小栖"
+  private var petName = "米露"
   private var running = false
 
   private val tick = object : Runnable {

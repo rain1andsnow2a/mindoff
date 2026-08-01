@@ -1,4 +1,4 @@
-# MindOff 后端
+# 喵灵（MindOff）后端
 
 FastAPI + SQLAlchemy(SQLite) + LangGraph。分两层：
 

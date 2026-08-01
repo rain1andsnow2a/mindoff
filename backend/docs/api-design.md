@@ -1,4 +1,4 @@
-# MindOff 后端 REST API 设计
+# 喵灵（MindOff）后端 REST API 设计
 
 > 依据《MindOff 项目功能文档》反推的领域资源与接口。原则：RESTful、资源名词复数、
 > 标准动词（GET/POST/PATCH/DELETE）、状态流转优先用 `PATCH status` 或子资源动作。

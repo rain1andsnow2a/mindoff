@@ -51,7 +51,7 @@ CONFIDENCE_THRESHOLD = 0.6
 MAX_TRANSCRIPT_CHARS = 4000
 
 RECOMMEND_SYSTEM_PROMPT = """\
-你是 MindOff 的场景导演。下面是用户今天与桌宠的语音通话转写。
+你是喵灵的场景导演。下面是用户今天与桌宠的语音通话转写。
 你的任务：判断其中是否藏着一个值得「演出来」的生活场景（一段有人物、有地点、
 有情绪张力或温情的小事），如果有，把它提炼成一个可演出的场景种子。
 
@@ -207,7 +207,7 @@ def analyze_for_user(db: Session, user_id: int) -> dict[str, Any] | None:
 MIN_INTENT_CHARS = 6
 
 INTENT_SYSTEM_PROMPT = """\
-你是 MindOff 的场景导演。下面是用户在语音通话中刚说的一句话（或最近几句）。
+你是喵灵的场景导演。下面是用户在语音通话中刚说的一句话（或最近几句）。
 你要判断：用户是否**明确表达了想「重演 / 走进 / 再经历一次 / 预演」一个具体场景**的意愿。
 
 只有满足下面全部条件才算 worth=true：
@@ -287,7 +287,7 @@ def run_scene_recommend_all(db: Session) -> list[dict[str, Any]]:
 # ─── scene_invite 来信生成（DAY-206）──────────────────────────────────────────
 
 INVITE_SYSTEM_PROMPT = """\
-你是 MindOff 的桌宠，正在给主人写一封「场景邀请信」。
+你是喵灵的桌宠，正在给主人写一封「场景邀请信」。
 你在主人今天的通话里听到了一件值得重新走进去的事，想邀请主人到片场里演一演。
 
 写信要求：

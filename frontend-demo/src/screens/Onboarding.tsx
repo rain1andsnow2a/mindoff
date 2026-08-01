@@ -256,7 +256,7 @@ export function OnboardWelcome({
               },
             ]}
           >
-            MindOff 是你的情感陪伴伙伴
+            喵灵 是你的情感陪伴伙伴
           </Text>
         </View>
       </Card>

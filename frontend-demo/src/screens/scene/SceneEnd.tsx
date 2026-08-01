@@ -29,7 +29,7 @@ import { absUrl, getActivePet, getScene, getSceneSummary, settleScene } from "..
 import type { TheaterSceneId } from "../../theater";
 import { Scene3D } from "../Scene3D";
 import type { SceneDetail } from "./shared";
-import { getLastSceneBeat, getLastUserExpression } from "./sceneReview";
+import { getLastSceneBeat, getLastUserExpression, isSceneEndDirectPreview } from "./sceneReview";
 import {
   buildPerspectiveCard,
   buildSettlementPayload,
@@ -51,8 +51,10 @@ const STAGE = {
 const fill = { position: "absolute" as const, top: 0, right: 0, bottom: 0, left: 0 };
 
 // 仅供仓库约定的 ?screen=scene-end 本地验收；真实导航始终传 sceneId 并读取接口数据。
-const DIRECT_PREVIEW = typeof window !== "undefined"
-  && new URLSearchParams(window.location.search).get("screen") === "scene-end";
+const DIRECT_PREVIEW = isSceneEndDirectPreview(
+  Platform.OS,
+  typeof window !== "undefined" ? window.location?.search : undefined,
+);
 const PREVIEW_SCENE: SceneDetail = {
   id: -1,
   title: "老屋檐下的风",
@@ -270,7 +272,7 @@ export function SceneEnd({ sceneId, onBack, onReplay }: {
   const [step, setStep] = useState<ExitStep>(1);
   const [scene, setScene] = useState<SceneDetail | null>(null);
   const [summary, setSummary] = useState<SceneReviewSummary | null>(null);
-  const [petName, setPetName] = useState("小栖");
+  const [petName, setPetName] = useState("米露");
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [exiting, setExiting] = useState(false);

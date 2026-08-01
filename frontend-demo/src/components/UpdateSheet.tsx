@@ -2,7 +2,7 @@
  * UpdateSheet —— 版本更新提示（方案 C 底部抽屉）。
  *
  * 纯展示组件：由 App.tsx 在检测到新版本时挂载。展示版本号、更新要点、下载按钮；
- * 「立即更新」「以后再说」的具体行为（打开下载链接 / 记忆忽略）由父组件通过回调决定。
+ * 「立即更新」「以后再说」的具体行为由父组件通过回调决定；后者只关闭当前提示。
  * 视觉全部走 design-system token，夜间模式自适应；升起动画 260ms，尊重 reduced motion。
  */
 import React, { useEffect, useRef } from "react";
@@ -16,7 +16,7 @@ interface UpdateSheetProps {
   info: AppVersionInfo;
   /** 点击「立即更新」：父组件负责打开 APK 下载链接并关闭。 */
   onUpdate: () => void;
-  /** 点击「以后再说」或点遮罩：父组件负责记忆忽略并关闭。 */
+  /** 点击「以后再说」或点遮罩：只关闭当前提示，下次进入 App 仍可再次展示。 */
   onLater: () => void;
 }
 

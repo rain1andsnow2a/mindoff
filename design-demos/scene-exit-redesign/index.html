@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>走出片场 · 喵灵场景结算重设计原型</title>
+<!--
+  我的假设（junior designer 给 manager 的汇报）：
+  - 视觉完全取自 MindOff design-system tokens（lightColors / paperColors / radii / motion），
+    不发明新颜色；字体用系统无衬线（PingFang SC / Noto Sans SC），不引入外部字体。
+  - 流程按已确认的「三幕式回看」：到这里就好 → 镜头退出舞台 → 看见当时的自己
+    → 对过去的自己说一句话 → 决定是否带回当下 → 留下一张视角卡。
+  - 「镜头退出舞台」用 CSS 视口后退 + 幕布滑入 + 灯光渐暗模拟 3D 隐喻（真 3D 在
+    theater/ 场景库里实现，本原型只表达节奏与空间感）。
+  - 人物/场景一律用诚实 placeholder（灰色剪影块 + 标签），不画拙劣 SVG 人像。
+  - 桌宠头像沿用产品现状的圆形 emoji 占位（产品本身在用，属品牌既有习惯）。
+  - 右上角 Tweaks 可切换「视角卡」的三种最终形态（信笺式 / 极简三行 / 舞台留影式）。
+
+  未解决的问题：
+  - 选项文案（"你不是不在乎…"等）来自设计提案示例，需产品确认措辞。
+  - "对过去的自己说一句话"的语音输入在原型中暂以文本框代替。
+  - 动画时长参考 motion tokens（enter 300ms / exit 240ms），镜头后退约 1.6s 为戏剧性留白。
+-->
+<style>
+  :root {
+    /* —— MindOff lightColors —— */
+    --bg: #FCFAF7;
+    --bg-subtle: #F4F1EC;
+    --surface: #FFFDFA;
+    --surface-elev: #FFFFFF;
+    --text-1: #403A35;
+    --text-2: #756C63;
+    --text-3: #9D9389;
+    --accent: #B8860B;
+    --accent-surface: #F6E7A8;
+    --accent-soft: rgba(246,225,143,0.48);
+    --accent-hover: #E8D48B;
+    --text-on-accent: #4B463F;
+    --border: #E8E2D8;
+    --support: #718879;
+    --focus: #C4953A;
+    --error: #A8483D;
+    --overlay: rgba(64,58,53,0.42);
+    --scrim: rgba(64,58,53,0.16);
+    /* —— MindOff paperColors（纸面不随主题变暗） —— */
+    --paper: #FFFCF6;
+    --paper-ink: #484145;
+    --paper-ink2: #4D4249;
+    --paper-body: #62575D;
+    --paper-meta: #7E7479;
+    --paper-dim: #A39A9F;
+    /* —— radii / spacing —— */
+    --r-card: 18px;
+    --r-ctrl: 12px;
+    --r-dialog: 20px;
+    --shadow-soft: 0 4px 12px rgba(64,58,53,0.08);
+    --shadow-float: 0 12px 28px rgba(64,58,53,0.14);
+    /* 舞台专用（素材语义，允许不进入 token） */
+    --stage-glow: rgba(246,225,143,0.55);
+    --curtain: #8C3A34;
+    --curtain-fold: #7A2F2A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg-subtle);
+    color: var(--text-1);
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px 12px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============ 布局：桌面居中 + 手机框 ============ */
+  .frame {
+    position: relative;
+    width: min(390px, 100vw);
+    height: min(844px, calc(100vh - 48px));
+    background: var(--bg);
+    border-radius: 44px;
+    box-shadow: var(--shadow-float), 0 0 0 8px #2E2A24, 0 0 0 9px rgba(64,58,53,0.25);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  @media (max-width: 480px) {
+    body { padding: 0; }
+    .frame { width: 100vw; height: 100vh; border-radius: 0; box-shadow: none; }
+  }
+
+  /* ============ 舞台视口（第一幕起点 & 镜头后退） ============ */
+  .stage-viewport {
+    position: absolute; inset: 0;
+    transform-origin: 50% 55%;
+    transition: transform 1.6s cubic-bezier(0.2, 0.8, 0.2, 1), filter 1.6s ease;
+    z-index: 2;
+  }
+  .stage-viewport.pulled-back {
+    transform: scale(0.42) translateY(28px);
+    filter: brightness(0.86) saturate(0.9);
+  }
+  .stage-viewport.hidden { opacity: 0; transition: opacity 0.6s ease; pointer-events: none; }
+
+  /* 舞台场景：暖色渐变天空 + 地板 + 剪影占位 */
+  .stage-scene {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #E8D8B4 0%, #EAD9B2 38%, #D8B98A 62%, #C8A376 100%);
+    overflow: hidden;
+  }
+  .stage-sun {
+    position: absolute; top: 13%; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 110px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,248,224,0.95), rgba(246,225,143,0.55) 62%, transparent 72%);
+  }
+  .stage-floor {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+    background: linear-gradient(180deg, #B98D5E, #A67A4C);
+  }
+  .stage-floor::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(rgba(64,58,53,0.10) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(64,58,53,0.10) 1px, transparent 1px);
+    background-size: 44px 44px;
+    transform: perspective(300px) rotateX(52deg) scale(1.6);
+    transform-origin: bottom;
+    opacity: 0.5;
+  }
+  /* 诚实 placeholder：人物剪影块 + 标签，不画人脸 */
+  .figure {
+    position: absolute;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .figure .silhouette {
+    width: 52px; height: 132px;
+    background: rgba(64,58,53,0.55);
+    border-radius: 26px 26px 14px 14px;
+  }
+  .figure .tag {
+    font-size: 11px; letter-spacing: 0.4px; color: rgba(64,58,53,0.65);
+    background: rgba(255,253,250,0.72);
+    padding: 2px 10px; border-radius: 999px;
+  }
+  .figure.you .silhouette { background: rgba(64,58,53,0.78); }
+  .figure.you { bottom: 20%; left: 50%; transform: translateX(-50%); z-index: 3; }
+  .figure.counterpart { bottom: 22%; left: 26%; transform: translateX(-50%) scale(0.92); opacity: 0.9; }
+  .figure.prop { bottom: 21%; left: 72%; transform: translateX(-50%) scale(0.7); opacity: 0.75; }
+  .figure.prop .silhouette { width: 66px; height: 92px; border-radius: 10px; }
+  .figure.prop .tag { content: "道具占位"; }
+
+  /* 台词气泡（第一幕"镜头停在这里"的还原） */
+  .speech-bubble {
+    position: absolute; left: 50%; bottom: 41%;
+    transform: translateX(-50%);
+    background: rgba(255,253,250,0.92);
+    color: var(--paper-ink2);
+    font-size: 15px; line-height: 23px;
+    padding: 12px 18px; border-radius: 16px;
+    box-shadow: var(--shadow-soft);
+    max-width: 78%;
+    z-index: 4;
+    text-align: center;
+  }
+  .speech-bubble::after {
+    content: ""; position: absolute; bottom: -8px; left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent; border-top-color: rgba(255,253,250,0.92);
+    border-bottom: 0;
+  }
+
+  /* 幕布（镜头后退时从两侧滑入） */
+  .curtain { position: absolute; top: 0; bottom: 0; width: 46%; z-index: 5; pointer-events: none; }
+  .curtain.left {
+    left: -46%;
+    background: linear-gradient(90deg, var(--curtain) 0%, var(--curtain-fold) 12%, var(--curtain) 22%, var(--curtain-fold) 34%, var(--curtain) 46%, var(--curtain-fold) 58%, var(--curtain) 72%, var(--curtain-fold) 88%, var(--curtain) 100%);
+    transition: left 1.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
+  }
+  .curtain.right {
+    right: -46%;
+    background: linear-gradient(270deg, var(--curtain) 0%, var(--curtain-fold) 12%, var(--curtain) 22%, var(--curtain-fold) 34%, var(--curtain) 46%, var(--curtain-fold) 58%, var(--curtain) 72%, var(--curtain-fold) 88%, var(--curtain) 100%);
+    transition: right 1.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
+  }
+  .frame.exit-mode .curtain.left { left: 0; }
+  .frame.exit-mode .curtain.right { right: 0; }
+
+  /* 舞台灯光（灯架 + 光锥，后退后变弱） */
+  .spotlights { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0.9; transition: opacity 1.6s ease; }
+  .spot { position: absolute; top: 0; width: 90px; height: 56%; }
+  .spot.left { left: 20%; }
+  .spot.right { right: 20%; }
+  .spot::before {
+    content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 26px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 30%, #FFFDFA, var(--accent-surface));
+    box-shadow: 0 0 22px 6px var(--stage-glow);
+  }
+  .spot::after {
+    content: ""; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 44px solid transparent; border-right: 44px solid transparent;
+    border-top: 300px solid rgba(255,248,224,0.20);
+  }
+  .frame.exit-mode .spotlights { opacity: 0.25; }
+
+  /* ============ 内容层（第二幕起） ============ */
+  .content {
+    position: absolute; inset: 0; z-index: 6;
+    display: flex; flex-direction: column;
+    padding: 48px 24px 28px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .content.active { opacity: 1; pointer-events: auto; }
+
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.4px; color: var(--text-3);
+    text-align: center; margin-bottom: 8px;
+  }
+  .title {
+    font-size: 22px; line-height: 30px; font-weight: 500;
+    text-align: center; color: var(--text-1);
+    letter-spacing: -0.3px; margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 15px; line-height: 23px; color: var(--text-2);
+    text-align: center; margin-bottom: 20px;
+  }
+
+  .body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+
+  /* 用户原话还原（第一幕） */
+  .quote-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 20px 18px;
+    box-shadow: var(--shadow-soft);
+  }
+  .quote-block .label {
+    font-size: 12px; letter-spacing: 0.4px; color: var(--text-3);
+    margin-bottom: 10px;
+  }
+  .quote-block .text {
+    font-size: 17px; line-height: 27px; color: var(--text-1);
+    font-weight: 500;
+  }
+  .fold-list { margin-top: 14px; }
+  .fold-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: var(--bg-subtle);
+    border-radius: var(--r-ctrl);
+    margin-bottom: 8px;
+    font-size: 14px; color: var(--text-2);
+  }
+  .fold-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+  /* 选项按钮 */
+  .option-btn {
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctrl);
+    padding: 15px 16px;
+    font-family: inherit; font-size: 15px; line-height: 23px; color: var(--text-1);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .option-btn:hover { background: var(--surface-elev); border-color: var(--accent-hover); }
+  .option-btn:active { transform: scale(0.97); background: var(--accent-soft); }
+  .option-btn.selected { background: var(--accent-soft); border-color: var(--accent); }
+  .option-btn .num {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bg-subtle); color: var(--text-2);
+    font-size: 12px; display: flex; align-items: center; justify-content: center;
+  }
+  .option-btn.selected .num { background: var(--accent); color: var(--text-on-accent); }
+
+  /* 输入区（对过去的自己说一句话） */
+  .say-input {
+    width: 100%;
+    min-height: 96px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctrl);
+    padding: 14px 16px;
+    font-family: inherit; font-size: 15px; line-height: 23px; color: var(--text-1);
+    resize: none;
+  }
+  .say-input:focus { outline: 2px solid var(--focus); outline-offset: 1px; border-color: transparent; }
+  .hint { font-size: 12px; color: var(--text-3); text-align: center; margin-top: -4px; }
+
+  /* 主按钮 */
+  .primary-btn {
+    width: 100%; height: 52px;
+    background: var(--accent-surface);
+    border: none; border-radius: var(--r-ctrl);
+    font-family: inherit; font-size: 16px; font-weight: 500; color: var(--text-on-accent);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .primary-btn:hover { background: var(--accent-hover); }
+  .primary-btn:active { transform: scale(0.97); }
+  .primary-btn:disabled { background: var(--bg-subtle); color: var(--text-3); cursor: default; }
+  .ghost-btn {
+    width: 100%; height: 52px;
+    background: transparent;
+    border: 1px solid var(--border); border-radius: var(--r-ctrl);
+    font-family: inherit; font-size: 15px; color: var(--text-2);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .ghost-btn:hover { background: var(--bg-subtle); }
+  .ghost-btn:active { transform: scale(0.97); }
+
+  .footer-actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
+
+  /* 桌宠落款 */
+  .pet-sign {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--bg-subtle);
+    border-radius: var(--r-card);
+    padding: 14px 16px;
+  }
+  .pet-avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .pet-sign .text { font-size: 14px; line-height: 22px; color: var(--text-2); }
+  .pet-sign .name { font-size: 12px; color: var(--text-3); margin-bottom: 4px; }
+
+  /* 选项网格（带回今天） */
+  .bring-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bring-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 16px 14px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    display: flex; flex-direction: column; gap: 6px;
+    text-align: left; font-family: inherit;
+  }
+  .bring-card:hover { background: var(--surface-elev); border-color: var(--accent-hover); }
+  .bring-card:active { transform: scale(0.97); }
+  .bring-card.selected { background: var(--accent-soft); border-color: var(--accent); }
+  .bring-card .t { font-size: 15px; font-weight: 500; color: var(--text-1); }
+  .bring-card .d { font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .bring-card .tick { margin-left: auto; color: var(--accent); font-size: 14px; opacity: 0; }
+  .bring-card.selected .tick { opacity: 1; }
+  .bring-card.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+
+  /* ============ 视角卡（终幕，三种变体） ============ */
+  .card-stage { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+
+  .perspective-card {
+    width: 100%;
+    background: var(--paper);
+    border-radius: var(--r-dialog);
+    box-shadow: var(--shadow-float);
+    padding: 26px 22px 22px;
+    position: relative;
+  }
+  .perspective-card::before {
+    content: ""; position: absolute; inset: 10px;
+    border: 1px solid rgba(64,58,53,0.06); border-radius: 14px; pointer-events: none;
+  }
+  .pc-row { padding: 10px 0; border-bottom: 1px solid rgba(64,58,53,0.07); }
+  .pc-row:last-of-type { border-bottom: none; }
+  .pc-row .k {
+    font-size: 11px; letter-spacing: 0.5px; color: var(--paper-meta);
+    margin-bottom: 5px;
+  }
+  .pc-row .v {
+    font-size: 16px; line-height: 26px; color: var(--paper-ink2);
+    font-weight: 500;
+  }
+  .pc-row .v .quote-mark { color: var(--accent); font-weight: 400; }
+
+  /* 变体 B：极简三行（无卡片） */
+  .perspective-card.minimal {
+    background: transparent; box-shadow: none; padding: 0;
+    text-align: center;
+  }
+  .perspective-card.minimal::before { display: none; }
+  .perspective-card.minimal .pc-row { border-bottom: none; padding: 16px 0; }
+  .perspective-card.minimal .k { color: var(--text-3); }
+  .perspective-card.minimal .v { font-size: 19px; color: var(--text-1); }
+
+  /* 变体 C：舞台留影式（卡片上方有舞台小窗） */
+  .perspective-card.polaroid { padding: 16px 16px 22px; }
+  .pc-photo {
+    height: 150px; border-radius: 12px; margin-bottom: 14px; position: relative; overflow: hidden;
+    background: linear-gradient(180deg, #E8D8B4 0%, #D8B98A 60%, #B98D5E 100%);
+  }
+  .pc-photo .sun { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle, rgba(255,248,224,0.95), rgba(246,225,143,0.5) 60%, transparent 72%); }
+  .pc-photo .s1 { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); width: 30px; height: 74px; background: rgba(64,58,53,0.65); border-radius: 15px 15px 8px 8px; }
+  .pc-photo .s2 { position: absolute; bottom: 16px; left: 28%; width: 24px; height: 58px; background: rgba(64,58,53,0.4); border-radius: 12px 12px 7px 7px; }
+  .pc-photo .s3 { position: absolute; bottom: 16px; left: 66%; width: 30px; height: 48px; background: rgba(64,58,53,0.32); border-radius: 8px; }
+  .pc-photo .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 24%; background: linear-gradient(180deg, #B98D5E, #A67A4C); }
+  .pc-photo .cap {
+    position: absolute; left: 8px; bottom: 8px;
+    font-size: 10px; color: rgba(64,58,53,0.75);
+    background: rgba(255,253,250,0.78); padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.4px;
+  }
+
+  /* 视角卡落款 */
+  .card-sign {
+    display: flex; align-items: center; gap: 10px; margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--bg-subtle);
+    border-radius: var(--r-ctrl);
+  }
+  .card-sign .text { font-size: 13px; line-height: 20px; color: var(--text-2); }
+
+  /* ============ 底部导航占位 ============ */
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
+    height: 64px;
+    background: rgba(252,250,247,0.92);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.4s ease 0.3s;
+  }
+  .tabbar.visible { opacity: 1; pointer-events: auto; }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .tab-item .ic {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+  }
+  .tab-item.active .ic { background: var(--accent-soft); border-color: var(--accent); }
+  .tab-item.active .lb { color: var(--accent); }
+  .tab-item .lb { font-size: 10px; color: var(--text-3); letter-spacing: 0.3px; }
+
+  /* ============ 步骤进度 ============ */
+  .steps {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 9;
+    display: flex; justify-content: center; gap: 6px;
+    padding: 14px 0;
+  }
+  .step-dot { width: 22px; height: 3px; border-radius: 2px; background: var(--border); transition: background 0.3s ease; }
+  .step-dot.done { background: var(--accent-hover); }
+  .step-dot.current { background: var(--accent); }
+
+  /* ============ Tweaks 面板 ============ */
+  .tweaks {
+    position: fixed; top: 20px; right: 20px; z-index: 50;
+    width: 240px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-float);
+    padding: 16px;
+  }
+  .tweaks h3 { font-size: 13px; font-weight: 600; color: var(--text-1); margin-bottom: 10px; }
+  .tweaks .group-label { font-size: 11px; color: var(--text-3); margin: 12px 0 6px; letter-spacing: 0.4px; }
+  .tweaks label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); padding: 4px 0; cursor: pointer; }
+  .tweaks input[type="radio"] { accent-color: var(--accent); }
+  .tweaks .legend { font-size: 11px; line-height: 17px; color: var(--text-3); margin-top: 10px; }
+  @media (max-width: 900px) {
+    .tweaks { position: absolute; top: 8px; right: 8px; width: 200px; padding: 12px; }
+  }
+  @media (max-width: 520px) {
+    .tweaks { display: none; }
+  }
+
+  /* 进入动画 */
+  .fade-in { animation: fadeIn 0.4s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* reduced motion：关闭长动画，镜头后退直接淡切 */
+  @media (prefers-reduced-motion: reduce) {
+    .stage-viewport { transition: opacity 0.4s ease; }
+    .curtain, .spotlights { transition: opacity 0.4s ease; }
+    .curtain.left { left: -46%; }
+    .curtain.right { right: -46%; }
+    .frame.exit-mode .curtain.left { left: 0; }
+    .frame.exit-mode .curtain.right { right: 0; }
+    .frame.exit-mode .stage-viewport.pulled-back { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="tweaks" aria-label="设计参数调节">
+  <h3>Tweaks · 参数调节</h3>
+  <div class="group-label">视角卡最终形态</div>
+  <label><input type="radio" name="card-variant" value="letter" checked> 信笺式</label>
+  <label><input type="radio" name="card-variant" value="minimal"> 极简三行</label>
+  <label><input type="radio" name="card-variant" value="polaroid"> 舞台留影式</label>
+  <div class="group-label">镜头退出节奏</div>
+  <label><input type="radio" name="exit-pace" value="slow" checked> 慢（1.6s 戏剧留白）</label>
+  <label><input type="radio" name="exit-pace" value="fast"> 快（0.8s 干脆）</label>
+  <div class="legend">原型只为演示「走出片场」三幕流程；真 3D 镜头退出在 theater/ 场景库实现。</div>
+</div>
+
+<div class="frame" id="frame">
+  <!-- 顶部步骤指示 -->
+  <div class="steps" id="steps" style="display:none">
+    <div class="step-dot" data-s="1"></div>
+    <div class="step-dot" data-s="2"></div>
+    <div class="step-dot" data-s="3"></div>
+    <div class="step-dot" data-s="4"></div>
+    <div class="step-dot" data-s="5"></div>
+  </div>
+
+  <!-- ── 舞台层（第一幕 · 剧情结束画面） ── -->
+  <div class="stage-viewport" id="stageViewport">
+    <div class="stage-scene">
+      <div class="stage-sun"></div>
+      <div class="spotlights">
+        <div class="spot left"></div>
+        <div class="spot right"></div>
+      </div>
+      <div class="figure counterpart"><div class="silhouette"></div><div class="tag">对位角色占位</div></div>
+      <div class="figure you"><div class="silhouette"></div><div class="tag">你</div></div>
+      <div class="figure prop"><div class="silhouette"></div><div class="tag">道具占位</div></div>
+      <div class="speech-bubble" id="lastLine">「你先别走，我还有一句话想说。」</div>
+    </div>
+  </div>
+  <div class="curtain left"></div>
+  <div class="curtain right"></div>
+
+  <!-- ── 内容层 ── -->
+  <!-- 第一幕 · 镜头停在这里 -->
+  <section class="content" id="c1">
+    <div class="eyebrow">场景回看 · 第一幕</div>
+    <div class="title">镜头停在这里</div>
+    <div class="subtitle">先不分析，只还原你刚才经历的这一幕</div>
+    <div class="body">
+      <div class="quote-block fade-in">
+        <div class="label">这一幕里，你最后说的是</div>
+        <div class="text">“你先别走，我还有一句话想说。”</div>
+      </div>
+      <div class="fold-list fade-in" style="animation-delay:0.08s">
+        <div class="fold-item"><span class="dot"></span>你选择过的回应 · 2 次</div>
+        <div class="fold-item"><span class="dot"></span>你自己输入的原话 · 1 段</div>
+        <div class="fold-item"><span class="dot"></span>对话最后停下的画面 · 傍晚的餐厅</div>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="primary-btn" onclick="goExit()">坐到观众席看看</button>
+    </div>
+  </section>
+
+  <!-- 第二幕 · 退到观众席（镜头退出动画后） -->
+  <section class="content" id="c2">
+    <div class="eyebrow">场景回看 · 第二幕</div>
+    <div class="title">如果你坐在观众席</div>
+    <div class="subtitle">看着当时的自己，你觉得那个人最想让别人知道什么？</div>
+    <div class="body">
+      <button class="option-btn fade-in" onclick="pick(this)">
+        <span class="num">1</span><span>我不是不在乎，只是不知道该怎么说</span>
+      </button>
+      <button class="option-btn fade-in" style="animation-delay:0.06s" onclick="pick(this)">
+        <span class="num">2</span><span>其实我也希望有人能留下来</span>
+      </button>
+      <button class="option-btn fade-in" style="animation-delay:0.12s" onclick="pick(this)">
+        <span class="num">3</span><span>我当时已经尽力了</span>
+      </button>
+      <button class="option-btn fade-in" style="animation-delay:0.18s" onclick="pickCustom(this)">
+        <span class="num">+</span><span>我看到的不是这些…（自己说）</span>
+      </button>
+    </div>
+    <div class="footer-actions">
+      <button class="primary-btn" id="c2next" disabled onclick="goSay()">继续</button>
+    </div>
+  </section>
+
+  <!-- 第三幕 · 对过去的自己说一句话 -->
+  <section class="content" id="c3">
+    <div class="eyebrow">场景回看 · 第三幕</div>
+    <div class="title">如果现在的你，可以走进画面</div>
+    <div class="subtitle">你想对当时的自己说什么？</div>
+    <div class="body">
+      <textarea class="say-input fade-in" id="sayInput" placeholder="写在这里，或按住说话…（语音入口原型占位）"></textarea>
+      <div class="hint">这句话只会属于你。它比任何鼓励都更有力量。</div>
+    </div>
+    <div class="footer-actions">
+      <button class="primary-btn" onclick="goBring()">说完了</button>
+    </div>
+  </section>
+
+  <!-- 第四幕 · 带回今天 -->
+  <section class="content" id="c4">
+    <div class="eyebrow">场景回看 · 最后一幕</div>
+    <div class="title">把一个选择带回今天</div>
+    <div class="subtitle">过去没有因此被改写。但下一次遇到相似的时刻，你已经多了一个选择。</div>
+    <div class="body">
+      <div class="bring-grid fade-in">
+        <button class="bring-card" onclick="pickCard(this)">
+          <span class="t">记住一句话</span>
+          <span class="d">留下刚才对过去的自己说的话</span>
+          <span class="tick">✓</span>
+        </button>
+        <button class="bring-card" onclick="pickCard(this)">
+          <span class="t">试一个小动作</span>
+          <span class="d">如「下次先说清楚自己的感受」</span>
+          <span class="tick">✓</span>
+        </button>
+        <button class="bring-card" onclick="pickCard(this)">
+          <span class="t">回到片场再试一次</span>
+          <span class="d">不带走结论，重新走进这一幕</span>
+          <span class="tick">✓</span>
+        </button>
+        <button class="bring-card" onclick="pickCard(this)">
+          <span class="t">只是看见就好</span>
+          <span class="d">不生成任务、不要求改变</span>
+          <span class="tick">✓</span>
+        </button>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="primary-btn" id="c4next" disabled onclick="goCard()">留下这张视角卡</button>
+    </div>
+  </section>
+
+  <!-- 终幕 · 视角卡 -->
+  <section class="content" id="c5">
+    <div class="eyebrow">这一幕，到这里就够了</div>
+    <div class="card-stage">
+      <div class="perspective-card letter" id="perspectiveCard">
+        <div class="pc-row">
+          <div class="k">这一次，我终于说出了</div>
+          <div class="v"><span class="quote-mark">“</span><span id="cardSaid">你先别走，我还有一句话想说。</span><span class="quote-mark">”</span></div>
+        </div>
+        <div class="pc-row">
+          <div class="k">退到画面之外，我看见</div>
+          <div class="v"><span class="quote-mark">“</span><span id="cardSaw">我不是不在乎，只是不知道该怎么说</span><span class="quote-mark">”</span></div>
+        </div>
+        <div class="pc-row">
+          <div class="k">回到今天，我愿意</div>
+          <div class="v"><span id="cardWill">记住这句话，慢慢来</span></div>
+        </div>
+        <div class="card-sign">
+          <div class="pet-avatar">✨</div>
+          <div class="text"><div class="name">米露</div>这一幕不需要马上得出答案，我陪你先把它放在这里。</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="primary-btn" onclick="finish()">带着它回到今天</button>
+      <button class="ghost-btn" onclick="restart()">再走一遍流程看看</button>
+    </div>
+  </section>
+
+  <!-- 底部导航占位（终幕可见） -->
+  <div class="tabbar" id="tabbar">
+    <div class="tab-item"><div class="ic"></div><div class="lb">陪伴</div></div>
+    <div class="tab-item"><div class="ic"></div><div class="lb">信箱</div></div>
+    <div class="tab-item active"><div class="ic"></div><div class="lb">片场</div></div>
+    <div class="tab-item"><div class="ic"></div><div class="lb">设置</div></div>
+  </div>
+</div>
+
+<script>
+  // ── 步骤状态机 ─────────────────────────────────────────────
+  const frame = document.getElementById("frame");
+  const steps = document.getElementById("steps");
+  const sections = { 1: document.getElementById("c1"), 2: document.getElementById("c2"),
+                     3: document.getElementById("c3"), 4: document.getElementById("c4"),
+                     5: document.getElementById("c5") };
+  let current = 0;
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function showStep(n) {
+    current = n;
+    steps.style.display = "flex";
+    document.querySelectorAll(".step-dot").forEach((d, i) => {
+      d.className = "step-dot" + (i + 1 < n ? " done" : i + 1 === n ? " current" : "");
+    });
+    Object.entries(sections).forEach(([k, el]) => {
+      el.classList.toggle("active", Number(k) === n);
+    });
+  }
+
+  // ── 第一幕 → 镜头退出舞台 ────────────────────────────────
+  const pace = () => (document.querySelector('input[name="exit-pace"]:checked').value === "fast" ? 0.8 : 1.6);
+  document.querySelectorAll('input[name="exit-pace"]').forEach(r => r.addEventListener("change", () => {
+    if (current === 2) { /* 已退出则不回放 */ }
+  }));
+
+  function goExit() {
+    showStep(2);
+    const vp = document.getElementById("stageViewport");
+    frame.classList.add("exit-mode");
+    // 用实际 pace 动态设置过渡时长
+    const t = pace();
+    vp.style.transition = `transform ${t}s cubic-bezier(0.2,0.8,0.2,1), filter ${t}s ease`;
+    const cLeft = document.querySelector(".curtain.left");
+    const cRight = document.querySelector(".curtain.right");
+    cLeft.style.transition = `left ${t*0.88}s cubic-bezier(0.4,0,0.2,1) 0.1s`;
+    cRight.style.transition = `right ${t*0.88}s cubic-bezier(0.4,0,0.2,1) 0.1s`;
+    // reduced motion 下直接切
+    if (reduceMotion) {
+      vp.classList.add("hidden");
+      vp.classList.add("pulled-back");
+      setTimeout(() => showStep(3), 400);
+      return;
+    }
+    vp.classList.add("pulled-back");
+    setTimeout(() => { vp.classList.add("hidden"); }, t * 1000 + 300);
+    // 舞台淡出后进入第三幕（看见当时的自己）
+    setTimeout(() => showStep(3), t * 1000 + 450);
+  }
+
+  // ── 第二幕 · 选项 ─────────────────────────────────────────
+  function pick(btn) {
+    document.querySelectorAll("#c2 .option-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    document.getElementById("c2next").disabled = false;
+    window._saw = btn.textContent.trim();
+  }
+  function pickCustom(btn) {
+    // 原型演示：直接视为选中「我看到的不是这些」，真实产品弹输入
+    pick(btn);
+    window._saw = "我看到的不是这些（自定义输入占位）";
+  }
+
+  // ── 第三幕 · 对过去的自己说 ──────────────────────────────
+  function goSay() {
+    showStep(3);
+    setTimeout(() => document.getElementById("sayInput").focus(), 350);
+  }
+
+  // ── 第四幕 · 带回今天 ────────────────────────────────────
+  function goBring() {
+    window._said = document.getElementById("sayInput").value.trim()
+      || "谢谢你当时没有放弃，现在我听见你了。";
+    showStep(4);
+  }
+  function pickCard(btn) {
+    document.querySelectorAll("#c4 .bring-card").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    document.getElementById("c4next").disabled = false;
+    const t = btn.querySelector(".t").textContent.trim();
+    window._will = {
+      "记住一句话": "记住这句话，慢慢来",
+      "试一个小动作": "下次先说清楚自己的感受",
+      "只是看见就好": "暂时什么都不做，只是看见",
+      "回到片场再试一次": "回到片场，再试一次",
+    }[t] || "记住这句话，慢慢来";
+    window._willTitle = t;
+  }
+
+  // ── 终幕 · 视角卡 ────────────────────────────────────────
+  function goCard() {
+    document.getElementById("cardSaid").textContent = window._said || "你先别走，我还有一句话想说。";
+    document.getElementById("cardSaw").textContent = window._saw || "我不是不在乎，只是不知道该怎么说";
+    document.getElementById("cardWill").textContent = window._will || "记住这句话，慢慢来";
+    showStep(5);
+    document.getElementById("tabbar").classList.add("visible");
+  }
+
+  function finish() {
+    // 原型终点：回到片场首页占位
+    alert("原型演示结束：这里将返回片场首页。「" + (window._willTitle || "记住一句话") + "」已随视角卡留下。");
+  }
+
+  function restart() {
+    const vp = document.getElementById("stageViewport");
+    vp.classList.remove("hidden", "pulled-back");
+    vp.style.transition = "";
+    frame.classList.remove("exit-mode");
+    document.querySelectorAll(".curtain").forEach(c => { c.style.transition = ""; });
+    document.getElementById("tabbar").classList.remove("visible");
+    document.getElementById("c2next").disabled = true;
+    document.getElementById("c4next").disabled = true;
+    document.querySelectorAll(".option-btn, .bring-card").forEach(b => b.classList.remove("selected"));
+    document.getElementById("sayInput").value = "";
+    showStep(1);
+  }
+
+  // ── Tweaks：视角卡形态切换 ───────────────────────────────
+  document.querySelectorAll('input[name="card-variant"]').forEach(r => r.addEventListener("change", () => {
+    const card = document.getElementById("perspectiveCard");
+    card.className = "perspective-card " + r.value;
+  }));
+
+  // 初始：第一幕
+  showStep(1);
+</script>
+</body>
+</html>

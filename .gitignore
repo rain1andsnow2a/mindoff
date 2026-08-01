@@ -15,3 +15,5 @@ frontend-demo/.expo/
 /2026-07-24-adventurex-companion-personality-prompt(1).md
 /2026-07-24-adventurex-morning-light-messenger-prompt.md
 backend/static/tts_audio/
+
+deploy/artifacts/

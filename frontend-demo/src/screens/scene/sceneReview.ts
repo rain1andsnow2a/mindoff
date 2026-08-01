@@ -2,6 +2,13 @@ import type { SceneDetail } from "./shared";
 
 export type SceneAdvancePhase = "playing" | "closure" | "ending";
 
+/** `?screen=scene-end` 只属于 Web 验收；原生没有 window.location，必须安全返回 false。 */
+export function isSceneEndDirectPreview(platform: string, search?: string): boolean {
+  return platform === "web"
+    && typeof search === "string"
+    && new URLSearchParams(search).get("screen") === "scene-end";
+}
+
 /** 后端只能建议收束；仅兼容旧服务的 ended=true，正常流程由用户确认结束。 */
 export function getSceneAdvancePhase(data: unknown): SceneAdvancePhase {
   if (!data || typeof data !== "object") return "playing";

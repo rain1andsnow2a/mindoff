@@ -84,7 +84,7 @@ export function PetChange({ onBack, onHandoff }: { onBack: () => void; onHandoff
     <div className="flex flex-col h-full">
       <SafeHeader onBack={onBack} title="更换伙伴"/>
       <div className="flex-1 px-5 pt-3 pb-[100px] flex flex-col gap-4">
-        <p className="text-[14px]" style={{ color: "var(--text-secondary)" }}>小栖会把粗粒度近况告诉新伙伴，不会复述细节</p>
+        <p className="text-[14px]" style={{ color: "var(--text-secondary)" }}>米露会把粗粒度近况告诉新伙伴，不会复述细节</p>
         {opts.map((p, i) => (
           <GlassCard key={i} className="p-5 flex items-center gap-4" onClick={() => setSel(i)}
             style={{
@@ -129,7 +129,7 @@ export function PetHandoff({ onBack, onDone, newPetEmoji }: {
           className="text-6xl">{newPetEmoji}</motion.div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18 }} className="text-center">
-          <h2 className="text-[22px] font-medium mb-1" style={{ color: "var(--text-primary)" }}>来自小栖的交接信</h2>
+          <h2 className="text-[22px] font-medium mb-1" style={{ color: "var(--text-primary)" }}>来自米露的交接信</h2>
           <p className="text-[14px]" style={{ color: "var(--text-secondary)" }}>给新来的伙伴看的</p>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -140,7 +140,7 @@ export function PetHandoff({ onBack, onDone, newPetEmoji }: {
               这位朋友最近在处理一些需要时间消化的事情，心情整体还不错，偶尔会有点累。<br/><br/>
               喜欢睡前说说话。有几件事放在信箱里还没处理完。<br/><br/>
               好好陪着她。<br/><br/>
-              <span style={{ color: "var(--text-muted)" }}>— 小栖</span>
+              <span style={{ color: "var(--text-muted)" }}>— 米露</span>
             </p>
           </GlassCard>
         </motion.div>

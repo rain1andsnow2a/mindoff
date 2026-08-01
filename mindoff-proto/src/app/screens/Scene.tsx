@@ -815,7 +815,7 @@ export function ScenePlay({ onEnd }: { onEnd: () => void }) {
               className="p-5">
               <div className="flex items-center gap-2 mb-2">
                 <span style={{ fontSize:14 }}>🌿</span>
-                <span className="text-[12px]" style={{ color:"var(--text-muted)" }}>小栖</span>
+                <span className="text-[12px]" style={{ color:"var(--text-muted)" }}>米露</span>
               </div>
               <p className="text-[14px] leading-relaxed mb-4" style={{ color:"var(--text-primary)" }}>
                 场景准备好了。你可以随时离开，这里没有对错。
@@ -992,7 +992,7 @@ export function SceneEnd({ onBack, onReplay }: { onBack: () => void; onReplay: (
               style={{ background:"rgba(246,231,168,0.32)", border:"1px solid rgba(255,255,255,0.45)" }}>
               <div className="flex items-center gap-2 mb-1.5">
                 <span style={{ fontSize:13 }}>🌿</span>
-                <span className="text-[12px]" style={{ color:"var(--text-muted)" }}>小栖</span>
+                <span className="text-[12px]" style={{ color:"var(--text-muted)" }}>米露</span>
               </div>
               <p className="text-[14px] leading-relaxed" style={{ color:"var(--text-secondary)" }}>
                 这里没有答案，也没有正确的说法。你表达了，这就够了。

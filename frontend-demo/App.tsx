@@ -3,7 +3,7 @@
  * 桌宠/设置/记忆已接 /api/v1；原型 mock 仅在离线或 dev bypass 时降级。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Linking, StatusBar } from "react-native";
+import { Animated, AppState, Linking, StatusBar } from "react-native";
 import {
   AppShell,
   DesignSystemPreview,
@@ -32,7 +32,7 @@ import {
 } from "./src/api";
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
 import { UpdateSheet } from "./src/components/UpdateSheet";
-import { checkForUpdate, ignoreUpdate } from "./src/updateCheck";
+import { checkForUpdate } from "./src/updateCheck";
 import type { AppVersionInfo } from "./src/api";
 import { reportCurrentLocation } from "./src/location";
 import { startCompanion, stopCompanion } from "mindoff-companion";
@@ -149,7 +149,7 @@ export default function App() {
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [sceneTheater, setSceneTheater] = useState<TheaterSceneId>("dining");
   const [toast, setToast] = useState<string | null>(null);
-  // 版本更新提示：启动检查到新版且未被忽略时，弹底部抽屉。
+  // 版本更新提示：每次启动或从后台回到前台，只要仍是旧版就弹底部抽屉。
   const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
   const [dumpText, setDumpText] = useState("");
   const [dumpReceipt, setDumpReceipt] = useState<any>(null);
@@ -172,10 +172,31 @@ export default function App() {
     });
   }, []);
 
-  // 启动时检查版本更新（公开接口，不依赖登录）；有新版且未忽略才弹。
+  // 启动及每次回到前台都检查版本更新（公开接口，不依赖登录）。
+  // 「以后再说」只关闭当前一次；用户下次重新进入 App 时仍会看到提示。
   useEffect(() => {
     if (DEV_SCREEN) return;  // ?screen= 预览不打扰
-    checkForUpdate().then(setUpdateInfo);
+    let alive = true;
+    let previousState = AppState.currentState;
+
+    const refreshUpdate = async () => {
+      const info = await checkForUpdate();
+      if (alive) setUpdateInfo(info);
+    };
+
+    void refreshUpdate();
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const returnedToForeground =
+        nextState === "active" &&
+        (previousState === "background" || previousState === "inactive");
+      previousState = nextState;
+      if (returnedToForeground) void refreshUpdate();
+    });
+
+    return () => {
+      alive = false;
+      subscription.remove();
+    };
   }, []);
 
   // 登录后：拉取当前桌宠 + 偏好；申请通知权限 + 开启来信轮询 + 拉起常驻陪伴前台服务。
@@ -517,11 +538,9 @@ export default function App() {
           info={updateInfo}
           onUpdate={() => {
             void Linking.openURL(updateInfo.apk_url);
-            void ignoreUpdate(updateInfo.latest);
             setUpdateInfo(null);
           }}
           onLater={() => {
-            void ignoreUpdate(updateInfo.latest);
             setUpdateInfo(null);
           }}
         />

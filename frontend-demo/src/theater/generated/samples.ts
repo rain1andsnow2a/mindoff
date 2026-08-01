@@ -87,6 +87,22 @@ export const schoolComfort: SceneSpec = {
   camera: { pos: [3.2, 1.9, 3.6], look: [0, 0.7, 0] },
 };
 
+/** 户外·黄昏·乡下老家：瓦房炊烟，老人门口等、孩子跑回来（oldHouse 零件）。 */
+export const grandmaHouse: SceneSpec = {
+  env: { mode: "outdoor", time: "dusk", mountains: { count: 5, color: "#6a4a4a" } },
+  props: [
+    { type: "oldHouse", pos: [0, 0, -3.5], params: { width: 4.4, depth: 3.2 } },
+    { type: "pineTree", pos: [-3.6, 0, -4], params: { height: 4.2, color: "#1e3a26" } },
+    { type: "bush", pos: [2.8, 0, -2.2] },
+    { type: "rock", pos: [-1.8, 0, -0.6], params: { size: 0.35 } },
+  ],
+  characters: [
+    { pos: [0.4, 0, -1.4], rotY: 0.3, pose: "standing", type: "elderly", outfit: "coat", hairstyle: "bun", bodyColor: "#7a7268" },
+    { pos: [-1.4, 0, 1.2], rotY: -2.8, pose: "waving", type: "child", outfit: "uniform", backpack: true },
+  ],
+  camera: { pos: [4.2, 2.2, 3.6], look: [0, 1.1, -2] },
+};
+
 /** 样例注册表（按 key 取用，便于预览切换）。 */
 export const SCENE_SAMPLES: Record<string, SceneSpec> = {
   campfireNight,
@@ -94,4 +110,5 @@ export const SCENE_SAMPLES: Record<string, SceneSpec> = {
   duskFarewell,
   rainyPier,
   schoolComfort,
+  grandmaHouse,
 };

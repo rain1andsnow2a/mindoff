@@ -15,7 +15,7 @@ import { ProfileScreen, PetChange, PetHandoff } from "./screens/Profile";
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const PET_DATA = [
-  { name: "小栖", emoji: "🌿" },
+  { name: "米露", emoji: "🌿" },
   { name: "晴晴", emoji: "☀️" },
   { name: "暮云", emoji: "🌙" },
 ];

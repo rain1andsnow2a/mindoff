@@ -139,7 +139,7 @@ export function AuthScreen({ onAuthed }: AuthScreenProps) {
               { color: theme.colors.textPrimary },
             ]}
           >
-            MindOff
+            喵灵
           </Text>
           <Text
             style={[

@@ -27,7 +27,7 @@ VALID_DEPTHS_EXTRACT = {"surface", "personal", "vulnerable"}  # core 不由提�
 # ─── 提示词 ────────────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
-你是 MindOff 的记忆整理助手。用户睡前一股脑倾诉，你要把它拆成一条条独立记忆并打三种标。
+你是喵灵的记忆整理助手。用户睡前一股脑倾诉，你要把它拆成一条条独立记忆并打三种标。
 规则：
 1) 先按语义分点，一件事/一种情绪/一个待办各成一条，不要合并。
 2) 每条同时判 layer(episodic|state|profile)、kind(待办|小结|灵感|情绪|片段)、depth(surface|personal|vulnerable)。

@@ -4,6 +4,7 @@ import {
   getSceneAdvancePhase,
   getLastSceneBeat,
   getLastUserExpression,
+  isSceneEndDirectPreview,
 } from "../src/screens/scene/sceneReview.ts";
 import {
   buildPerspectiveCard,
@@ -32,6 +33,12 @@ assert.equal(getLastUserExpression({ history: [], beats: [] }), "");
 assert.equal(getSceneAdvancePhase({ ended: false, closure_ready: false }), "playing");
 assert.equal(getSceneAdvancePhase({ ended: false, closure_ready: true }), "closure");
 assert.equal(getSceneAdvancePhase({ ended: true, closure_ready: true }), "ending");
+assert.equal(
+  isSceneEndDirectPreview("android", undefined),
+  false,
+  "Android 原生没有 window.location 时必须安全跳过 Web 直达预览",
+);
+assert.equal(isSceneEndDirectPreview("web", "?screen=scene-end"), true);
 
 assert.deepEqual(getReviewFacts(scene, null), {
   responseCount: 2,

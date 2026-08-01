@@ -538,7 +538,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
             <View style={{ padding: 20 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Text style={{ fontSize: 14 }}>🌿</Text>
-                <Text style={{ fontSize: 12, color: paperColors.dim }}>小栖</Text>
+                <Text style={{ fontSize: 12, color: paperColors.dim }}>米露</Text>
               </View>
               <Text style={{ fontSize: 14, lineHeight: 22, marginBottom: 16, color: paperColors.ink }}>
                 场景准备好了。你可以随时离开，这里没有对错。

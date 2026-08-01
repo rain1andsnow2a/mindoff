@@ -71,7 +71,7 @@ async function checkNewLetters(): Promise<void> {
     for (const l of fresh) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: l.title || "小栖来信",
+          title: l.title || "米露来信",
           body: preview(l.body),
           data: { letterId: l.id, type: l.type },
         },

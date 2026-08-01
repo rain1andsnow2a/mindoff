@@ -29,6 +29,8 @@ ALLOWED_PROPS = {
     "emptyChair", "photoFrame", "teacup",
     # 街道 / 校门
     "road", "crosswalk", "schoolGate", "railing", "building",
+    # 乡村
+    "oldHouse",
     # 城市设施
     "busStop", "car", "phoneBooth", "vendingMachine", "cafeTable", "parasol",
 }
@@ -51,7 +53,7 @@ MAX_CHARACTERS = 3
 COORD_LIMIT = 12.0  # 位置坐标绝对值上限（米）
 
 SPEC_SYSTEM_PROMPT = """\
-你是 MindOff 的「场景搭建师」。用户想在一个安全的低多边形 3D 小场景里，把没说完的话重演一遍。
+你是喵灵的「场景搭建师」。用户想在一个安全的低多边形 3D 小场景里，把没说完的话重演一遍。
 根据给定的场景信息，输出一份**只用给定零件**拼装的场景规格 JSON。
 
 只能用这些零件 type（其余一律不要用）：
@@ -94,6 +96,8 @@ SPEC_SYSTEM_PROMPT = """\
   railing（围栏）、building（楼）、streetlight（路灯）搭出基本环境，再放人物。
 - 等车/告别用 busStop；路上可放 car（想要驶过就 params.drive=true）；深夜街角用 phoneBooth、
   vendingMachine 增氛围；咖啡店/户外座位用 cafeTable + parasol。
+- 乡村/老家/奶奶家场景用 oldHouse（坡屋顶瓦房，自带暖窗与炊烟；params.lit=false 关窗灯、
+  params.smoke=false 关炊烟），搭配 pineTree/bush/rock 和暖色黄昏最出效果。
 - 若信息不足以判断室内外/时段，就选最贴合情绪的合理默认。
 - 人物姿态按情绪选：打电话用 phone；离别用 waving / lookingBack / walking；低落用 headDown /
   sittingGround / crying；冲突用 arguing；和解与安慰用 comforting / hugging；递信物用 handingItem。

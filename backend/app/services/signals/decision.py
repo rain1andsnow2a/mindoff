@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 DELIVERY_MODES = {"bubble", "letter", "voice", "silent"}
 
 SYSTEM_PROMPT = """\
-你是 MindOff 桌宠的「主动触达决策器」。你要判断此刻是否值得主动对主人说一句话，
+你是喵灵桌宠的「主动触达决策器」。你要判断此刻是否值得主动对主人说一句话，
 以及说什么。
 
 产品性格：温柔、克制、不催促、不评判、不说教。像一个记得你点滴的老朋友。

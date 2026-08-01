@@ -31,10 +31,10 @@ export const INITIAL_TASKS: Task[] = [
 
 export const INITIAL_KEEPSAKES: Keepsake[] = [
   { id:"k1", type:"letter",  title:"桐桐写给我的信",                excerpt:"你已经做得比自己感觉到的更多了。", savedAt:"7月24日", petName:"桐桐", source:"桌宠来信"  },
-  { id:"k2", type:"insight", title:"我不是害怕失败，而是害怕拖累队友。", excerpt:"",                              savedAt:"7月18日", petName:"小栖", source:"今日洞察" },
-  { id:"k3", type:"scene",   title:"我终于把那句话说了出来",          excerpt:"场景：和妈妈的对话",              savedAt:"6月12日", petName:"小栖", source:"场景结算" },
+  { id:"k2", type:"insight", title:"我不是害怕失败，而是害怕拖累队友。", excerpt:"",                              savedAt:"7月18日", petName:"米露", source:"今日洞察" },
+  { id:"k3", type:"scene",   title:"我终于把那句话说了出来",          excerpt:"场景：和妈妈的对话",              savedAt:"6月12日", petName:"米露", source:"场景结算" },
   { id:"k4", type:"music",   title:"Bloom",                        excerpt:"桐桐夹在信里的歌",                savedAt:"6月8日",  petName:"桐桐", source:"信中附件" },
-  { id:"k5", type:"quote",   title:"朋友说：你不用每次都表现得没事。", excerpt:"",                              savedAt:"5月28日", petName:"小栖", source:"一句话"   },
+  { id:"k5", type:"quote",   title:"朋友说：你不用每次都表现得没事。", excerpt:"",                              savedAt:"5月28日", petName:"米露", source:"一句话"   },
 ];
 
 // ─── Week Helpers ─────────────────────────────────────────────────────────────

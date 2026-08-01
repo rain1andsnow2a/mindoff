@@ -615,6 +615,100 @@ function building(p: Params) {
   return g;
 }
 
+// ─── 乡村件 ───────────────────────────────────────────────────
+
+/**
+ * 乡村老房子：人字形坡屋顶瓦房 + 木门 + 暖窗 + 烟囱炊烟（逐帧动画）。
+ * 老家/奶奶家/乡下场景的情感锚点。lit=false 关窗灯，smoke=false 关炊烟。
+ */
+function oldHouse(p: Params) {
+  const g = new THREE.Group();
+  const w = numOf(p.width, 4), d = numOf(p.depth, 3), wallH = numOf(p.height, 1.9);
+
+  // 墙体（暖灰泥墙）+ 底部勒脚
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), flatMat(hexNum(p.color, 0xd8cbb4), 1));
+  body.position.y = wallH / 2;
+  body.castShadow = true;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, 0.24, d + 0.12), flatMat(hexNum(p.base, 0x8a8078), 1));
+  base.position.y = 0.12;
+  g.add(body, base);
+
+  // 坡屋顶（三棱柱：脊线沿 x，两端出山花）+ 微微出檐
+  const r = d * 0.66;
+  const roof = new THREE.Mesh(
+    new THREE.CylinderGeometry(r, r, w + 0.5, 3, 1),
+    flatMat(hexNum(p.roof, 0x4a4a52), 0.9)
+  );
+  roof.rotation.z = Math.PI / 2;
+  roof.scale.y = 0.8; // 压扁一点，别太陡
+  roof.position.y = wallH + r * 0.4;
+  roof.castShadow = true;
+  g.add(roof);
+  // 屋脊瓦当条
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(w + 0.56, 0.08, 0.16), flatMat(hexNum(p.roof, 0x4a4a52), 0.85));
+  ridge.position.y = wallH + r * 0.8 + 0.02;
+  g.add(ridge);
+
+  // 木门（双扇感：门板 + 中缝）
+  const doorMat = flatMat(hexNum(p.door, 0x6a4a30), 0.85);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.3, 0.06), doorMat);
+  door.position.set(0, 0.65, d / 2 + 0.02);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.3, 0.02), flatMat(0x3a2a1a, 1));
+  seam.position.set(0, 0.65, d / 2 + 0.06);
+  g.add(door, seam);
+  // 门阶
+  const step = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.4), flatMat(0x9a938a, 1));
+  step.position.set(0, 0.06, d / 2 + 0.22);
+  g.add(step);
+
+  // 窗（两扇小木窗；lit 时暖黄光——傍晚老家亮灯的感觉）
+  const lit = p.lit !== false;
+  const winMat = lit
+    ? new THREE.MeshBasicMaterial({ color: hexNum(p.window, 0xffcf8a) })
+    : new THREE.MeshStandardMaterial({ color: hexNum(p.window, 0x3a3f4c), roughness: 0.4 });
+  const frameMat = flatMat(0x5a4632, 0.9);
+  ([-w * 0.28, w * 0.28] as const).forEach((x) => {
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.05), frameMat);
+    frame.position.set(x, wallH * 0.62, d / 2 + 0.01);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), winMat);
+    pane.position.set(x, wallH * 0.62, d / 2 + 0.04);
+    g.add(frame, pane);
+  });
+
+  // 烟囱 + 炊烟（灰色粒子缓缓上升、变大变淡）
+  const smoke = p.smoke !== false;
+  const chimneyX = w * 0.3;
+  const chimneyZ = -d * 0.08;
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.3), flatMat(0x8a8078, 1));
+  chimney.position.set(chimneyX, wallH + r * 0.48, chimneyZ);
+  chimney.castShadow = true;
+  g.add(chimney);
+  if (smoke) {
+    const puffGeo = new THREE.BufferGeometry();
+    const count = 10;
+    const pos = new Float32Array(count * 3);
+    const seed = new Float32Array(count);
+    for (let i = 0; i < count; i++) seed[i] = Math.random();
+    puffGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const puffs = new THREE.Points(puffGeo, new THREE.PointsMaterial({
+      color: 0xe2ddd6, size: 0.36, transparent: true, opacity: 0.6, depthWrite: false,
+    }));
+    g.add(puffs);
+    g.userData.update = (t: number) => {
+      const arr = puffGeo.attributes.position.array as Float32Array;
+      for (let i = 0; i < count; i++) {
+        const life = (t * 0.12 + seed[i]) % 1;
+        arr[i * 3] = chimneyX + Math.sin(seed[i] * 30 + t * 0.6) * (0.1 + life * 0.5) + life * 0.6; // 随风略斜
+        arr[i * 3 + 1] = wallH + r * 0.78 + life * 2.2;
+        arr[i * 3 + 2] = chimneyZ + Math.cos(seed[i] * 24 + t * 0.5) * (0.08 + life * 0.3);
+      }
+      puffGeo.attributes.position.needsUpdate = true;
+      puffs.material.opacity = 0.55 + Math.sin(t * 0.9) * 0.08;
+    };
+  }
+  return markShadows(g);
+}
+
 // ─── 城市设施件 ───────────────────────────────────────────────
 
 /** 公交站台：顶棚 + 立柱 + 长椅 + 站牌（等待/告别场景）。 */
@@ -762,6 +856,8 @@ const PROP_BUILDERS: Record<string, (p: Params) => THREE.Object3D> = {
   emptyChair, photoFrame, teacup,
   // 街道 / 校门
   road, crosswalk, schoolGate, railing, building,
+  // 乡村
+  oldHouse,
   // 城市设施
   busStop, car, phoneBooth, vendingMachine, cafeTable, parasol,
 };

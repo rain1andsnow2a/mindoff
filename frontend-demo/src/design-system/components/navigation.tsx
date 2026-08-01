@@ -182,7 +182,7 @@ export function SideNavigation({ active, onChange }: NavigationProps) {
       }}
     >
       <View
-        accessibilityLabel="MindOff"
+        accessibilityLabel="喵灵"
         style={{
           width: 44,
           height: 44,
@@ -216,7 +216,7 @@ export function SideNavigation({ active, onChange }: NavigationProps) {
           { color: theme.colors.textMuted, textAlign: "center" },
         ]}
       >
-        MindOff
+        喵灵
       </Text>
     </View>
   );

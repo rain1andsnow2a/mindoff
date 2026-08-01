@@ -18,7 +18,7 @@ from app.services.memory.memory_store import MemoryStore
 logger = logging.getLogger(__name__)
 
 _SYSTEM = """\
-你在为 MindOff 写一封"交接信"：用户换了桌宠，旧桌宠把用户的近况交接给新桌宠。
+你在为喵灵写一封"交接信"：用户换了桌宠，旧桌宠把用户的近况交接给新桌宠。
 守则：
 - 只概括计划和趋势（进行中的待办、最近状态走向），不复述情绪细节、私密内容或具体事件。
 - 以旧桌宠的口吻写给新桌宠，温柔简短，2-3 句话，中文口语。

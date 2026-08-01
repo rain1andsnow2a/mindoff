@@ -72,7 +72,7 @@ export function OnboardPet({ onNext, onBack, selected, onSelect }: {
   onNext: () => void; onBack: () => void; selected: number; onSelect: (i: number) => void;
 }) {
   const pets = [
-    { name: "小栖", trait: "温柔，善于倾听", desc: "喜欢在安静的傍晚陪你说话", emoji: "🌿" },
+    { name: "米露", trait: "温柔，善于倾听", desc: "喜欢在安静的傍晚陪你说话", emoji: "🌿" },
     { name: "晴晴", trait: "活泼，偶尔调皮", desc: "会在你沮丧时想办法让你笑一下", emoji: "☀️" },
     { name: "暮云", trait: "沉稳，有时神秘", desc: "话不多，但每句都刚好", emoji: "🌙" },
   ];
