@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>米露语音通话页 · 三个重构方案</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+/* ── MindOff design token（严格取自 frontend-demo/src/design-system/tokens.ts，未新增颜色）── */
+:root{
+  --bg:#FCFAF7; --bg-subtle:#F4F1EC; --surface:#FFFDFA; --surface-el:#FFFFFF;
+  --ink:#403A35; --ink2:#756C63; --muted:#9D9389;
+  --border:#E8E2D8; --accent:#B8860B; --accent-surface:#F6E7A8;
+  --accent-soft:rgba(246,225,143,0.48); --success:#5E7D68; --danger:#A8483D;
+  --disabled-surface:#EFEBE4;
+  --r-control:12px; --r-card:18px; --r-pill:999px;
+  --shadow-soft:0 4px 12px rgba(64,58,53,0.08);
+  --shadow-float:0 12px 28px rgba(64,58,53,0.14);
+  /* 项目规则：仅用平台系统无衬线字体，不引入外部字体 */
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#DAD4CB;font-family:var(--font);color:var(--ink);
+  -webkit-font-smoothing:antialiased;padding:44px 32px 80px}
+
+/* ── 页面说明区 ── */
+.head{max-width:1180px}
+.head h1{font-size:23px;font-weight:600;letter-spacing:-.4px;color:#332E29}
+.head .lede{margin-top:10px;font-size:14px;line-height:1.75;color:#5F5852;max-width:820px}
+.head .lede b{font-weight:600;color:#413B35}
+.diag{margin-top:18px;padding:14px 18px;border-radius:var(--r-card);
+  background:rgba(255,253,248,.62);border:1px solid rgba(64,58,53,.08);max-width:820px}
+.diag h2{font-size:12px;font-weight:600;letter-spacing:.4px;color:var(--accent);margin-bottom:7px}
+.diag p{font-size:13px;line-height:1.75;color:#5F5852}
+
+.grid{display:flex;flex-wrap:wrap;gap:44px 34px;margin-top:40px;align-items:flex-start}
+.col{width:392px}
+.cap{margin-bottom:14px;min-height:106px}
+.cap .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.3px;
+  color:#7A5C08;background:var(--accent-soft);padding:3px 10px;border-radius:var(--r-pill)}
+.cap h3{font-size:16px;font-weight:600;margin:10px 0 5px;color:#332E29}
+.cap p{font-size:12.5px;line-height:1.7;color:#6E675F}
+.cap p em{font-style:normal;color:#8A6A12}
+
+/* ── 设备框（Android · Pixel 手势导航；不手写 iOS 刘海）── */
+.phone{width:392px;padding:10px;background:#1A1A1A;border-radius:44px;
+  box-shadow:0 0 0 2px #2A2A2A,0 22px 52px rgba(60,50,40,.3)}
+.screen{position:relative;width:100%;height:800px;border-radius:36px;overflow:hidden;
+  background:var(--bg);display:flex;flex-direction:column}
+.sbar{flex:none;height:32px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;font-size:12px;font-weight:600;color:#8B827A}
+.punch{position:absolute;top:9px;left:50%;transform:translateX(-50%);
+  width:11px;height:11px;border-radius:50%;background:#000;z-index:30}
+.navbar{flex:none;height:26px;display:flex;align-items:center;justify-content:center}
+.navbar i{width:104px;height:4px;border-radius:var(--r-pill);background:rgba(64,58,53,.28)}
+
+/* ── 状态切换器（每台手机独立状态机）── */
+.states{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.states button{font:inherit;font-size:11.5px;padding:5px 11px;border-radius:var(--r-pill);
+  border:1px solid var(--border);background:rgba(255,253,248,.7);color:#6E675F;
+  cursor:pointer;transition:all .16s}
+.states button:hover{background:#fff}
+.states button[data-on="1"]{background:var(--accent-surface);border-color:#E3CE7E;
+  color:#5E4805;font-weight:600}
+
+/* ── 通用元件 ── */
+.hang{width:56px;height:56px;border-radius:50%;border:none;background:var(--danger);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:var(--shadow-soft);transition:transform .15s,opacity .15s}
+.hang:active{transform:scale(.94);opacity:.85}
+.dot{width:6px;height:6px;border-radius:50%;flex:none}
+.bub{max-width:78%;padding:10px 14px;font-size:14.5px;line-height:1.55;word-break:break-word}
+.bub.pet{background:var(--surface-el);color:var(--ink);
+  border-radius:16px 16px 16px 5px;box-shadow:var(--shadow-soft)}
+.bub.me{background:var(--accent-surface);color:#4B463F;
+  border-radius:16px 16px 5px 16px;align-self:flex-end}
+.row{display:flex;gap:8px;align-items:flex-end}
+.row.me{justify-content:flex-end}
+.mini{width:26px;height:26px;border-radius:8px;flex:none;background:var(--accent-soft);
+  display:flex;align-items:center;justify-content:center;font-size:13px}
+
+/* ── 呼吸动画：仅在「接通中」与音量律动使用，遵守 reduced-motion ── */
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.14);opacity:.82}}
+@keyframes ripple{0%{transform:scale(.82);opacity:.55}100%{transform:scale(1.5);opacity:0}}
+@keyframes dots{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.breathe{animation:breathe 3.6s ease-in-out infinite}
+.ripple{animation:ripple 2.4s ease-out infinite}
+.typing i{display:inline-block;width:4px;height:4px;border-radius:50%;
+  background:var(--muted);margin-right:3px;animation:dots 1.3s infinite}
+.typing i:nth-child(2){animation-delay:.16s}
+.typing i:nth-child(3){animation-delay:.32s}
+@media (prefers-reduced-motion:reduce){
+  .breathe,.ripple,.typing i{animation:none}
+}
+.scroll{overflow-y:auto;scrollbar-width:thin}
+.scroll::-webkit-scrollbar{width:3px}
+.scroll::-webkit-scrollbar-thumb{background:rgba(64,58,53,.16);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const {useState} = React;
+
+/* ══ 共用内容（用户真实截图里的文案，非 Lorem）══════════════════════ */
+const PET = {name:"米露", emoji:"✨"};
+const TURNS = [
+  {id:1, role:"me",  text:"今天刚做完实习。"},
+  {id:2, role:"pet", text:"（把旁边的小垫子推到你手边）结束了就好。先坐会儿？"},
+];
+/* 四个可切状态，对应 useRealtimeCall.ts 的 CallStatus */
+const STATES = [
+  {k:"connecting", label:"接通中",  hint:"正在接通…"},
+  {k:"listening",  label:"在听",    hint:"在听你说"},
+  {k:"speaking",   label:"你在说",  hint:"在听你说"},
+  {k:"thinking",   label:"在想",    hint:"在想怎么回你…"},
+];
+const LIVE = "然后我就想，是不是该给自己放半天假";
+
+/* ══ 设备外壳 ══════════════════════════════════════════════════════ */
+function Phone({children}){
+  return (
+    <div className="phone">
+      <div className="screen">
+        <div className="punch" />
+        <div className="sbar"><span>20:56</span><span>5G · 100%</span></div>
+        {children}
+        <div className="navbar"><i /></div>
+      </div>
+    </div>
+  );
+}
+
+function HangBtn({size=56}){
+  return (
+    <button aria-label="挂断通话" className="hang"
+      style={{width:size, height:size}}>
+      <svg width={size*.45} height={size*.45} viewBox="0 0 24 24" fill="none"
+        stroke="#FFF9F5" strokeWidth="2" strokeLinecap="round">
+        <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/>
+        <line x1="2" y1="22" x2="22" y2="2" />
+      </svg>
+    </button>
+  );
+}
+/* 对话流：三个方案共用同一份对话渲染，只换容器与排版 */
+function Turns({state, dense}){
+  const gap = dense ? 10 : 14;
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap}}>
+      {TURNS.map(t => t.role === "me" ? (
+        <div className="row me" key={t.id}><div className="bub me">{t.text}</div></div>
+      ) : (
+        <div className="row" key={t.id}>
+          <div className="mini">{PET.emoji}</div>
+          <div className="bub pet">{t.text}</div>
+        </div>
+      ))}
+      {state === "speaking" && (
+        <div className="row me">
+          <div className="bub me" style={{opacity:.6, fontStyle:"italic"}}>{LIVE}</div>
+        </div>
+      )}
+      {state === "thinking" && (
+        <div className="row">
+          <div className="mini">{PET.emoji}</div>
+          <div className="bub pet typing" style={{padding:"13px 15px"}}>
+            <i /><i /><i />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* 语音回复开关：三个方案都保留这个功能，但收纳方式各不同 */
+function VoiceToggle({on, onClick, compact}){
+  if (compact) {  /* 方案A/C：收成顶栏一个图标按钮 */
+    return (
+      <button aria-label={`桌宠语音回复${on?"已开启":"已关闭"}`} onClick={onClick}
+        style={{width:36, height:36, borderRadius:"var(--r-control)", cursor:"pointer",
+          border:"1px solid " + (on ? "#E3CE7E" : "var(--border)"),
+          background: on ? "var(--accent-surface)" : "transparent",
+          display:"flex", alignItems:"center", justifyContent:"center"}}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" strokeWidth="2"
+          stroke={on ? "#8A6A12" : "var(--muted)"} strokeLinecap="round">
+          <path d="M11 5 6 9H2v6h4l5 4V5z" />
+          {on ? <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a9 9 0 0 1 0 14" /></>
+              : <><line x1="22" y1="9" x2="16" y2="15" /><line x1="16" y1="9" x2="22" y2="15" /></>}
+        </svg>
+      </button>
+    );
+  }
+  return (  /* 方案B：作为一行设置留在底部工具条 */
+    <button aria-label={`桌宠语音回复${on?"已开启":"已关闭"}`} onClick={onClick}
+      style={{display:"flex", alignItems:"center", gap:9, padding:"7px 13px 7px 9px",
+        borderRadius:"var(--r-pill)", cursor:"pointer", border:"1px solid var(--border)",
+        background:"rgba(255,253,248,.8)"}}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeWidth="2"
+        stroke={on ? "var(--accent)" : "var(--muted)"} strokeLinecap="round">
+        <path d="M11 5 6 9H2v6h4l5 4V5z" />
+        {on ? <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            : <><line x1="22" y1="9" x2="16" y2="15" /><line x1="16" y1="9" x2="22" y2="15" /></>}
+      </svg>
+      <span style={{fontSize:12.5, color:"#5F5852"}}>出声</span>
+      <span style={{width:30, height:18, borderRadius:9, padding:2.5, flex:"none",
+        display:"flex", justifyContent: on ? "flex-end" : "flex-start",
+        background: on ? "var(--accent-surface)" : "var(--disabled-surface)"}}>
+        <span style={{width:13, height:13, borderRadius:"50%",
+          background:"var(--surface-el)", boxShadow:"var(--shadow-soft)"}} />
+      </span>
+    </button>
+  );
+}
+/* 方案 A · 接通即折叠
+   orb 只在 connecting 时占满舞台；一旦接通就收成顶栏 34px 呼吸点，
+   对话区升为唯一主角占满全屏。最贴用户原话「上面只在没接通时需要」。 */
+function PlanA({state, voice, setVoice}){
+  const cur = STATES.find(s => s.k === state);
+  const connecting = state === "connecting";
+
+  return (
+    <>
+      <div style={{flex:"none", display:"flex", alignItems:"center", gap:11,
+        padding:"6px 16px 12px",
+        borderBottom: connecting ? "none" : "1px solid var(--border)"}}>
+        {!connecting && (
+          <div style={{position:"relative", width:34, height:34, flex:"none",
+            display:"flex", alignItems:"center", justifyContent:"center"}}>
+            <span className={state === "speaking" ? "ripple" : ""}
+              style={{position:"absolute", inset:0, borderRadius:"50%",
+                background:"var(--accent-soft)"}} />
+            <span style={{position:"relative", width:26, height:26, borderRadius:9,
+              background:"var(--surface-el)", boxShadow:"var(--shadow-soft)",
+              display:"flex", alignItems:"center", justifyContent:"center", fontSize:13}}>
+              {PET.emoji}
+            </span>
+          </div>
+        )}
+        <div style={{flex:1, textAlign: connecting ? "center" : "left"}}>
+          <div style={{fontSize:17, fontWeight:500}}>{PET.name}</div>
+          <div style={{display:"flex", alignItems:"center", gap:6, marginTop:2,
+            justifyContent: connecting ? "center" : "flex-start"}}>
+            <span className="dot" style={{background: connecting ? "var(--accent)" : "var(--success)"}} />
+            <span style={{fontSize:12.5, color:"var(--muted)"}}>{cur.hint}</span>
+            {!connecting && <span style={{fontSize:12.5, color:"var(--muted)"}}>· 02:14</span>}
+          </div>
+        </div>
+        {!connecting && <VoiceToggle compact on={voice} onClick={() => setVoice(!voice)} />}
+      </div>
+
+      {connecting ? (
+        /* 未接通：orb 是主角，占满整块，这是它唯一名正言顺的时刻 */
+        <div style={{flex:1, display:"flex", flexDirection:"column",
+          alignItems:"center", justifyContent:"center", gap:34, paddingBottom:40}}>
+          <div style={{position:"relative", width:196, height:196,
+            display:"flex", alignItems:"center", justifyContent:"center"}}>
+            <span className="ripple" style={{position:"absolute", width:176, height:176,
+              borderRadius:"50%", background:"var(--accent-soft)"}} />
+            <span className="breathe" style={{position:"absolute", width:150, height:150,
+              borderRadius:"50%", background:"var(--accent-soft)"}} />
+            <span style={{position:"relative", width:110, height:110, borderRadius:30,
+              background:"var(--surface-el)", boxShadow:"var(--shadow-float)", fontSize:42,
+              display:"flex", alignItems:"center", justifyContent:"center"}}>
+              {PET.emoji}
+            </span>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:14.5, color:"var(--ink2)"}}>正在接通米露…</div>
+            <div style={{fontSize:12.5, color:"var(--muted)", marginTop:7}}>
+              你可以自然地说，我会在停顿时回应
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* 已接通：对话区拿走全部纵向空间 */
+        <div className="scroll" style={{flex:1, padding:"16px 16px 4px"}}>
+          <Turns state={state} />
+        </div>
+      )}
+
+      <div style={{flex:"none", display:"flex", justifyContent:"center",
+        padding:"14px 0 18px"}}>
+        <HangBtn size={connecting ? 60 : 52} />
+      </div>
+    </>
+  );
+}
+/* 方案 B · 字幕通话
+   取消独立对话卡这层容器，转写与回复以字幕形态直接落在暖色底上，
+   最新一句最大最清晰、旧句逐级淡去。整屏只有一个层，没有「上下两块」。 */
+function PlanB({state, voice, setVoice}){
+  const cur = STATES.find(s => s.k === state);
+  /* 字幕流：历史句淡、当前句亮，模拟通话中的实时字幕 */
+  const lines = [
+    {role:"me",  text:TURNS[0].text, age:1},
+    {role:"pet", text:TURNS[1].text, age:0},
+  ];
+  if (state === "speaking") lines.push({role:"me", text:LIVE, age:-1});
+
+  return (
+    <>
+      <div style={{flex:"none", display:"flex", alignItems:"center",
+        justifyContent:"space-between", padding:"8px 18px 0"}}>
+        <div style={{display:"flex", alignItems:"center", gap:7}}>
+          <span className="dot" style={{background:"var(--success)"}} />
+          <span style={{fontSize:13, fontWeight:500, color:"var(--ink2)"}}>{PET.name}</span>
+          <span style={{fontSize:12, color:"var(--muted)"}}>· 02:14</span>
+        </div>
+        <span style={{fontSize:12, color:"var(--muted)"}}>{cur.hint}</span>
+      </div>
+
+      {/* 字幕舞台：内容自下而上堆叠，最新一句贴近底部操作区 */}
+      <div className="scroll" style={{flex:1, display:"flex", flexDirection:"column",
+        justifyContent:"flex-end", gap:20, padding:"30px 26px 8px"}}>
+        {state === "connecting" ? (
+          <div style={{margin:"auto 0", textAlign:"center"}}>
+            <div className="breathe" style={{width:64, height:64, borderRadius:22, margin:"0 auto",
+              background:"var(--accent-soft)", display:"flex",
+              alignItems:"center", justifyContent:"center", fontSize:26}}>
+              {PET.emoji}
+            </div>
+            <div style={{fontSize:14.5, color:"var(--ink2)", marginTop:22}}>正在接通…</div>
+          </div>
+        ) : lines.map((l, i) => (
+          <div key={i} style={{opacity: l.age === 1 ? .42 : l.age === -1 ? .6 : 1}}>
+            <div style={{fontSize:11, fontWeight:600, letterSpacing:.5, marginBottom:6,
+              color: l.role === "me" ? "var(--muted)" : "var(--accent)"}}>
+              {l.role === "me" ? "你" : PET.name}
+            </div>
+            <div style={{fontSize: l.age === 0 ? 20 : 16,
+              lineHeight: l.age === 0 ? 1.55 : 1.6,
+              fontWeight: l.age === 0 ? 500 : 400,
+              fontStyle: l.age === -1 ? "italic" : "normal",
+              color: l.age === 1 ? "var(--ink2)" : "var(--ink)"}}>
+              {l.text}
+            </div>
+          </div>
+        ))}
+        {state === "thinking" && (
+          <div className="typing" style={{paddingLeft:1}}><i /><i /><i /></div>
+        )}
+      </div>
+
+      {/* 底部工具条：音量律动做成一条极细的水平波纹，替代大圆圈 */}
+      <div style={{flex:"none", padding:"12px 22px 16px"}}>
+        <div style={{display:"flex", alignItems:"center", justifyContent:"center",
+          gap:3, height:18, marginBottom:14}}>
+          {[6,11,16,9,14,18,12,7,13,17,10,15,8,12,6].map((h, i) => (
+            <span key={i} className={state === "speaking" ? "breathe" : ""}
+              style={{width:2.5, borderRadius:2, background:"var(--accent-surface)",
+                height: state === "speaking" ? h : 3,
+                animationDelay:`${i * 0.09}s`,
+                transition:"height .2s"}} />
+          ))}
+        </div>
+        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+          <VoiceToggle on={voice} onClick={() => setVoice(!voice)} />
+          <HangBtn size={52} />
+          <span style={{width:96}} />
+        </div>
+      </div>
+    </>
+  );
+}
+/* 方案 C · 状态即背景
+   orb 化为整屏极淡光晕背景（跟音量呼吸，opacity ≤ .08 服从内容不抢戏），
+   前景只有对话流和挂断。视觉上没有任何圆圈实体，状态感仍在。 */
+function PlanC({state, voice, setVoice}){
+  const cur = STATES.find(s => s.k === state);
+  const connecting = state === "connecting";
+  /* 光晕强度随状态走：说话时最亮、思考时中等、在听时最淡 */
+  const glow = state === "speaking" ? .085 : state === "thinking" ? .07 : .045;
+
+  return (
+    <>
+      {/* 背景光晕层：不占布局，只在底下呼吸 */}
+      <div aria-hidden="true" className={connecting ? "breathe" : ""}
+        style={{position:"absolute", left:"50%", top: connecting ? "42%" : "26%",
+          transform:"translate(-50%,-50%)", width:520, height:520, borderRadius:"50%",
+          pointerEvents:"none", zIndex:0,
+          background:`radial-gradient(circle, rgba(184,134,11,${connecting ? .13 : glow}) 0%, rgba(184,134,11,0) 68%)`,
+          transition:"opacity .4s, top .5s"}} />
+
+      <div style={{position:"relative", zIndex:1, flex:"none",
+        display:"flex", alignItems:"center", gap:10, padding:"8px 18px 14px"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:17, fontWeight:500}}>{PET.name}</div>
+          <div style={{display:"flex", alignItems:"center", gap:6, marginTop:3}}>
+            {/* 状态点自己就是律动元件：说话时轻微呼吸，替代整个大圆圈 */}
+            <span className={state === "speaking" || connecting ? "breathe" : ""}
+              style={{width:7, height:7, borderRadius:"50%", flex:"none",
+                background: connecting ? "var(--accent)" : "var(--success)"}} />
+            <span style={{fontSize:12.5, color:"var(--muted)"}}>
+              {cur.hint}{!connecting && " · 02:14"}
+            </span>
+          </div>
+        </div>
+        <VoiceToggle compact on={voice} onClick={() => setVoice(!voice)} />
+      </div>
+
+      <div className="scroll" style={{position:"relative", zIndex:1, flex:1,
+        display:"flex", flexDirection:"column",
+        justifyContent: connecting ? "center" : "flex-start",
+        padding:"4px 16px"}}>
+        {connecting ? (
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:15.5, color:"var(--ink2)"}}>正在接通米露…</div>
+            <div style={{fontSize:12.5, color:"var(--muted)", marginTop:9, lineHeight:1.7}}>
+              你可以自然地说<br />我会在停顿时回应
+            </div>
+          </div>
+        ) : <Turns state={state} />}
+      </div>
+
+      {/* 挂断悬浮在光晕之上，底部留白让整屏收口 */}
+      <div style={{position:"relative", zIndex:1, flex:"none",
+        display:"flex", justifyContent:"center", padding:"16px 0 20px"}}>
+        <HangBtn size={54} />
+      </div>
+    </>
+  );
+}
+
+/* ══ 三方案说明 + 状态切换外壳 ═════════════════════════════════════ */
+const PLANS = [
+  {id:"A", Comp:PlanA, tag:"方案 A", title:"接通即折叠",
+   desc:<>orb 只在<em>没接通时</em>占满屏；一接通就收成顶栏 34px 呼吸点，对话区拿走全部纵向空间。最贴你原话，改动量也最小。</>},
+  {id:"B", Comp:PlanB, tag:"方案 B", title:"字幕通话",
+   desc:<>拆掉对话卡这层容器，转写与回复以<em>字幕</em>形态直接落在底色上，最新一句最大。音量律动收成底部一条细波纹。</>},
+  {id:"C", Comp:PlanC, tag:"方案 C", title:"状态即背景",
+   desc:<>orb 化为<em>整屏极淡光晕</em>（跟音量呼吸），前景只有对话与挂断。画面里没有任何圆圈实体，但状态感还在。</>},
+];
+
+function Column({plan}){
+  const [state, setState] = useState("listening");
+  const [voice, setVoice] = useState(true);
+  const {Comp} = plan;
+  return (
+    <div className="col">
+      <div className="cap">
+        <span className="tag">{plan.tag}</span>
+        <h3>{plan.title}</h3>
+        <p>{plan.desc}</p>
+      </div>
+      <Phone><Comp setVoice={setVoice} state={state} voice={voice} /></Phone>
+      <div className="states">
+        {STATES.map(s => (
+          <button data-on={state === s.k ? "1" : "0"} key={s.k}
+            onClick={() => setState(s.k)}>{s.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  return (
+    <>
+      <div className="head">
+        <h1>米露语音通话页 · 三个重构方案</h1>
+        <p className="lede">
+          三台手机都是<b>活的状态机</b>——点手机下方的「接通中 / 在听 / 你在说 / 在想」
+          切状态，也能点顶栏喇叭切语音回复。内容、配色、字号全部取自
+          <b> frontend-demo/src/design-system/tokens.ts</b>，没有新发明颜色。
+        </p>
+        <div className="diag">
+          <h2>先说问题出在哪</h2>
+          <p>
+            现在这屏里有<b>两个都想当主角的区块</b>：上半 callStage（名字＋光圈＋提示＋挂断）
+            和下半 conversation（开关＋对话）。手机窄屏下它们上下平铺，各占一半，
+            于是两边都不够用——光圈大而无信息，对话区被压到 180~220px 只能看两句。
+            而 <b>useRealtimeCall</b> 里光圈接通后其实只是个音量指示器，
+            用不着 184px。三个方案就是三种「把主角还给对话」的方式。
+          </p>
+        </div>
+      </div>
+      <div className="grid">
+        {PLANS.map(p => <Column key={p.id} plan={p} />)}
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
