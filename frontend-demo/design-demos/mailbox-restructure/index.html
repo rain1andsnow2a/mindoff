@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DAY-252 · 信箱重构三方案</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body, #root { min-height: 100%; margin: 0; }
+    body { background: #e9e1d4; color: #403a35; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    button { font: inherit; }
+    .stage { min-height: 100vh; padding: 28px; }
+    .toolbar { max-width: 1480px; margin: 0 auto 24px; display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+    .toolbar h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; letter-spacing: -.03em; }
+    .toolbar p { margin: 0; max-width: 760px; color: #756c63; line-height: 1.65; }
+    .switcher { display: flex; gap: 4px; padding: 4px; border: 1px solid #d9cfc2; border-radius: 12px; background: #fffaf1; }
+    .switcher button { border: 0; border-radius: 8px; padding: 9px 14px; color: #756c63; background: transparent; cursor: pointer; }
+    .switcher button.active { color: #6e5a28; background: rgba(246,225,143,.68); }
+    .grid { max-width: 1480px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; align-items: start; }
+    .variation { min-width: 0; }
+    .label { margin: 0 0 12px; padding-left: 4px; }
+    .label strong { display: block; font-size: 16px; margin-bottom: 4px; }
+    .label span { color: #756c63; font-size: 13px; line-height: 1.5; }
+    .phone-wrap { display: flex; justify-content: center; }
+    .desktop-shell { height: 720px; border: 1px solid #d9cfc2; border-radius: 22px; overflow: hidden; display: grid; grid-template-columns: 78px 1fr; background: #f7f2e8; box-shadow: 0 18px 50px rgba(64,58,53,.10); }
+    .desktop-nav { padding: 24px 10px; background: #fffcf6; border-right: 1px solid #e4dace; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .desktop-nav .brand { width: 42px; height: 42px; border-radius: 13px; background: #f6e18f; display: grid; place-items: center; color: #6e5a28; font-weight: 750; }
+    .desktop-nav span { font-size: 11px; color: #9d9389; }
+    .desktop-nav span.active { color: #6e5a28; font-weight: 650; }
+    .desktop-content { overflow: auto; padding: 30px; }
+    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } .desktop-shell { height: 620px; } }
+    @media (max-width: 620px) { .stage { padding: 18px 10px; } .toolbar { align-items: stretch; flex-direction: column; } .switcher { align-self: flex-start; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    const androidFrameStyles = {
+      wrapper: { display: 'inline-block', padding: 8, background: '#1a1a1a', borderRadius: 38, boxShadow: '0 0 0 2px #2a2a2a, 0 20px 60px rgba(0,0,0,0.22)', position: 'relative' },
+      screen: { position: 'relative', borderRadius: 31, overflow: 'hidden', background: '#fff' },
+      statusBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 21px', fontSize: 12, fontWeight: 600, zIndex: 20, pointerEvents: 'none' },
+      punchHole: { position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, background: '#000', borderRadius: '50%', zIndex: 30 },
+      statusIcons: { display: 'flex', alignItems: 'center', gap: 5 },
+      content: { position: 'absolute', top: 30, left: 0, right: 0, bottom: 22, overflow: 'hidden' },
+      navBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+      navButton: { width: 82, height: 4, background: 'rgba(0,0,0,.35)', borderRadius: 999 },
+    };
+
+    function AndroidFrame({ children, width = 360, height = 760, time = '9:41', battery = 86 }) {
+      return <div style={androidFrameStyles.wrapper}>
+        <div style={{ ...androidFrameStyles.screen, width, height, background: '#f7f2e8' }}>
+          <div style={{ ...androidFrameStyles.statusBar, color: '#2f2a26' }}><span>{time}</span><div style={androidFrameStyles.statusIcons}><span>5G</span><span>▮▮▮</span><span>{battery}%</span></div></div>
+          <div style={androidFrameStyles.punchHole} />
+          <div style={androidFrameStyles.content}>{children}</div>
+          <div style={androidFrameStyles.navBar}><div style={androidFrameStyles.navButton} /></div>
+        </div>
+      </div>;
+    }
+
+    const ui = {
+      page: { height: '100%', display: 'flex', flexDirection: 'column', background: '#f7f2e8', color: '#403a35', position: 'relative', overflow: 'hidden' },
+      header: { padding: '22px 20px 14px' },
+      eyebrow: { fontSize: 11, letterSpacing: '.14em', color: '#9a7a25', marginBottom: 5 },
+      title: { margin: 0, fontSize: 26, fontWeight: 650 },
+      sub: { margin: '6px 0 0', color: '#756c63', fontSize: 13, lineHeight: 1.55 },
+      content: { flex: 1, overflow: 'auto', padding: '0 18px 92px' },
+      panel: { borderRadius: 20, background: '#fffcf6', border: '1px solid #e4dace', padding: 18 },
+      tab: { border: 0, borderRadius: 10, padding: '10px 14px', background: 'transparent', color: '#756c63', cursor: 'pointer' },
+      tabOn: { color: '#6e5a28', background: 'rgba(246,225,143,.66)', fontWeight: 650 },
+      primary: { width: '100%', border: 0, borderRadius: 12, padding: '12px 16px', background: '#f0d477', color: '#6e5a28', fontWeight: 650, cursor: 'pointer' },
+    };
+
+    function BottomNav() {
+      return <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 76, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '1px solid #e4dace', background: '#fffcf6', zIndex: 8 }}>
+        {[['陪伴','聊'],['信箱','信'],['片场','演'],['我的','我']].map(([label,glyph]) => <div key={label} style={{ display: 'grid', placeItems: 'center', alignContent: 'center', gap: 3, color: label === '信箱' ? '#6e5a28' : '#9d9389' }}><b style={{ width: 30, height: 26, borderRadius: 9, display: 'grid', placeItems: 'center', background: label === '信箱' ? 'rgba(246,225,143,.58)' : 'transparent', fontSize: 12 }}>{glyph}</b><span style={{ fontSize: 11 }}>{label}</span></div>)}
+      </div>;
+    }
+
+    function Letter({ opened, onOpen }) {
+      if (!opened) return <button onClick={onOpen} style={{ ...ui.panel, width: '100%', minHeight: 230, cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ color: '#9d9389', fontSize: 12 }}>今天 · 米露</div><div style={{ marginTop: 52, fontSize: 20, fontWeight: 650 }}>一封写给你的信</div><div style={{ marginTop: 8, color: '#756c63', fontSize: 13 }}>轻点拆开</div><div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 58, background: 'rgba(243,216,199,.28)' }} />
+      </button>;
+      return <div style={ui.panel}><div style={{ color: '#9d9389', fontSize: 12 }}>今天 · 米露</div><h3 style={{ margin: '8px 0 14px', fontSize: 20 }}>今晚，先歇一会儿</h3><p style={{ margin: 0, color: '#625a53', fontSize: 14, lineHeight: 1.8 }}>今天已经走了很远。没做完的事可以先留给明天，我会在这里陪你把这一晚慢下来。</p><div style={{ display: 'flex', gap: 8, marginTop: 18 }}><button style={{ ...ui.primary, flex: 1 }}>收到啦</button><button style={{ ...ui.primary, flex: 1, background: '#f1ebe1', color: '#756c63' }}>回它一句</button></div></div>;
+    }
+
+    function Thoughts() {
+      const [filter, setFilter] = useState('待启');
+      return <div><div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{['待启','珍藏','寄存'].map(x => <button key={x} onClick={() => setFilter(x)} style={{ ...ui.tab, ...(filter === x ? ui.tabOn : {}) }}>{x}</button>)}</div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={ui.panel}><small style={{ color: '#9d9389' }}>{filter === '待启' ? '今天 · 15:00' : filter === '珍藏' ? '长久留下' : '1 天后到期'}</small><strong style={{ display: 'block', marginTop: 7 }}>{filter === '待启' ? '与朋友的约定' : filter === '珍藏' ? '那次终于说出口的话' : '那次和妈妈的通话'}</strong><p style={{ margin: '7px 0 0', color: '#756c63', fontSize: 13, lineHeight: 1.55 }}>{filter === '寄存' ? '有些感受不必立刻决定去留。' : '这是喵灵替你整理好的思绪，不是桌宠来信。'}</p></div>
+          <div style={{ ...ui.panel, background: '#f2ebdf' }}><small style={{ color: '#9d9389' }}>整理说明</small><p style={{ margin: '7px 0 0', color: '#756c63', fontSize: 13 }}>这里仅展示你主动说过、并允许留下的内容。</p></div>
+        </div></div>;
+    }
+
+    function DualTabs() {
+      const [tab, setTab] = useState('letter'); const [opened, setOpened] = useState(false);
+      return <div style={ui.page}><div style={ui.header}><div style={ui.eyebrow}>两种内容 · 两个空间</div><h2 style={ui.title}>信箱</h2></div><div style={{ margin: '0 18px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: 4, border: '1px solid #e4dace', borderRadius: 14, background: '#fffaf1' }}>{[['letter','桌宠来信'],['thought','我的思绪']].map(([id,label]) => <button key={id} onClick={() => setTab(id)} style={{ ...ui.tab, ...(tab === id ? ui.tabOn : {}) }}>{label}</button>)}</div><div style={ui.content}>{tab === 'letter' ? <Letter opened={opened} onOpen={() => setOpened(true)} /> : <Thoughts />}</div><BottomNav /></div>;
+    }
+
+    function LetterStage() {
+      const [view, setView] = useState('letter'); const [opened, setOpened] = useState(false);
+      return <div style={ui.page}><div style={ui.header}><div style={ui.eyebrow}>{view === 'letter' ? '米露写给你' : '你留下的内容'}</div><h2 style={ui.title}>{view === 'letter' ? '今天的来信' : '思绪归档'}</h2><p style={ui.sub}>{view === 'letter' ? '打开信箱，就先见到它。' : '待启、珍藏和寄存都在这里。'}</p></div><div style={ui.content}>{view === 'letter' ? <Letter opened={opened} onOpen={() => setOpened(true)} /> : <Thoughts />}</div><button onClick={() => setView(view === 'letter' ? 'thought' : 'letter')} style={{ position: 'absolute', right: 18, bottom: 88, border: '1px solid #d8c887', borderRadius: 999, padding: '11px 15px', background: '#fff8dd', color: '#6e5a28', fontWeight: 650, boxShadow: '0 8px 22px rgba(64,58,53,.12)', cursor: 'pointer', zIndex: 10 }}>{view === 'letter' ? '思绪归档 · 3' : '返回来信'}</button><BottomNav /></div>;
+    }
+
+    function TwoSpaces() {
+      const [view, setView] = useState('home'); const [opened, setOpened] = useState(false);
+      if (view !== 'home') return <div style={ui.page}><div style={ui.header}><button onClick={() => setView('home')} style={{ ...ui.tab, paddingLeft: 0 }}>‹ 返回信箱</button><h2 style={ui.title}>{view === 'letter' ? '桌宠来信' : '我的思绪'}</h2></div><div style={ui.content}>{view === 'letter' ? <Letter opened={opened} onOpen={() => setOpened(true)} /> : <Thoughts />}</div><BottomNav /></div>;
+      return <div style={ui.page}><div style={ui.header}><div style={ui.eyebrow}>先选想去的空间</div><h2 style={ui.title}>信箱</h2><p style={ui.sub}>桌宠写来的，与自己留下的，分开安放。</p></div><div style={{ ...ui.content, display: 'grid', alignContent: 'start', gap: 12 }}><button onClick={() => setView('letter')} style={{ ...ui.panel, minHeight: 190, textAlign: 'left', cursor: 'pointer' }}><small style={{ color: '#9a7a25' }}>桌宠来信 · 1 封未读</small><strong style={{ display: 'block', marginTop: 40, fontSize: 21 }}>米露写给你的</strong><span style={{ display: 'block', marginTop: 7, color: '#756c63', fontSize: 13 }}>关系、问候与场景邀请</span></button><button onClick={() => setView('thought')} style={{ ...ui.panel, minHeight: 150, textAlign: 'left', cursor: 'pointer', background: '#f0e9dd' }}><small style={{ color: '#718879' }}>我的思绪</small><strong style={{ display: 'block', marginTop: 28, fontSize: 19 }}>整理与归档</strong><span style={{ display: 'block', marginTop: 7, color: '#756c63', fontSize: 13 }}>待启 · 珍藏 · 寄存</span></button></div><BottomNav /></div>;
+    }
+
+    const variants = [
+      { name: 'A · 双入口切换', note: '最直接：在同一页明确分开来信与思绪。', Component: DualTabs },
+      { name: 'B · 来信主舞台', note: '打开即见桌宠来信，思绪以独立入口进入。', Component: LetterStage },
+      { name: 'C · 并列双空间', note: '概念最清楚：先选空间，再查看具体内容。', Component: TwoSpaces },
+    ];
+
+    function DesktopPreview({ Component }) {
+      return <div className="desktop-shell"><div className="desktop-nav"><div className="brand">喵</div><span>陪伴</span><span className="active">信箱</span><span>片场</span><span>我的</span></div><div className="desktop-content"><div style={{ maxWidth: 720, margin: '0 auto', height: '100%' }}><Component /></div></div></div>;
+    }
+
+    function App() {
+      const [mode, setMode] = useState('phone');
+      return <main className="stage"><header className="toolbar"><div><h1>DAY-252 · 宠物信箱信息架构</h1><p>共同原则：桌宠来信只承载关系型内容；用户思绪独立成空间，但仍归属于底部“信箱”。点击每个方案体验来信、思绪和分类切换。</p></div><div className="switcher"><button className={mode === 'phone' ? 'active' : ''} onClick={() => setMode('phone')}>390×844 手机</button><button className={mode === 'desktop' ? 'active' : ''} onClick={() => setMode('desktop')}>1440×900 桌面</button></div></header><section className="grid">{variants.map(({name,note,Component}) => <article className="variation" key={name}><div className="label"><strong>{name}</strong><span>{note}</span></div>{mode === 'phone' ? <div className="phone-wrap"><AndroidFrame><Component /></AndroidFrame></div> : <DesktopPreview Component={Component} />}</article>)}</section></main>;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

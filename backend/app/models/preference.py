@@ -31,6 +31,8 @@ class UserPreference(Base):
     sleep_reminder_time: Mapped[str] = mapped_column(String(5), nullable=False, default="22:30")
     # 隐私：是否保留原始倾诉（关闭则 raw_ref 即焚）
     keep_raw_dump: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 用户画像学习开关：关闭后停止新增观察；已有画像仍可查看、纠正和删除。
+    profile_learning_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # 三日寄存 TTL 天数（影响到期清理，默认 7 天对齐现行为）
     ephemeral_ttl_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)

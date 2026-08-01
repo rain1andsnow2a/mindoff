@@ -6,9 +6,10 @@
 
 做的事：
 1. docker —— 装 Docker Engine + compose 插件（Ubuntu 22.04，走阿里云 apt 镜像）
-2. sync   —— 上传 backend/ 源码 + docker-compose.yml，并生成线上 /opt/mindoff/.env
-3. up     —— docker compose up -d --build
-4. status —— 打印容器状态 + /health 探测
+2. backup —— 为当前镜像打回滚 tag，并用 SQLite backup API 生成一致性数据库备份
+3. sync   —— 上传 backend/ 源码 + docker-compose.yml，并生成线上 /opt/mindoff/.env
+4. up     —— docker compose up -d --build
+5. status —— 打印容器状态 + /health 探测
 
 密钥处理：
 - SSH 密码只从环境变量读，不写进仓库、不打日志。
@@ -130,6 +131,35 @@ def step_docker(client: paramiko.SSHClient) -> None:
         f.write(DOCKER_INSTALL)
     sftp.close()
     run(client, "bash /tmp/install_docker.sh")
+
+
+# ─── 步骤 2：发布前回滚点 ───────────────────────────────────────────────────
+def step_backup(client: paramiko.SSHClient) -> None:
+    """备份当前运行镜像和 SQLite；只写入 /opt/mindoff/backups。"""
+    log("创建发布前回滚点")
+    command = f"""set -eu
+stamp=$(date +%Y%m%d-%H%M%S)
+mkdir -p {REMOTE_ROOT}/backups
+if ! docker inspect mindoff-backend >/dev/null 2>&1; then
+  echo '当前容器不存在，跳过回滚镜像和数据库备份'
+  exit 0
+fi
+image=$(docker inspect -f '{{{{.Image}}}}' mindoff-backend)
+tag=mindoff-backend:rollback-$stamp
+docker tag "$image" "$tag"
+echo "rollback_image=$tag"
+if docker exec mindoff-backend test -f /data/mindoff.db; then
+  inside=/data/mindoff-$stamp.db
+  docker exec mindoff-backend python -c "import sqlite3; s=sqlite3.connect('/data/mindoff.db'); d=sqlite3.connect('$inside'); s.backup(d); d.close(); s.close()"
+  docker cp mindoff-backend:$inside {REMOTE_ROOT}/backups/mindoff-$stamp.db >/dev/null
+  docker exec mindoff-backend rm -f "$inside"
+  chmod 600 {REMOTE_ROOT}/backups/mindoff-$stamp.db
+  echo "database_backup={REMOTE_ROOT}/backups/mindoff-$stamp.db"
+else
+  echo '线上数据库不存在，跳过数据库备份'
+fi
+"""
+    run(client, command)
 
 
 # ─── 步骤 2：同步源码 + 生成线上 .env ────────────────────────────────────────
@@ -267,11 +297,26 @@ def step_status(client: paramiko.SSHClient) -> None:
     run(client, "ss -lntp | grep 8000 || echo '8000 未监听'", check=False)
 
 
+def step_verify(client: paramiko.SSHClient) -> None:
+    """发布验收：只输出非敏感状态、迁移版本和公开接口。"""
+    log("发布后容器与迁移验收")
+    run(client, "docker inspect -f 'status={{.State.Status}} health={{.State.Health.Status}} started={{.State.StartedAt}} image={{.Image}}' mindoff-backend")
+    run(client, "docker exec mindoff-backend alembic current")
+    run(client, "docker exec mindoff-backend python -c \"import importlib.metadata as m; print('jieba='+m.version('jieba'))\"")
+    log("公开健康与版本接口")
+    run(client, "curl -fsS -m 15 http://127.0.0.1:8000/health; echo")
+    run(client, "curl -fsS -m 15 http://127.0.0.1:8000/api/v1/app/version; echo")
+    log("线上 APK 文件")
+    run(client, "docker exec mindoff-backend ls -ln /app/static/download/mindoff.apk")
+
+
 STEPS = {
     "docker": step_docker,
+    "backup": step_backup,
     "sync": step_sync,
     "up": step_up,
     "status": step_status,
+    "verify": step_verify,
 }
 
 

@@ -14,6 +14,8 @@ from app.db import SessionLocal
 from app.deps import user_id_from_token
 from app.models.user import User
 from app.services.companion.conversation_store import ConversationStore
+from app.services.memory.content_signals import ContentSignalService
+from app.services.memory.profile_consolidation import ProfileConsolidator
 from app.services.pet.pet_store import PetStore
 from app.stepfun.constants import WS_REALTIME
 from app.stepfun.ws_relay import extract_transcript, relay
@@ -53,6 +55,14 @@ def persist_voice_call(
         conv = store.create(user_id=user_id, mode="voice_call", pet_id=pet_id)
         for role, text in transcript:
             store.add_message(conv.id, role=role, content=text)
+        user_text = "\n".join(text for role, text in transcript if role == "user" and text.strip())
+        if user_text:
+            signal = ContentSignalService(db).extract(
+                user_id=user_id, source_type="voice_call",
+                source_id=f"conversation:{conv.id}", text=user_text,
+            )
+            if signal is not None:
+                ProfileConsolidator(db).consolidate(user_id)
         return conv.id
     except Exception:  # noqa: BLE001
         return None

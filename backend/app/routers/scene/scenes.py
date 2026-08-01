@@ -5,8 +5,9 @@ MVP：单场景单次体验（Scene 自带当前剧情状态），非流式。�
 """
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from app.services.scene import scene_service
 from app.services.scene.scene_images import gen_scene_images
 from app.services.scene.scene_recommend import PRESET_THEATERS, detect_scene_intent
 from app.services.scene.scene_turn_images import schedule_bg_regen
+from app.services.memory.content_signals import capture_best_effort, source_hash
 
 router = APIRouter(prefix="/api/v1/scenes", tags=["scenes"])
 
@@ -231,6 +233,7 @@ def scene_detect_intent(
 @router.post("", response_model=None, status_code=status.HTTP_201_CREATED)
 def create_scene(
     body: SceneCreate,
+    background_tasks: BackgroundTasks,
     stream: bool = Query(False, description="true 走 SSE 逐句浮现"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -267,11 +270,16 @@ def create_scene(
         effective_kind = body.render_kind
         if body.render_kind == "generated_3d" and scene_spec is None:
             effective_kind = "dynamic_image"
-        return _persist_opening(
+        scene = _persist_opening(
             db, user.id, opening, None,
             theater_id=body.theater_id, render_kind=effective_kind,
             bg_image=bg_image, characters=characters, scene_spec=scene_spec,
         )
+        background_tasks.add_task(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:{scene.id}:opening", text=desc,
+        )
+        return scene
 
     uid = user.id
     title = body.title or "重演片刻"
@@ -299,7 +307,13 @@ def create_scene(
         finally:
             db2.close()
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        gen(), media_type="text/event-stream",
+        background=BackgroundTask(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:create:{source_hash(desc)[:16]}", text=desc,
+        ),
+    )
 
 
 # ─── Plays 子资源（MVP 下每场 Scene 对应单次体验，play_id 复用 scene_id）────────
@@ -342,6 +356,7 @@ def play_choose(
     scene_id: int,
     play_id: str,
     body: ChoiceIn,
+    background_tasks: BackgroundTasks,
     stream: bool = Query(False, description="true 走 SSE 逐句浮现"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -360,6 +375,10 @@ def play_choose(
     if not stream:
         # 推进逻辑集中在 scene_service.advance（与 /scenes/{id}/choices 复用）
         scene_service.advance(db, s, chosen["label"])
+        background_tasks.add_task(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:{s.id}:turn:{s.turn}", text=chosen["label"],
+        )
         return PlayOut(
             play_id=play_id, scene_id=s.id, status=s.status,
             turn=s.turn, node=_node(s),
@@ -370,6 +389,10 @@ def play_choose(
     return StreamingResponse(
         _advance_stream_gen(scene_id, chosen["label"], turn, final),
         media_type="text/event-stream",
+        background=BackgroundTask(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:{s.id}:turn:{turn}", text=chosen["label"],
+        ),
     )
 
 
@@ -409,6 +432,7 @@ def get_scene(scene_id: int, user: User = Depends(get_current_user), db: Session
 def choose(
     scene_id: int,
     body: ChoiceIn,
+    background_tasks: BackgroundTasks,
     stream: bool = Query(False, description="true 走 SSE 逐句浮现"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -430,6 +454,10 @@ def choose(
     if not stream:
         # 推进逻辑集中在 scene_service.advance（与 /plays/{id}/choices 复用）
         scene_service.advance(db, s, label)
+        background_tasks.add_task(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:{s.id}:turn:{s.turn}", text=label,
+        )
         return SceneOut.model_validate(s)
 
     turn = s.turn + 1
@@ -438,6 +466,10 @@ def choose(
     return StreamingResponse(
         _advance_stream_gen(scene_id, label, turn, final),
         media_type="text/event-stream",
+        background=BackgroundTask(
+            capture_best_effort, user_id=user.id, source_type="scene",
+            source_id=f"scene:{s.id}:turn:{turn}", text=label,
+        ),
     )
 
 

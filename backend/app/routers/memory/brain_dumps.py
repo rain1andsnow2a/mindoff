@@ -7,6 +7,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.models.memory import MemoryItem
 from app.models.user import User
 from app.services.companion.conversation_store import ConversationStore
 from app.services.memory.dump_ingest import KIND_TO_OUTPUT, OUTPUT_KEYS, ingest_dump
+from app.services.memory.content_signals import capture_best_effort, source_hash
 from app.services.memory.memory_store import MemoryStore
 
 router = APIRouter(prefix="/api/v1/brain-dumps", tags=["brain-dumps"])
@@ -71,7 +73,13 @@ async def create_brain_dump(
         finally:
             db.close()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream",
+        background=BackgroundTask(
+            capture_best_effort, user_id=user.id, source_type="brain_dump",
+            source_id=f"request:{source_hash(dump_text)[:16]}", text=dump_text,
+        ),
+    )
 
 
 @router.get("/{dump_id}")

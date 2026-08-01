@@ -39,6 +39,7 @@ SYSTEM_PROMPT = """\
 - 不把推测当事实。证据不足就用"好像/也许"，或者干脆 suppress。
 - 不追问细节、不布置任务、不列建议清单。
 - 只能引用「素材」里出现过的内容，不许编造主人的经历。
+- 「长期理解」只是用户可纠正的待验证线索；使用时必须用"好像/也许"，不可断言。
 - 如果没有明显必要，就 suppress。少打扰永远比多打扰安全。
 
 只输出 JSON，不要额外解释：
@@ -161,6 +162,7 @@ def decide(context: dict[str, Any], *, signal_type: str, scenario: str) -> dict[
         "手机使用摘要": context.get("usage_summary"),
         "桌宠": context.get("pet"),
         "素材": context.get("surface_material"),
+        "长期理解": context.get("profile_context"),
         "写作要求": instruction,
     }
     try:

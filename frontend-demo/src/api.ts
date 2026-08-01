@@ -230,6 +230,7 @@ export const listConversations = () => get("/api/v1/conversations");
 export const createConversation = (petId: number | null, mode: string) =>
   post("/api/v1/conversations", { pet_id: petId, mode });
 export const getConversation = (id: number) => get(`/api/v1/conversations/${id}`);
+export const deleteConversation = (id: number) => del<void>(`/api/v1/conversations/${id}`);
 /** 发消息并逐字流式接收桌宠回复。onToken 拿增量，返回完整回复。 */
 export async function streamChatReply(
   convId: number,
@@ -412,6 +413,21 @@ export const clearMemories = () => del("/api/v1/memories");
 export const getMemoryReview = (q = "") => get(`/api/v1/memory-review${q}`);
 export const getPreferences = () => get("/api/v1/preferences");
 export const updatePreferences = (b: any) => patch("/api/v1/preferences", b);
+export type UserProfileItem = {
+  id: number;
+  category: string;
+  statement: string;
+  confidence: number;
+  evidence_count: number;
+  evidence_sources: string[];
+  sensitivity: string;
+  updated_at: string;
+};
+export type UserProfile = { learning_enabled: boolean; items: UserProfileItem[] };
+export const getUserProfile = () => get<UserProfile>("/api/v1/profile");
+export const correctUserProfile = (id: number, statement: string) =>
+  patch<UserProfileItem>(`/api/v1/profile/${id}`, { statement });
+export const deleteUserProfile = (id: number) => del(`/api/v1/profile/${id}`);
 /** 上报最近一次模糊位置（供后端天气/环境上下文）。 */
 export const reportLocation = (lat: number, lon: number, city?: string) =>
   post("/api/v1/preferences/location", { lat, lon, city });

@@ -24,6 +24,7 @@ from app.models.conversation import Conversation, Message
 from app.models.letter import Letter
 from app.services.mailbox.letter_store import LetterStore
 from app.services.pet.pet_store import PetStore
+from app.services.memory.context_builder import build as build_memory_context
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ RECOMMEND_SYSTEM_PROMPT = """\
 - 通话里只有闲聊寒暄、任务指令、无具体人事物 → worth=false。
 - 有具体的人、事、情绪（遗憾/期待/思念/紧张）→ worth=true。
 - theater_id 必须严格从预置列表 id 中选，语义不贴合就填 null 且 confidence 给低分。
+- 既有长期理解只可帮助消歧，不可替通话补写人物、事件或意图；冲突时以今天的通话为准。
 """
 
 
@@ -175,11 +177,15 @@ def analyze_for_user(db: Session, user_id: int) -> dict[str, Any] | None:
         return None
 
     theaters_text = "\n".join(f"- {tid}: {desc}" for tid, desc in PRESET_THEATERS.items())
+    profile_context = build_memory_context(db, user_id, mode="profile")
     try:
         llm = get_chat_model()
         resp = llm.invoke([
             {"role": "system", "content": RECOMMEND_SYSTEM_PROMPT.format(theaters=theaters_text)},
-            {"role": "user", "content": f"今天的通话转写：\n{transcript}"},
+            {"role": "user", "content": (
+                f"今天的通话转写：\n{transcript}\n\n"
+                f"可纠正的长期理解（仅供消歧）：\n{profile_context}"
+            )},
         ])
     except Exception as e:  # noqa: BLE001
         logger.error("[scene-recommend] LLM call failed for user %d: %s", user_id, e)

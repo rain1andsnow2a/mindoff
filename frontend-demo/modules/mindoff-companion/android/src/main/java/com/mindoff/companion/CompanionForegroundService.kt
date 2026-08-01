@@ -15,7 +15,7 @@ import android.os.Looper
 
 /**
  * 常驻陪伴前台服务：状态栏保留一条安静的通知
- * 「{petName}正在陪伴你 · 已运行 X 分钟」，带「暂停陪伴」「打开 MindOff」两个按钮。
+ * 「{petName}正在陪伴你 · 已运行 X 分钟」，带「暂停陪伴」「打开喵灵」两个按钮。
  * 每 60s 刷新一次运行时长；点「暂停陪伴」即停止服务并移除通知。
  */
 class CompanionForegroundService : Service() {
@@ -114,7 +114,7 @@ class CompanionForegroundService : Service() {
       .setShowWhen(false)
       .setCategory(Notification.CATEGORY_SERVICE)
       .addAction(0, "暂停陪伴", stopPendingIntent)
-      .addAction(0, "打开 MindOff", contentIntent)
+      .addAction(0, "打开喵灵", contentIntent)
 
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       @Suppress("DEPRECATION")

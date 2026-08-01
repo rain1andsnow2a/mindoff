@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Lock, Mic } from "lucide-react-native";
-import { Button, CreamRipple, useReducedMotion, paperColors } from "../../design-system";
+import { Button, CreamRipple, useReducedMotion, useResponsive, paperColors } from "../../design-system";
 import { parseSceneNarration, parseSceneRole } from "../../api";
 import type { SceneParseResult } from "../../api";
 import { useVoiceInput } from "../../useVoiceInput";
@@ -157,8 +157,12 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
 }) {
   const { theme, C } = useSceneSurface();
   const [text, setText] = useState("");
-  // 真实 STT：按住麦克录音，松手转写后追加到描述框（复用 useVoiceInput，真机走原生 PCM）
-  const voice = useVoiceInput((t) => setText((prev) => (prev ? `${prev}${t}` : t)));
+  const beforeRecording = useRef("");
+  // 真机 PCM 在录音中把累计转写整体替换到描述框；松手后的整段识别再校准最终文本。
+  const voice = useVoiceInput(
+    (finalText) => setText(`${beforeRecording.current}${finalText}`),
+    (partialText) => setText(`${beforeRecording.current}${partialText}`),
+  );
   const placeholder = "我想回到上周和朋友吵架之后。地点在学校门口，她准备打车离开。她平时比较敏感，生气后会假装不在意，但其实很希望我先道歉。我想试着把她叫住。";
   const micHint = voice.transcribing ? "正在转写…" : voice.isRecording ? "松开结束录音" : "按住说话";
   return (
@@ -182,7 +186,11 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
               backgroundColor: theme.colors.accentSoft,
             }} />
             <Pressable
-              onPressIn={() => { voice.start(); }} onPressOut={() => { voice.stop(); }}
+              onPressIn={() => {
+                beforeRecording.current = text;
+                void voice.start();
+              }}
+              onPressOut={() => { void voice.stop(); }}
               disabled={voice.transcribing}
               style={({ pressed }) => ({
                 width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center",
@@ -343,6 +351,7 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
   onReady: (char: CharReady) => void;
 }) {
   const { C } = useSceneSurface();
+  const { isCompact } = useResponsive();
   const [name, setName] = useState(parsed?.people ?? "");
   const [rel, setRel] = useState(parsed?.relation || scene?.relationships[0] || "");
   const [desc, setDesc] = useState("");
@@ -394,7 +403,15 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
       <View style={{ flex: 1 }}>
         <ActBar stage={2} onBack={onBack} />
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            // 手机底部导航是绝对定位；为最后一组操作留出可滚动空间，避免按钮被覆盖。
+            paddingBottom: isCompact ? 128 : 24,
+            gap: 20,
+          }}
+        >
           {/* 第三幕 · 定妆 标题 */}
           <View style={{ paddingTop: 8 }}>
             <Text style={{ fontSize: 22, fontWeight: "700", lineHeight: 31, color: C.text }}>

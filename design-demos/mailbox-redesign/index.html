@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>信箱重构 · 来信 + 思绪 · 三个方案</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+/* ── MindOff design token（取自 frontend-demo/src/design-system/tokens.ts，未新增颜色）── */
+:root{
+  --bg:#FCFAF7; --surface:#FFFDFA; --surface-el:#FFFFFF;
+  --ink:#403A35; --ink2:#756C63; --muted:#9D9389;
+  --border:#E8E2D8; --accent:#B8860B; --acc-surf:#F6E7A8;
+  --acc-soft:rgba(246,225,143,0.48); --success:#5E7D68; --error:#A8483D;
+  --divider:#E8E2D8; --r-card:18px; --r-pill:999px;
+  --shadow-soft:0 4px 12px rgba(64,58,53,0.08);
+  --shadow-float:0 12px 28px rgba(64,58,53,0.14);
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#DAD4CB;font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;padding:44px 30px 80px}
+
+.head{max-width:1240px}
+.head h1{font-size:23px;font-weight:600;letter-spacing:-.4px;color:#332E29}
+.head .lede{margin-top:10px;font-size:14px;line-height:1.75;color:#5F5852;max-width:840px}
+.head .lede b{font-weight:600;color:#413B35}
+.diag{margin-top:18px;padding:14px 18px;border-radius:var(--r-card);background:rgba(255,253,248,.62);border:1px solid rgba(64,58,53,.08);max-width:840px}
+.diag h2{font-size:12px;font-weight:600;letter-spacing:.4px;color:var(--accent);margin-bottom:7px}
+.diag p{font-size:13px;line-height:1.75;color:#5F5852}
+
+.grid{display:flex;flex-wrap:wrap;gap:44px 34px;margin-top:40px;align-items:flex-start}
+.col{width:392px}
+.cap{margin-bottom:14px;min-height:108px}
+.cap .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.3px;color:#7A5C08;background:var(--acc-soft);padding:3px 10px;border-radius:var(--r-pill)}
+.cap h3{font-size:16px;font-weight:600;margin:10px 0 5px;color:#332E29}
+.cap p{font-size:12.5px;line-height:1.7;color:#6E675F}
+.cap p em{font-style:normal;color:#8A6A12}
+
+/* ── 设备框（Android · 手势导航）── */
+.phone{width:392px;padding:10px;background:#1A1A1A;border-radius:44px;box-shadow:0 0 0 2px #2A2A2A,0 22px 52px rgba(60,50,40,.3)}
+.screen{position:relative;width:100%;height:800px;border-radius:36px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.sbar{flex:none;height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:12px;font-weight:600;color:#8B827A}
+.punch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:11px;height:11px;border-radius:50%;background:#000;z-index:30}
+.navbar{flex:none;height:26px;display:flex;align-items:center;justify-content:center}
+.navbar i{width:104px;height:4px;border-radius:var(--r-pill);background:rgba(64,58,53,.28)}
+.tabbar{flex:none;height:58px;border-top:1px solid var(--divider);display:flex;align-items:stretch;background:rgba(255,253,248,.94)}
+.tabbar .tb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:11px}
+.tabbar .tb.on{color:var(--accent)}
+
+/* ── 分段 / 顶部状态卡 ── */
+.seg{display:flex;background:var(--bg-sub,#F4F1EC);border-radius:14px;padding:3px;gap:3px}
+.seg button{flex:1;font:inherit;font-size:13.5px;font-weight:500;padding:9px 0;border:none;border-radius:11px;background:transparent;color:var(--ink2);cursor:pointer}
+.seg button.on{background:var(--surface-el);color:var(--ink);box-shadow:var(--shadow-soft);font-weight:600}
+
+/* ── 通用 ── */
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.scroll{overflow-y:auto;scrollbar-width:thin;flex:1}
+.scroll::-webkit-scrollbar{width:3px}
+.scroll::-webkit-scrollbar-thumb{background:rgba(64,58,53,.16);border-radius:2px}
+.envelope{width:100%;border-radius:22px;padding:18px 20px;background:rgba(252,247,225,.96);border:1px solid rgba(255,255,255,.6);position:relative;overflow:hidden;cursor:pointer}
+.paper{width:100%;border-radius:22px;padding:20px;background:rgba(255,253,247,.96);border:1px solid rgba(255,255,255,.6)}
+.btn{border:none;border-radius:999px;padding:11px 0;font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+.btn.gold{background:var(--acc-surf);color:#4B3B16}
+.btn.soft{background:rgba(255,252,245,.7);color:var(--ink2);border:1px solid rgba(255,255,255,.45)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState} = React;
+
+/* lucide 风格描边图标（不用 emoji） */
+const ICONS = {
+  mic: ["M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z","M19 10v2a7 7 0 0 1-14 0v-2","M12 19v4"],
+  mail: ["M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7","M2 4h20v16H2z"],
+  leaf: ["M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z","M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"],
+  film: ["M2 3h20v18H2z","M7 3v18","M17 3v18","M2 8h5","M2 12h20","M2 16h5","M17 16h5"],
+  user: ["M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2","M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"],
+  bulb: ["M9 18h6","M10 22h4","M15.09 14c.18-1 .57-1.7 1.21-2.5A7 7 0 1 0 7.7 4.5C4.2 8.6 7.5 14 15.09 14Z"],
+  check: ["M22 11.08V12a10 10 0 1 1-5.93-9.14","m9 11 3 3L22 4"],
+  bell: ["M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9","M10.3 21a1.94 1.94 0 0 0 3.4 0"],
+  archive: ["M2 3h20v5H2z","M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8","M10 12h4"],
+};
+function Ic({n, size=18, color="currentColor", sw=1.8}){
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{ICONS[n].map((d,i)=><path key={i} d={d}/>)}</svg>;
+}
+
+/* ══ 内容（真实产品文案，非 Lorem）══════════════════════ */
+const PET = "米露";
+const LETTERS = [
+  { id:1, title:"周三的约定，还记得吗", date:"今早 8:04",
+    body:"你说周末想去把那家面馆的招牌汤面再吃一次。我记下了，周三下午的时间还空着，想一起去的话告诉我一声。" },
+  { id:2, title:"那首歌，我又哼了一遍", date:"昨晚 21:20",
+    body:"昨晚睡前你一直在哼那首老歌。我去找了找它背后的故事，读给你听好不好？" },
+];
+const THOUGHTS = [
+  { id:"t1", kind:"待办", label:"周三 15:00 · 和妈妈通电话", note:"你说想跟她说说最近的打算", done:false, tone:"todo" },
+  { id:"t2", kind:"寄存", label:"那种说不清的烦躁", note:"还剩 2 天到期，想放下或留下都行", done:false, tone:"hold" },
+  { id:"t3", kind:"珍藏", label:"夏末天台的那句再见", note:"你主动留下的，会一直收着", done:true, tone:"keep" },
+];
+
+function Phone({children}){
+  return (
+    <div className="phone"><div className="screen">
+      <div className="punch" /><div className="sbar"><span>20:56</span><span>5G · 100%</span></div>
+      {children}
+      <div className="tabbar">
+        <div className="tb on"><Ic n="leaf" size={17} /><span>陪伴</span></div>
+        <div className="tb"><Ic n="mail" size={17} /><span>信箱</span></div>
+        <div className="tb"><Ic n="film" size={17} /><span>片场</span></div>
+        <div className="tb"><Ic n="user" size={17} /><span>我的</span></div>
+      </div>
+      <div className="navbar"><i /></div>
+    </div></div>
+  );
+}
+
+/* 来信卡片（信封 → 信纸两种） */
+function LetterThumb({l, open}){
+  return open ? (
+    <div className="paper">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+        <div><div style={{fontSize:11,color:"#8C8187",marginBottom:4}}>{l.date}</div>
+        <div style={{fontSize:17,fontWeight:500,color:"#4D4249"}}>{l.title}</div></div>
+        <span style={{width:34,height:34,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(246,231,168,.6)"}}><Ic n="leaf" size={16} color="#8A6A12" /></span>
+      </div>
+      <div style={{fontSize:13.5,lineHeight:22,color:"#62575D"}}>{l.body}</div>
+      <div style={{display:"flex",gap:8,marginTop:18}}>
+        <button className="btn gold" style={{flex:1}}>收到啦</button>
+        <button className="btn soft" style={{flex:1}}>回它一句</button>
+      </div>
+    </div>
+  ) : (
+    <div className="envelope">
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+        <span style={{width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(246,231,168,.72)"}}><Ic n="leaf" size={16} color="#8A6A12" /></span>
+      </div>
+      <div style={{fontSize:15,fontWeight:500,marginBottom:4,color:"#4D4249"}}>{l.title}</div>
+      <div style={{fontSize:11.5,color:"#8C8187"}}>{l.date}</div>
+      <div style={{fontSize:12,color:"#A39A9F",marginTop:6}}>{l.body.slice(0,22)}…</div>
+    </div>
+  );
+}
+
+/* 思绪卡片 */
+function ThoughtCard({t, onToggle}){
+  const tone = t.tone==="todo" ? "var(--acc-surf)" : t.tone==="hold" ? "rgba(240,212,119,.3)" : "rgba(221,237,227,.55)";
+  const toneText = t.tone==="keep" ? "#5A8A6A" : "#8A6A12";
+  return (
+    <div style={{borderRadius:18,padding:14,border:"1px solid rgba(255,255,255,.5)",background:tone,marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <span style={{fontSize:11,fontWeight:600,color:toneText}}>{t.kind}</span>
+        {t.tone==="hold" && <span style={{fontSize:11,color:"#A39A9F"}}>· 剩 2 天</span>}
+      </div>
+      <div style={{fontSize:14,fontWeight:500,color:"#4B443F"}}>{t.label}</div>
+      <div style={{fontSize:12,color:"#847D72",marginTop:4,lineHeight:17}}>{t.note}</div>
+      {t.tone==="todo" && (
+        <button onClick={onToggle} className="btn soft" style={{marginTop:10,padding:"7px 0",fontSize:13,width:"100%",background:t.done?"rgba(221,237,227,.7)":"rgba(255,255,255,.6)"}}>
+          {t.done ? "✓ 已完成" : "做完了"}
+        </button>
+      )}
+      {t.tone==="hold" && (
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button className="btn gold" style={{flex:1,padding:"7px 0",fontSize:13}}>珍藏</button>
+          <button className="btn soft" style={{flex:1,padding:"7px 0",fontSize:13}}>放下</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══ 方案 A · 双区并列 ═══════════════════════════════
+   来信和思绪是两个平等的区块，各自一张状态卡 + 时间线，一眼同时看到两边。 */
+function PlanA(){
+  const [side, setSide] = useState("letter");
+  const [openLetter, setOpenLetter] = useState(false);
+  const [th, setTh] = useState(THOUGHTS);
+  return (
+    <>
+      <div style={{flex:"none",padding:"14px 20px 6px"}}>
+        <div style={{fontSize:20,fontWeight:600,letterSpacing:-.3}}>信箱</div>
+        <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>来信和你的思绪，都安静收在这里</div>
+      </div>
+      <div style={{flex:"none",display:"flex",gap:10,padding:"14px 20px 4px"}}>
+        <button onClick={()=>setSide("letter")} style={{flex:1,padding:14,borderRadius:18,cursor:"pointer",textAlign:"left",border:"1px solid "+(side==="letter"?"#E3CE7E":"rgba(255,255,255,.5)"),background:side==="letter"?"var(--acc-surf)":"rgba(255,253,248,.9)"}}>
+          <Ic n="mail" size={20} color="var(--accent)" />
+          <div style={{fontSize:14,fontWeight:600,marginTop:6}}>桌宠来信</div>
+          <div style={{fontSize:11.5,color:"var(--muted)",marginTop:2}}>2 封未读 · 今早刚来一封</div>
+        </button>
+        <button onClick={()=>setSide("thought")} style={{flex:1,padding:14,borderRadius:18,cursor:"pointer",textAlign:"left",border:"1px solid "+(side==="thought"?"#E3CE7E":"rgba(255,255,255,.5)"),background:side==="thought"?"var(--acc-surf)":"rgba(255,253,248,.9)"}}>
+          <Ic n="leaf" size={20} color="var(--accent)" />
+          <div style={{fontSize:14,fontWeight:600,marginTop:6}}>我的思绪</div>
+          <div style={{fontSize:11.5,color:"var(--muted)",marginTop:2}}>昨夜 3 条待接回</div>
+        </button>
+      </div>
+      <div className="scroll" style={{padding:"14px 20px 6px"}}>
+        {side==="letter" ? (
+          <>
+            <LetterThumb l={LETTERS[0]} open={openLetter} />
+            <div onClick={()=>setOpenLetter(!openLetter)} style={{marginTop:10,fontSize:12,textAlign:"center",color:"var(--accent)",cursor:"pointer"}}>
+              {openLetter ? "收起" : "还有 1 封更早的信"}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>昨夜整理</span>
+              <span className="dot" style={{background:"var(--accent)"}} />
+              <span style={{fontSize:11.5,color:"var(--muted)"}}>去喝口水，接回慢慢看</span>
+            </div>
+            {th.map(t=><ThoughtCard key={t.id} t={t} onToggle={()=>setTh(ls=>ls.map(x=>x.id===t.id?{...x,done:!x.done}:x))} />)}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ══ 方案 B · 分段切换 ═══════════════════════════════
+   信箱顶部一个大分段「来信 / 思绪」，一次只看一个，内容全屏聚焦。 */
+function PlanB(){
+  const [tab, setTab] = useState("letter");
+  const [openLetter, setOpenLetter] = useState(false);
+  const [th, setTh] = useState(THOUGHTS);
+  return (
+    <>
+      <div style={{flex:"none",padding:"14px 20px 6px"}}>
+        <div style={{fontSize:20,fontWeight:600,letterSpacing:-.3}}>信箱</div>
+      </div>
+      <div style={{flex:"none",padding:"12px 20px 4px"}}>
+        <div className="seg">
+          <button className={tab==="letter"?"on":""} onClick={()=>setTab("letter")}>来信 <span style={{fontSize:11,opacity:.7}}>2</span></button>
+          <button className={tab==="thought"?"on":""} onClick={()=>setTab("thought")}>思绪 <span style={{fontSize:11,opacity:.7}}>3</span></button>
+        </div>
+      </div>
+      <div className="scroll" style={{padding:"16px 20px 6px"}}>
+        {tab==="letter" ? (
+          <>
+            <div style={{fontSize:13,color:"var(--muted)",marginBottom:10}}>桌宠来信 · 今早来了一封</div>
+            <LetterThumb l={LETTERS[0]} open={openLetter} />
+            <div onClick={()=>setOpenLetter(!openLetter)} style={{marginTop:10,fontSize:12,textAlign:"center",color:"var(--accent)",cursor:"pointer"}}>
+              {openLetter ? "收起" : "更早的信"}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{fontSize:13,color:"var(--muted)",marginBottom:10}}>昨夜你倾倒的思绪 · 慢慢接回</div>
+            {th.map(t=><ThoughtCard key={t.id} t={t} onToggle={()=>setTh(ls=>ls.map(x=>x.id===t.id?{...x,done:!x.done}:x))} />)}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ══ 方案 C · 来信仪式 + 思绪收纳 ═══════════════════════
+   信箱默认是来信（信封仪式感最强），思绪收成顶部一条「昨夜收纳」横条，点开下滑抽屉。 */
+function PlanC(){
+  const [openLetter, setOpenLetter] = useState(false);
+  const [drawer, setDrawer] = useState(false);
+  const [th, setTh] = useState(THOUGHTS);
+  return (
+    <>
+      <div style={{flex:"none",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px 6px"}}>
+        <div style={{fontSize:20,fontWeight:600,letterSpacing:-.3}}>信箱</div>
+        <button onClick={()=>setDrawer(!drawer)} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 12px",borderRadius:999,cursor:"pointer",border:"1px solid #E3CE7E",background:"var(--acc-surf)",font: "inherit",fontSize:12,fontWeight:500,color:"#6E5A28"}}>
+          <Ic n="leaf" size={13} color="#6E5A28" /> 昨夜收进 3 条
+        </button>
+      </div>
+      <div className="scroll" style={{padding:"18px 20px 6px"}}>
+        <div style={{textAlign:"center",marginBottom:18}}>
+          <div style={{fontSize:15,fontWeight:500,color:"var(--ink)"}}>今天，米露想告诉你</div>
+          <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>轻点拆开 · 有想告诉你的时候它会送来</div>
+        </div>
+        <LetterThumb l={LETTERS[0]} open={openLetter} />
+        <div onClick={()=>setOpenLetter(!openLetter)} style={{marginTop:10,fontSize:12,textAlign:"center",color:"var(--accent)",cursor:"pointer"}}>
+          {openLetter ? "收起" : "更早的信"}
+        </div>
+        {/* 思绪收纳抽屉 */}
+        <div style={{marginTop:16,overflow:"hidden",transition:"max-height .3s",maxHeight:drawer?500:0}}>
+          <div style={{borderRadius:18,padding:14,background:"rgba(247,242,232,.85)",border:"1px solid rgba(255,255,255,.5)"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--ink)",marginBottom:10}}>昨夜思绪</div>
+            {th.map(t=><ThoughtCard key={t.id} t={t} onToggle={()=>setTh(ls=>ls.map(x=>x.id===t.id?{...x,done:!x.done}:x))} />)}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ══ 页 ═══════════════════════════════════════════════ */
+const PLANS = [
+  { id:"A", Comp:PlanA, tag:"方案 A", title:"双区并列",
+    desc:<>来信和思绪是<em>平等的两个区块</em>，各一张状态卡，一眼同时看到两边最新。待办/寄存/珍藏全部收进「思绪」。</> },
+  { id:"B", Comp:PlanB, tag:"方案 B", title:"分段切换",
+    desc:<>顶部一个大分段<em>「来信 / 思绪」</em>，一次只看一个，内容全屏聚焦。交互最贴现状，只把四分区并成两块。</> },
+  { id:"C", Comp:PlanC, tag:"方案 C", title:"来信仪式 + 思绪收纳",
+    desc:<>信箱默认是<em>来信</em>（信封仪式感最强），思绪收成顶部一条<em>「昨夜收进 3 条」</em>横条，点开下滑。突出来信的情感仪式。</> },
+];
+
+function App(){
+  return (
+    <>
+      <div className="head">
+        <h1>信箱重构 · 来信 + 思绪</h1>
+        <p className="lede">
+          底部「信箱」标签下只留两块：<b>桌宠来信</b>（宠物主动写给你的）和
+          <b>我的思绪</b>（你自己倾倒、次日接回的）。今日待启 / 三日寄存 / 长久珍藏
+          全部收进「思绪」。三台手机都是活的状态机——点顶部卡片 / 分段 / 收纳条切换。
+          配色、文案取自 <b>design-system tokens</b> 与产品文档，没有新发明。
+        </p>
+        <div className="diag">
+          <h2>现状问题</h2>
+          <p>
+            现在信箱把四类内容并排：来信、待办、珍藏、寄存。但它们的性质不同——
+            <b>来信是宠物对你的表达</b>，而待办 / 寄存 / 珍藏是<b>你自己思绪的整理</b>。
+            混在一起，来信的仪式感被稀释，思绪也没有自己的归处。三个方案就是两种
+            内容的三种组织方式。
+          </p>
+        </div>
+      </div>
+      <div className="grid">
+        {PLANS.map(p => (
+          <div className="col" key={p.id}>
+            <div className="cap"><span className="tag">{p.tag}</span><h3>{p.title}</h3><p>{p.desc}</p></div>
+            <Phone><p.Comp /></Phone>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

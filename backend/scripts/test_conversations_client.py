@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
+from app.models.conversation import Message
 from app.models.pet import Pet
 from app.models.user import User
 from app.core.security import hash_password
@@ -72,5 +73,24 @@ assert len(msgs) == 2
 assert msgs[0]["role"] == "user"
 assert msgs[1]["role"] == "assistant"
 print("CONVERSATION detail 2 messages PASS")
+
+# 其他用户不能删除这段会话（按用户隔离，外部统一表现为不存在）
+other_token, _ = register_user("conv_delete_other")
+other_h = {"Authorization": f"Bearer {other_token}"}
+r = client.delete(f"/api/v1/conversations/{cid}", headers=other_h)
+assert r.status_code == 404, r.text
+r = client.get(f"/api/v1/conversations/{cid}", headers=H)
+assert r.status_code == 200, r.text
+print("DELETE cross-user isolation PASS")
+
+# 本人删除后，会话不可再取，关联消息一并清理
+r = client.delete(f"/api/v1/conversations/{cid}", headers=H)
+assert r.status_code == 204, r.text
+r = client.get(f"/api/v1/conversations/{cid}", headers=H)
+assert r.status_code == 404, r.text
+db = SessionLocal()
+assert db.query(Message).filter(Message.conversation_id == cid).count() == 0
+db.close()
+print("DELETE conversation + messages PASS")
 
 print("\n=== Conversations Client ALL PASS ===")

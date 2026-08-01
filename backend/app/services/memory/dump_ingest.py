@@ -17,6 +17,7 @@ from app.graphs.extractor import run_extractor
 from app.models.preference import UserPreference
 from app.services.memory import privacy
 from app.services.memory.memory_store import MemoryStore
+from app.services.memory.context_builder import build as build_memory_context
 from app.services.infra.preferences import ttl_days_for
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,8 @@ def ingest_dump(db: Session, *, user_id: int, dump_text: str,
 
     # 2. 调 LangGraph extractor
     try:
-        facts = run_extractor(dump_text)
+        profile_context = build_memory_context(db, user_id, mode="profile")
+        facts = run_extractor(dump_text, profile_context=profile_context)
     except Exception as e:
         logger.error("Extractor crashed: %s", e)
         facts = []

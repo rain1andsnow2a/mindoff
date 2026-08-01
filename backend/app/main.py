@@ -16,7 +16,7 @@ from app.routers.ai import chat, realtime, stt
 from app.routers.scene import candidates, role_profiles, scenes, theater_ext
 from app.routers.mailbox import ephemeral, letters, mailbox, reminders, treasures
 from app.routers.companion import companion, conversations, handoffs, pets
-from app.routers.memory import brain_dumps, memory, memory_review, signals, stores
+from app.routers.memory import brain_dumps, memory, memory_review, profile, signals, stores
 from app.routers.system import app_version, auth, debug, preferences, weather
 
 settings = get_settings()
@@ -184,6 +184,7 @@ def _ensure_preference_location_columns() -> None:
             "max_daily_triggers": "INTEGER NOT NULL DEFAULT 6",
             "driving_mode_active": "BOOLEAN NOT NULL DEFAULT 0",
             "last_motion_signal_at": "DATETIME",
+            "profile_learning_enabled": "BOOLEAN NOT NULL DEFAULT 1",
         }
         with engine.begin() as conn:
             for name, typ in adds.items():
@@ -358,6 +359,7 @@ app.include_router(preferences.router)
 
 # 业务层：记忆审阅控制面（我的·记忆）
 app.include_router(memory_review.router)
+app.include_router(profile.router)
 
 # 业务层：主动提醒（待办到期桌宠提醒）
 app.include_router(reminders.router)

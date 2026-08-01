@@ -17,6 +17,7 @@ dependencies = [
     "pyjwt>=2.13.0",
     "bcrypt>=5.0.0",
     "pillow>=10.0",
+    "jieba>=0.42.1",
 ]
 
 [tool.uv]

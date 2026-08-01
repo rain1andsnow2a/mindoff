@@ -4,6 +4,7 @@
 - POST /conversations                开启对话
 - GET  /conversations                历史列表
 - GET  /conversations/{id}           详情 + 消息
+- DELETE /conversations/{id}         删除会话 + 消息
 - POST /conversations/{id}/messages  发消息 → 桌宠回应；?stream=true 走 SSE
 - GET  /conversations/{id}/messages  消息分页
 
@@ -13,8 +14,9 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,7 @@ from app.graphs.companion import run_companion, stream_companion
 from app.models.conversation import ConversationMode
 from app.models.user import User
 from app.services.memory.context_builder import build as build_memory_context
+from app.services.memory.content_signals import capture_best_effort, source_hash
 from app.services.companion.conversation_store import ConversationStore
 from app.services.memory.memory_store import MemoryStore
 from app.services.pet.pet_store import PetStore
@@ -176,6 +179,18 @@ def get_conversation(
     return conv
 
 
+@router.delete("/{conv_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conv_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除当前用户的一段往日会话及其全部消息。"""
+    if not ConversationStore(db).delete(user.id, conv_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "会话不存在")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ─── 消息 ────────────────────────────────────────────────────────────────────
 
 @router.get("/{conv_id}/messages", response_model=list[MessageOut])
@@ -194,6 +209,7 @@ def list_messages(
 def send_message(
     conv_id: int,
     body: SendMessageRequest,
+    background_tasks: BackgroundTasks,
     stream: bool = Query(False, description="true 走 SSE 逐 token 流式"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -205,7 +221,12 @@ def send_message(
 
     if not stream:
         store = ConversationStore(db)
-        store.add_message(conv_id, role="user", content=body.text)
+        user_message = store.add_message(conv_id, role="user", content=body.text)
+        source_type = "voice_call" if mode == ConversationMode.voice_call.value else "conversation"
+        background_tasks.add_task(
+            capture_best_effort, user_id=user.id, source_type=source_type,
+            source_id=f"message:{user_message.id}", text=body.text,
+        )
         history = store.history_as_dicts(conv_id)
         memory_context = _memory_context(db, user.id, body.text)
         pet_prompt = _pet_prompt(db, user.id, conv)
@@ -243,4 +264,11 @@ def send_message(
         finally:
             db2.close()
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    source_type = "voice_call" if mode == ConversationMode.voice_call.value else "conversation"
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream",
+        background=BackgroundTask(
+            capture_best_effort, user_id=user.id, source_type=source_type,
+            source_id=f"conversation:{conv_id}:{source_hash(body.text)[:16]}", text=body.text,
+        ),
+    )

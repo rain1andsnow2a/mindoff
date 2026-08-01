@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.services.memory.memory_store import MemoryStore
 from app.services.memory.privacy import filter_for_cloud_prompt
 
@@ -90,6 +91,9 @@ def build(
 
     mode ∈ profile | query | full。任何一段检索失败都只丢该段。
     """
+    if mode in ("profile", "full") and not get_settings().user_profile_enabled:
+        # 全局灰度/回滚开关：画像不可用时保持调用方原有行为。
+        mode = "query" if mode == "full" else "disabled"
     budgets = budgets or DEFAULT_BUDGETS
     store = MemoryStore(db)
     sections: list[str] = []

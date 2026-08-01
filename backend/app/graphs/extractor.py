@@ -52,6 +52,7 @@ FEW_SHOT = """\
 
 class ExtractorState(TypedDict):
     dump_text: str
+    profile_context: str
     llm_output: str
     facts: list[dict[str, Any]]
     error: str
@@ -64,7 +65,12 @@ def call_llm(state: ExtractorState) -> dict:
     model = get_chat_model(temperature=0.1)
     messages = [
         SystemMessage(content=SYSTEM_PROMPT + "\n" + FEW_SHOT),
-        HumanMessage(content=f"原始倾诉：\n{state['dump_text']}"),
+        HumanMessage(content=(
+            f"原始倾诉：\n{state['dump_text']}\n\n"
+            "下面的既有理解只用于帮助消歧和沿用用户自己的称呼，不可覆盖原文、"
+            "不可据此新增事实；冲突时以本次原文为准：\n"
+            f"{state.get('profile_context') or '（无）'}"
+        )),
     ]
     try:
         resp = model.invoke(messages)
@@ -154,10 +160,11 @@ _extractor_graph = _build_graph()
 
 # ─── Public API ────────────────────────────────────────────────────────────────
 
-def run_extractor(dump_text: str) -> list[dict[str, Any]]:
+def run_extractor(dump_text: str, profile_context: str | None = None) -> list[dict[str, Any]]:
     """运行提取图，返回结构化事实列表。失败返回空列表。"""
     result = _extractor_graph.invoke({
         "dump_text": dump_text,
+        "profile_context": profile_context or "",
         "llm_output": "",
         "facts": [],
         "error": "",

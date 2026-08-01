@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # 能力开关（可回滚）
     dreaming_enabled: bool = True
     proactive_enabled: bool = True
+    user_profile_enabled: bool = True
 
     # 鉴权（JWT）—— 生产务必用 .env 覆盖 jwt_secret
     jwt_secret: str = "dev-only-change-me"

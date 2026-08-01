@@ -21,6 +21,7 @@ from app.models.memory import MemoryItem
 from app.models.preference import UserPreference
 from app.models.signal import DeviceUsageSignal, MotionSample
 from app.services.signals.date_context import DateContext, get_date_context
+from app.services.memory.context_builder import build as build_memory_context
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class DecisionContext:
     usage_summary: dict[str, Any] | None
     pet: dict[str, Any] | None
     surface_material: list[str]
+    profile_context: str | None
     signal: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
@@ -163,5 +165,6 @@ def build_decision_context(
         usage_summary=latest_usage_summary(db, user_id),
         pet=_pet_snapshot(db, user_id),
         surface_material=_surface_material(db, user_id),
+        profile_context=build_memory_context(db, user_id, mode="profile"),
         signal=signal,
     )

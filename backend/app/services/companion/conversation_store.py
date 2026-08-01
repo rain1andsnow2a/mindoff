@@ -57,6 +57,15 @@ class ConversationStore:
         stmt = stmt.order_by(Conversation.id.desc()).limit(limit)
         return self._db.scalars(stmt).all()
 
+    def delete(self, user_id: int, conv_id: int) -> bool:
+        """删除用户自己的会话；关联消息由 ORM delete-orphan 级联清理。"""
+        conv = self.get(user_id, conv_id)
+        if conv is None:
+            return False
+        self._db.delete(conv)
+        self._db.commit()
+        return True
+
     # ─── 消息 ──────────────────────────────────────────────────────────────
 
     def add_message(self, conv_id: int, *, role: str, content: str) -> Message:

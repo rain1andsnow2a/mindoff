@@ -58,6 +58,7 @@ export type Preferences = {
   font_size: "小" | "标准" | "大" | string;
   companion_tone: string;
   reduce_transparency: boolean;
+  profile_learning_enabled: boolean;
 };
 
 // ─── 睡前提醒 · 双列滚轮时间选择器（零依赖：自制 ScrollView + snap）─────────────
@@ -147,10 +148,12 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
 export function ProfileScreen({
   onChangePet, night, onNightToggle, petName, petEmoji, petSummary,
   onMemory, onMemoryReview, preferences, onSetPreference, onLogout,
+  onUserProfile,
 }: {
   onChangePet: () => void; night: boolean; onNightToggle: () => void;
   petName: string; petEmoji: string; petSummary?: string;
   onMemory: () => void; onMemoryReview: () => void;
+  onUserProfile: () => void;
   preferences: Preferences;
   onSetPreference: (patch: Partial<Preferences>) => void;
   onLogout?: () => void;
@@ -185,6 +188,7 @@ export function ProfileScreen({
       { icon: <Clock size={16} color={C.text2} />, label: "睡前提醒", val: preferences.sleep_reminder_time, act: () => setShowTimePicker(true) },
     ]},
     { title: "记忆与隐私", rows: [
+      { icon: <Shield size={16} color={C.text2} />, label: "喵灵对我的理解", val: "可查看与纠正", act: onUserProfile },
       { icon: <Archive size={16} color={C.text2} />, label: "记忆管理", val: "", act: onMemory },
       { icon: <Clock size={16} color={C.text2} />, label: "三日寄存规则", val: `${preferences.ephemeral_ttl_days}天` },
       { icon: <Shield size={16} color={C.text2} />, label: "记忆审阅", val: "", act: onMemoryReview },

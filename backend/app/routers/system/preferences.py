@@ -46,6 +46,7 @@ class PreferenceOut(BaseModel):
     proactive_frequency: str
     sleep_reminder_time: str
     keep_raw_dump: bool
+    profile_learning_enabled: bool
     ephemeral_ttl_days: int
     font_size: str
     companion_tone: str
@@ -74,6 +75,7 @@ class PreferencePatch(BaseModel):
     proactive_frequency: str | None = Field(default=None)
     sleep_reminder_time: str | None = None
     keep_raw_dump: bool | None = None
+    profile_learning_enabled: bool | None = None
     ephemeral_ttl_days: int | None = None
     font_size: str | None = None
     companion_tone: str | None = None

@@ -28,11 +28,13 @@ assert defaults["ephemeral_ttl_days"] == 7
 assert defaults["font_size"] == "标准"
 assert defaults["companion_tone"] == "温和"
 assert defaults["reduce_transparency"] is False
+assert defaults["profile_learning_enabled"] is True
 
 # 部分修改（扩字段）
 r = httpx.patch(f"{B}/preferences", headers=H, timeout=30,
                 json={"sleep_reminder_time": "23:00",
                       "ephemeral_ttl_days": 3,
+                      "profile_learning_enabled": False,
                       "font_size": "大",
                       "companion_tone": "活泼",
                       "reduce_transparency": True})
@@ -43,6 +45,7 @@ assert body["ephemeral_ttl_days"] == 3
 assert body["font_size"] == "大"
 assert body["companion_tone"] == "活泼"
 assert body["reduce_transparency"] is True
+assert body["profile_learning_enabled"] is False
 assert body["proactive_frequency"] == "温和", "其他字段不受影响"
 print("PATCH extended fields: ok")
 

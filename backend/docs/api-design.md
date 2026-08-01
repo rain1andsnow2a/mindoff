@@ -76,8 +76,29 @@
 | POST | `/conversations` ★ | 开启对话，`{petId, mode}`；mode ∈ `free_chat`(自由聊聊) / `brain_dump`(一股脑倒) / `hard_thing`(说件放不下的事) / `review_fragment`(回看片段, 带 fragmentId) |
 | GET | `/conversations` ○ | 历史会话列表 |
 | GET | `/conversations/{id}` ★ | 会话详情 + 消息 |
+| DELETE | `/conversations/{id}` ○ | 删除当前用户的一段会话及其全部消息 |
 | POST | `/conversations/{id}/messages` ★ | 发消息 → 返回桌宠回应（内部走 LangGraph）。`?stream=true` 走 SSE |
 | GET | `/conversations/{id}/messages` | 消息分页 |
+
+### 用户画像观察层
+
+| Method | Path | 说明 |
+|---|---|---|
+| GET | `/profile/signals` | 查看当前用户的结构化内容信号（观察层，非最终画像） |
+| POST | `/profile/signals/backfill` | 对当前用户历史聊天/倾倒/片场输入做有界幂等回填 |
+| GET | `/profile` | 用户可见的“喵灵对我的理解”及学习开关状态 |
+| POST | `/profile/consolidate` | 审阅暂存候选，通过证据与安全门控后写入稳定画像 |
+| PATCH | `/profile/{id}` | 用户纠正一条画像（走记忆版本链） |
+| DELETE | `/profile/{id}` | 用户删除一条画像（走遗忘历史） |
+
+> `PROFILE_LEARNING_ENABLED` 是用户级“暂停继续学习”偏好；暂停不会删除已有画像。
+> `USER_PROFILE_ENABLED=false` 是服务端灰度/紧急回滚开关，画像消费链会退化为原有行为。
+>
+> 观察链采用本地 VAD 词典（效价/唤醒度/控制感）与模型结构化语义分工：VAD
+> 不负责主题、关系或意图判断；模型不可用时只保存 VAD，不用关键词补造语义。
+> 长期画像不依赖 embedding/rerank：模型基于有界画像快照提出 ADD/UPDATE/NOOP
+> 候选，本地门控校验证据原文、独立信号数、置信度、敏感度、重复项、用户纠正和
+> 容量预算。自动 DELETE 永不执行，用户删除仍只走 `DELETE /profile/{id}`。
 
 ## 5. 睡前思绪整理 Brain Dumps ★（核心闭环）— ✅ 已实现
 

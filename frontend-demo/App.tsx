@@ -23,6 +23,7 @@ import {
 } from "./src/screens/Mailbox";
 import { SceneEnd, ScenePlay, SceneScreen } from "./src/screens/Scene";
 import { PetChange, PetHandoff, ProfileScreen, MemoryScreen, MemoryReviewScreen, Preferences } from "./src/screens/Profile";
+import { UserProfileScreen } from "./src/screens/UserProfile";
 import { AuthScreen } from "./src/screens/Auth";
 import { Scene3DPreview } from "./src/screens/Scene3DPreview";
 import {
@@ -45,7 +46,7 @@ const SCREEN_IDS = [
   "mailbox", "task-detail", "storage-detail",
   "scene", "scene-play", "scene-end",
   "profile", "pet-change", "pet-handoff",
-  "memory-list", "memory-review",
+  "memory-list", "memory-review", "user-profile",
   "design-system", "scene3d-preview",
 ] as const;
 
@@ -101,7 +102,7 @@ const INITIAL_TAB: AppTab =
     : DEV_SCREEN === "scene" || DEV_SCREEN === "scene-play" || DEV_SCREEN === "scene-end"
       ? "scene"
       : DEV_SCREEN === "profile" || DEV_SCREEN === "pet-change" || DEV_SCREEN === "pet-handoff"
-          || DEV_SCREEN === "memory-list" || DEV_SCREEN === "memory-review"
+          || DEV_SCREEN === "memory-list" || DEV_SCREEN === "memory-review" || DEV_SCREEN === "user-profile"
         ? "profile"
         : "companion";
 
@@ -113,7 +114,7 @@ const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_ty
 const FULL_SCREENS: Screen[] = [
   "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
   "task-detail", "storage-detail", "scene-play", "scene-end",
-  "pet-change", "pet-handoff", "memory-list", "memory-review", "design-system", "scene3d-preview",
+  "pet-change", "pet-handoff", "memory-list", "memory-review", "user-profile", "design-system", "scene3d-preview",
 ];
 
 const PREFERENCE_DEFAULTS: Preferences = {
@@ -125,6 +126,7 @@ const PREFERENCE_DEFAULTS: Preferences = {
   font_size: "标准",
   companion_tone: "温暖",
   reduce_transparency: false,
+  profile_learning_enabled: true,
 };
 
 export default function App() {
@@ -470,6 +472,7 @@ export default function App() {
                 onChangePet={() => go("pet-change")}
                 onMemory={() => go("memory-list")}
                 onMemoryReview={() => go("memory-review")}
+                onUserProfile={() => go("user-profile")}
                 preferences={preferences}
                 onSetPreference={handleSetPreference}
                 onLogout={async () => {
@@ -495,6 +498,9 @@ export default function App() {
             )}
             {screen === "memory-review" && (
               <MemoryReviewScreen onBack={() => { go("profile"); setTab("profile"); }} onToast={showToast} />
+            )}
+            {screen === "user-profile" && (
+              <UserProfileScreen onBack={() => { go("profile"); setTab("profile"); }} onToast={showToast} />
             )}
             {screen === "design-system" && <DesignSystemPreview />}
             {screen === "scene3d-preview" && <Scene3DPreview />}
