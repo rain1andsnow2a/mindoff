@@ -5,7 +5,7 @@
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -34,8 +34,25 @@ class Letter(Base):
 
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # 自动来信投递控制：type 仅表达展示类别，generation_key 才是来源幂等键。
+    # delivery_date 使用产品时区（东八区）的 YYYY-MM-DD；slot 的唯一约束把
+    # 所有生成入口统一限制为每用户每天最多两封。
+    generation_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    delivery_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    delivery_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "generation_key", name="uq_letters_user_generation_key"
+        ),
+        UniqueConstraint(
+            "user_id", "delivery_date", "delivery_slot",
+            name="uq_letters_user_date_slot",
+        ),
     )
 
     def __repr__(self) -> str:

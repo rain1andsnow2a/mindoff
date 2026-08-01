@@ -212,14 +212,19 @@ def _deliver(
             from app.services.pet.pet_store import PetStore
 
             pet = PetStore(db).get_active(user_id)
-            letter = LetterStore(db).create(
+            letter = LetterStore(db).create_generated(
                 user_id=user_id,
+                generation_key=f"proactive_signal:{event.id}",
                 type="proactive",
                 title=title,
                 body=message,
                 pet_id=pet.id if pet is not None else None,
             )
-            letter_id = letter.id
+            if letter is not None:
+                letter_id = letter.id
+            else:
+                # 信箱额度已满时仍以气泡送达，不丢弃主动陪伴消息。
+                mode = "bubble"
         except Exception as e:  # noqa: BLE001  写信失败降级为气泡，不丢消息
             logger.warning("[signals] 信箱来信写入失败 user=%s err=%s", user_id, e)
             mode = "bubble"

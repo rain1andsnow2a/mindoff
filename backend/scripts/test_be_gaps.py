@@ -95,8 +95,12 @@ print(f"TTL effective: expires_at ~ {delta_days:.2f} days later PASS")
 # ─── DAY-192：来信回信端点 ────────────────────────────────────────────────────
 from app.services.mailbox.letter_store import LetterStore
 db = SessionLocal()
-letter = LetterStore(db).create(user_id=uid, type="greeting", title="早安",
-                                body="昨晚的事我记着呢，今天慢慢来。", pet_id=None)
+letter = LetterStore(db).create_generated(
+    user_id=uid, generation_key=f"test_reply:{uuid.uuid4().hex}",
+    type="greeting", title="早安",
+    body="昨晚的事我记着呢，今天慢慢来。", pet_id=None,
+)
+assert letter is not None
 db.close()
 
 r = httpx.post(f"{B}/letters/{letter.id}/reply", headers=H, timeout=90,

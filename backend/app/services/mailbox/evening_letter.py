@@ -3,7 +3,7 @@
 产品口径：
 - 结合信箱——生成物落库为 Letter（type=greeting），用户在信箱查看。
 - 独立于 proactive 开关，每晚都尝试发。
-- 只有 LLM 调用失败才不发；无素材/首次无记忆也发通用问候。
+- 无素材/首次无记忆也发通用问候；LLM 失败或当日两封额度已满时不发。
 
 隐私底座（Property 9）：送进外部 LLM 的素材只取 depth=surface 记忆，
 vulnerable/core/personal 深层记忆绝不进入 prompt、不外流。
@@ -21,7 +21,11 @@ from sqlalchemy.orm import Session
 from app.llm import get_chat_model
 from app.models.letter import Letter
 from app.models.memory import MemoryItem
-from app.services.mailbox.letter_store import LetterStore
+from app.services.mailbox.letter_store import (
+    LetterStore,
+    daily_generation_key,
+    local_delivery_date,
+)
 from app.services.pet.pet_store import PetStore
 
 logger = logging.getLogger(__name__)
@@ -89,20 +93,19 @@ def _gather_material(db: Session, user_id: int) -> list[str]:
 def generate_evening_letter(db: Session, user_id: int) -> Letter | None:
     """为单个用户生成并落库一封晚间来信。
 
-    返回落库的 Letter；仅当 LLM 调用失败时返回 None（不发）。
+    返回落库的 Letter；LLM 失败或当日统一额度已满时返回 None（不发）。
     """
-    # 幂等：当天已有晚间来信则跳过（防重启/重复触发重复发）
-    start = _start_of_today_cst()
-    existing = db.scalar(
-        select(Letter).where(
-            Letter.user_id == user_id,
-            Letter.type == "greeting",
-            Letter.created_at >= start,
-        )
-    )
+    # type 只表达展示类别；晚间信使用独立来源键，不再和早安 greeting 冲突。
+    store = LetterStore(db)
+    date_key = local_delivery_date()
+    generation_key = daily_generation_key("evening_letter", date_key)
+    existing = store.get_generated(user_id, generation_key)
     if existing is not None:
         logger.info("[evening] user %d already has today's letter, skip", user_id)
         return existing
+    if not store.has_daily_capacity(user_id, date_key):
+        logger.info("[evening] user %d reached daily mailbox limit, skip", user_id)
+        return None
 
     material = _gather_material(db, user_id)
     if material:
@@ -117,20 +120,25 @@ def generate_evening_letter(db: Session, user_id: int) -> Letter | None:
             {"role": "user", "content": f"今天的碎片：\n{material_text}"},
         ])
     except Exception as e:
-        # 只有 LLM 调用失败才不发
+        # LLM 调用失败时不发
         logger.error("[evening] LLM call failed for user %d: %s", user_id, e)
         return None
 
     title, body = _parse_letter(resp.content)
 
     pet = PetStore(db).get_active(user_id)
-    letter = LetterStore(db).create(
+    letter = store.create_generated(
         user_id=user_id,
+        generation_key=generation_key,
+        delivery_date=date_key,
         type="greeting",
         title=title,
         body=body,
         pet_id=pet.id if pet is not None else None,
     )
+    if letter is None:
+        logger.info("[evening] user %d lost daily-slot race, skip", user_id)
+        return None
     logger.info("[evening] letter id=%d created for user %d", letter.id, user_id)
     return letter
 

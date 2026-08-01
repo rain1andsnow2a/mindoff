@@ -34,7 +34,17 @@ ALLOWED_PROPS = {
 }
 ALLOWED_TIME = {"day", "dusk", "night"}
 ALLOWED_MODE = {"indoor", "outdoor"}
-ALLOWED_POSE = {"standing", "sitting", "phone"}
+# 与前端 src/theater/figure/presets.ts 保持一致（改动需两端同步）。
+ALLOWED_POSE = {
+    # 静态
+    "standing", "sitting", "phone", "lookingBack", "headDown", "sittingGround",
+    # 情感动作（前端逐帧动画）
+    "walking", "waving", "arguing", "comforting", "hugging", "handingItem", "crying",
+}
+ALLOWED_CHAR_TYPE = {"child", "student", "adult", "elderly"}
+ALLOWED_BUILD = {"slim", "average", "stout"}
+ALLOWED_OUTFIT = {"casual", "uniform", "coat", "skirt"}
+ALLOWED_HAIR = {"short", "long", "ponytail", "bun"}
 
 MAX_PROPS = 16
 MAX_CHARACTERS = 3
@@ -55,13 +65,23 @@ SPEC_SYSTEM_PROMPT = """\
     "ground": {{ "color": "#RRGGBB" }},          // 可省
     "stars": true,                                  // 户外夜晚可开；可省
     "moon": true,                                   // 户外夜晚可开；可省
+    "sun": true,                                    // 户外白天/黄昏默认开；可省（false 关闭）
     "mountains": true                               // 户外可开；可省
   }},
   "props": [
     {{ "type": "零件type", "pos": [x, 0, z], "rotY": 0.0, "scale": 1.0, "params": {{ "color": "#RRGGBB" }} }}
   ],
   "characters": [
-    {{ "pos": [x, 0, z], "rotY": 0.0, "pose": "standing|sitting|phone", "bodyColor": "#RRGGBB" }}
+    {{
+      "pos": [x, 0, z], "rotY": 0.0,
+      "pose": "standing|sitting|phone|walking|waving|lookingBack|headDown|arguing|comforting|hugging|handingItem|crying|sittingGround",
+      "type": "child|student|adult|elderly",        // 可省，默认 adult
+      "build": "slim|average|stout",                // 可省
+      "outfit": "casual|uniform|coat|skirt",        // 可省，默认 casual
+      "hairstyle": "short|long|ponytail|bun",       // 可省
+      "backpack": true,                             // 可省（学生背书包）
+      "bodyColor": "#RRGGBB"
+    }}
   ]
 }}
 
@@ -75,6 +95,10 @@ SPEC_SYSTEM_PROMPT = """\
 - 等车/告别用 busStop；路上可放 car（想要驶过就 params.drive=true）；深夜街角用 phoneBooth、
   vendingMachine 增氛围；咖啡店/户外座位用 cafeTable + parasol。
 - 若信息不足以判断室内外/时段，就选最贴合情绪的合理默认。
+- 人物姿态按情绪选：打电话用 phone；离别用 waving / lookingBack / walking；低落用 headDown /
+  sittingGround / crying；冲突用 arguing；和解与安慰用 comforting / hugging；递信物用 handingItem。
+- 人物形象要贴合描述里的人：孩子 type=child，学生 type=student 且一般 outfit=uniform + backpack=true，
+  老人 type=elderly；体型/发型按需给，不要每个人都一样。
 """
 
 
@@ -104,7 +128,7 @@ def _sanitize(parsed: Any) -> dict[str, Any] | None:
     mode = env_in.get("mode") if env_in.get("mode") in ALLOWED_MODE else "outdoor"
     time = env_in.get("time") if env_in.get("time") in ALLOWED_TIME else "night"
     env: dict[str, Any] = {"mode": mode, "time": time}
-    for key in ("stars", "moon", "mountains"):
+    for key in ("stars", "moon", "sun", "mountains"):
         if isinstance(env_in.get(key), bool):
             env[key] = env_in[key]
     if isinstance(env_in.get("ground"), dict) and isinstance(env_in["ground"].get("color"), str):
@@ -140,6 +164,16 @@ def _sanitize(parsed: Any) -> dict[str, Any] | None:
             cc["rotY"] = float(c["rotY"])
         if c.get("pose") in ALLOWED_POSE:
             cc["pose"] = c["pose"]
+        if c.get("type") in ALLOWED_CHAR_TYPE:
+            cc["type"] = c["type"]
+        if c.get("build") in ALLOWED_BUILD:
+            cc["build"] = c["build"]
+        if c.get("outfit") in ALLOWED_OUTFIT:
+            cc["outfit"] = c["outfit"]
+        if c.get("hairstyle") in ALLOWED_HAIR:
+            cc["hairstyle"] = c["hairstyle"]
+        if isinstance(c.get("backpack"), bool):
+            cc["backpack"] = c["backpack"]
         for key in ("bodyColor", "skinColor", "hairColor"):
             if isinstance(c.get(key), str):
                 cc[key] = c[key][:9]

@@ -4,7 +4,7 @@
 - 消息经**当前激活桌宠的 agent** 生成——走 `run_companion`（BASE_PERSONA 红线 +
   激活桌宠 `system_prompt` 人格层），与聊天用同一套人格，不是通用文案。
 - 落库为 Letter（type=reminder），用户在信箱查看。
-- 每天至多一条（幂等：当天已有 reminder 信则跳过）。
+- 每天至多一条（独立来源键幂等），并受信箱每日两封统一额度约束。
 - 到点触发由 main.py 的每分钟调度器驱动（扫描到点且今日未发的用户）。
 
 时区：sleep_reminder_time 按东八区（产品面向国内用户，固定时区）解释。
@@ -21,7 +21,11 @@ from sqlalchemy.orm import Session
 from app.graphs.companion import run_companion
 from app.models.letter import Letter
 from app.models.preference import UserPreference
-from app.services.mailbox.letter_store import LetterStore
+from app.services.mailbox.letter_store import (
+    LetterStore,
+    daily_generation_key,
+    local_delivery_date,
+)
 from app.services.pet.pet_store import PetStore
 
 logger = logging.getLogger(__name__)
@@ -36,35 +40,26 @@ REMINDER_TRIGGER = (
 DEFAULT_TITLE = "该歇一歇了 🌙"
 
 
-def _start_of_today_cst() -> datetime:
-    """东八区今天 00:00，转 UTC 后返回。
-
-    created_at 以 UTC 存储，SQLite 对带时区 ISO 字符串是字典序比较、
-    不认偏移量，必须统一到 UTC 再比，否则 00:00–07:59 时段去重失效。
-    """
-    start_cst = datetime.now(CST).replace(hour=0, minute=0, second=0, microsecond=0)
-    return start_cst.astimezone(timezone.utc)
-
-
 def _already_sent_today(db: Session, user_id: int) -> bool:
     """当天（东八区）是否已发过睡前提醒。"""
-    start = _start_of_today_cst()
-    return db.scalar(
-        select(Letter).where(
-            Letter.user_id == user_id,
-            Letter.type == "reminder",
-            Letter.created_at >= start,
-        )
-    ) is not None
+    date_key = local_delivery_date()
+    key = daily_generation_key("bedtime_reminder", date_key)
+    return LetterStore(db).get_generated(user_id, key) is not None
 
 
 def generate_bedtime_reminder(db: Session, user_id: int) -> Letter | None:
     """由当前激活桌宠 agent 生成一条睡前提醒并落库为信箱来信。
 
-    返回落库的 Letter；当天已发过则返回 None（幂等）。
+    返回落库的 Letter；当天已发过或统一额度已满时返回 None。
     """
-    if _already_sent_today(db, user_id):
+    store = LetterStore(db)
+    date_key = local_delivery_date()
+    generation_key = daily_generation_key("bedtime_reminder", date_key)
+    if store.get_generated(user_id, generation_key) is not None:
         logger.info("[bedtime] user %d already reminded today, skip", user_id)
+        return None
+    if not store.has_daily_capacity(user_id, date_key):
+        logger.info("[bedtime] user %d reached daily mailbox limit, skip", user_id)
         return None
 
     pet = PetStore(db).get_active(user_id)
@@ -79,13 +74,18 @@ def generate_bedtime_reminder(db: Session, user_id: int) -> Letter | None:
     if not body or not body.strip():
         return None
 
-    letter = LetterStore(db).create(
+    letter = store.create_generated(
         user_id=user_id,
+        generation_key=generation_key,
+        delivery_date=date_key,
         type="reminder",
         title=DEFAULT_TITLE,
         body=body.strip(),
         pet_id=pet.id if pet is not None else None,
     )
+    if letter is None:
+        logger.info("[bedtime] user %d lost daily-slot race, skip", user_id)
+        return None
     logger.info("[bedtime] reminder letter id=%d for user %d (pet=%s)",
                 letter.id, user_id, pet.id if pet else None)
     return letter

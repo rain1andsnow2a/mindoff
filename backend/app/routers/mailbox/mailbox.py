@@ -60,7 +60,10 @@ def get_letters(
 
 
 @router.post("/expire")
-def trigger_expire(db: Session = Depends(get_db)):
+def trigger_expire(
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """手动触发三日寄存过期清理（开发/演示用）。"""
     count = expire_ephemeral(db)
     return {"expired_count": count}

@@ -40,7 +40,10 @@ from app.services.memory.memory_store import MemoryStore
 
 uid = httpx.get(f"{B}/users/me", headers=Ha).json()["id"]
 db = SessionLocal()
-LetterStore(db).create(user_id=uid, type="greeting", title="早安", body="早。")
+LetterStore(db).create_generated(
+    user_id=uid, generation_key=f"test_home:{uuid.uuid4().hex}",
+    type="greeting", title="早安", body="早。",
+)
 db.close()
 r = httpx.get(f"{B}/companion/home", headers=Ha, timeout=60)
 print("HOME (unread letter):", r.json()["invitation"])

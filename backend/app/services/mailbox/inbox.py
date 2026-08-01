@@ -121,7 +121,6 @@ def expire_ephemeral(db: Session) -> int:
     stmt = select(MemoryItem).where(
         MemoryItem.expires_at != None,  # noqa: E711
         MemoryItem.expires_at <= now,
-        MemoryItem.is_forgotten == False,  # noqa: E712
     )
     expired = list(db.scalars(stmt).all())
 
@@ -146,29 +145,22 @@ def expire_ephemeral(db: Session) -> int:
 def build_letters(db: Session, user_id: int) -> list[dict[str, Any]]:
     """生成并持久化桌宠来信（≤1-2 封/日）。
 
-    幂等：当天已有来信则直接返回，不再重复生成。
+    幂等：每种早间来信使用独立来源键；所有来源共享每日两封硬上限。
     黑客松简化版：基于近期记忆生成 1-2 封信，并落库为 Letter。
     """
     from datetime import timedelta
 
-    from app.services.mailbox.letter_store import LetterStore
+    from app.services.mailbox.letter_store import (
+        LetterStore,
+        daily_generation_key,
+        local_delivery_date,
+    )
     from app.services.pet.pet_store import PetStore
 
-    today_start = _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # 当天已有来信 → 直接返回，避免重复生成
-    # SQLite 存的是 naive UTC，需先补时区再比较
-    existing_today = []
-    for l in LetterStore(db).list_for_user(user_id, limit=10):
-        if l.created_at is None:
-            continue
-        created = l.created_at
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        if created >= today_start:
-            existing_today.append(l)
-    if existing_today:
-        return [_letter_dict(l) for l in existing_today[:2]]
+    store = LetterStore(db)
+    date_key = local_delivery_date()
+    if not store.has_daily_capacity(user_id, date_key):
+        return [_letter_dict(l) for l in store.list_for_delivery_date(user_id, date_key)]
 
     # 取近期（24h 内）的记忆作为素材
     since = _utcnow() - timedelta(hours=24)
@@ -187,6 +179,7 @@ def build_letters(db: Session, user_id: int) -> list[dict[str, Any]]:
     if recent:
         topic = recent[0]
         letters_to_create.append({
+            "generation_key": daily_generation_key("morning_greeting", date_key),
             "type": "greeting",
             "title": "早安 ☀️",
             "body": f"昨晚你说的「{topic.surface_text[:30]}」，我帮你记着呢。今天也要加油哦。",
@@ -198,6 +191,7 @@ def build_letters(db: Session, user_id: int) -> list[dict[str, Any]]:
     if todos and len(letters_to_create) < 2:
         todo_text = todos[0].surface_text[:30]
         letters_to_create.append({
+            "generation_key": daily_generation_key("morning_reminder", date_key),
             "type": "reminder",
             "title": "别忘了 📋",
             "body": f"今天有一件事：{todo_text}。准备好了随时可以开始。",
@@ -205,19 +199,19 @@ def build_letters(db: Session, user_id: int) -> list[dict[str, Any]]:
         })
 
     pet = PetStore(db).get_active(user_id)
-    created: list[dict[str, Any]] = []
     for data in letters_to_create[:2]:
-        letter = LetterStore(db).create(
+        store.create_generated(
             user_id=user_id,
+            generation_key=data["generation_key"],
+            delivery_date=date_key,
             type=data["type"],
             title=data["title"],
             body=data["body"],
             pet_id=pet.id if pet is not None else None,
             ref_memory_id=data.get("ref_memory_id"),
         )
-        created.append(_letter_dict(letter))
-
-    return created
+    # 返回当天统一信箱视图（含其它生成器来信），而不是只返回本次新建结果。
+    return [_letter_dict(l) for l in store.list_for_delivery_date(user_id, date_key)]
 
 
 def _letter_dict(letter: Any) -> dict[str, Any]:

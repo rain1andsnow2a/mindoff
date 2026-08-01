@@ -28,10 +28,12 @@ from app.services.mailbox.letter_store import LetterStore
 from app.services.memory.memory_store import MemoryStore
 
 db = SessionLocal()
-letter = LetterStore(db).create(
-    user_id=uid, type="greeting", title="早安",
+letter = LetterStore(db).create_generated(
+    user_id=uid, generation_key=f"test_mailbox:{uuid.uuid4().hex}",
+    type="greeting", title="早安",
     body="昨晚的事我记着呢，今天慢慢来。", pet_id=1,
 )
+assert letter is not None
 expires = datetime.now(timezone.utc) + timedelta(hours=72)
 memo = MemoryStore(db).create(
     user_id=uid, layer="episodic", kind="情绪", depth="personal",

@@ -23,6 +23,12 @@ import {
 } from "mindoff-companion";
 
 import { sttOnce, wsAuthUrl } from "./api";
+import {
+  createSpeechGate,
+  observeSpeech,
+  replaceCumulativeTranscript,
+  type SpeechGate,
+} from "./voice/speechGuards";
 
 export interface VoiceInputState {
   isRecording: boolean;
@@ -79,7 +85,8 @@ export function useVoiceInput(
   const usingPcm = useRef(false);
   const streamSocket = useRef<WebSocket | null>(null);
   const chunkSubscription = useRef<EventSubscription | null>(null);
-  const completedTranscript = useRef("");
+  const latestTranscript = useRef("");
+  const speechGate = useRef<SpeechGate>(createSpeechGate());
   const partialCallback = useRef(onPartial);
   partialCallback.current = onPartial;
 
@@ -104,7 +111,7 @@ export function useVoiceInput(
   }, [closeStreaming]);
 
   const connectStreaming = useCallback(async (): Promise<boolean> => {
-    completedTranscript.current = "";
+    latestTranscript.current = "";
     const ws = new WebSocket(wsAuthUrl("/ai/stt/stream"));
     streamSocket.current = ws;
     ws.onmessage = (event) => {
@@ -116,13 +123,21 @@ export function useVoiceInput(
       }
       if (message?.type === "conversation.item.input_audio_transcription.delta"
           && typeof message.text === "string") {
-        partialCallback.current?.(`${completedTranscript.current}${message.text}`);
+        latestTranscript.current = replaceCumulativeTranscript(
+          latestTranscript.current,
+          message.text,
+        );
+        if (speechGate.current.detected) {
+          partialCallback.current?.(latestTranscript.current);
+        }
       }
       if (message?.type === "conversation.item.input_audio_transcription.completed") {
-        const transcript = typeof message.transcript === "string" ? message.transcript : "";
-        if (transcript) {
-          completedTranscript.current += transcript;
-          partialCallback.current?.(completedTranscript.current);
+        latestTranscript.current = replaceCumulativeTranscript(
+          latestTranscript.current,
+          message.transcript,
+        );
+        if (speechGate.current.detected && latestTranscript.current) {
+          partialCallback.current?.(latestTranscript.current);
         }
       }
     };
@@ -150,6 +165,8 @@ export function useVoiceInput(
 
   const start = useCallback(async () => {
     setError(null);
+    speechGate.current = createSpeechGate();
+    latestTranscript.current = "";
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
@@ -162,20 +179,21 @@ export function useVoiceInput(
         if (ok) {
           usingPcm.current = true;
           setPcmRecording(true);
-          if (streamingReady && streamSocket.current?.readyState === WebSocket.OPEN) {
-            chunkSubscription.current = addAudioChunkListener(({ base64 }) => {
-              if (streamSocket.current?.readyState === WebSocket.OPEN) {
-                streamSocket.current.send(JSON.stringify({
-                  event_id: nextVoiceEventId(),
-                  type: "input_audio_buffer.append",
-                  audio: base64,
-                }));
-              }
-            });
-          } else {
+          if (!streamingReady) {
             // 流式链路不可用时保留原有整段识别，用户仍可正常录音。
             closeStreaming();
           }
+          // 无论流式连接是否可用都观察本地音量：整段识别同样需要静音保护。
+          chunkSubscription.current = addAudioChunkListener(({ base64, rms }) => {
+            speechGate.current = observeSpeech(speechGate.current, rms);
+            if (streamSocket.current?.readyState === WebSocket.OPEN) {
+              streamSocket.current.send(JSON.stringify({
+                event_id: nextVoiceEventId(),
+                type: "input_audio_buffer.append",
+                audio: base64,
+              }));
+            }
+          });
           return;
         }
         closeStreaming();
@@ -200,6 +218,8 @@ export function useVoiceInput(
           setError("录音保存失败");
           return;
         }
+        // 没有连续清晰人声时不把整段静音交给 ASR，避免模型凭底噪生成文字。
+        if (!speechGate.current.detected) return;
         setTranscribing(true);
         const uri = await writePcmTemp(base64);
         const { text } = await sttOnce(uri, "pcm");

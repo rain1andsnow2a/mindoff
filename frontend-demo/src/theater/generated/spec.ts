@@ -20,6 +20,8 @@ export interface SceneEnv {
   ground?: { color?: string };
   stars?: boolean;                                  // 户外夜晚星空
   moon?: boolean | { angle?: number; height?: number; size?: number };
+  /** 太阳（白天/黄昏可见；黄昏默认开——低角度暖阳 + 光晕，避免"黄昏像半夜"）。 */
+  sun?: boolean | { angle?: number; height?: number; size?: number; color?: string };
   mountains?: boolean | { color?: string; count?: number };
   fog?: { color?: string; near?: number; far?: number };
 }
@@ -33,12 +35,25 @@ export interface PropInstance {
   params?: Record<string, unknown>;
 }
 
-/** 人物实例（复用 figure.createFigure）。颜色为 CSS hex；pose 三态与预置场景一致。 */
+/**
+ * 人物实例（复用 figure.createFigure）。颜色为 CSS hex。
+ * pose 含情感动作；type/build/outfit/hairstyle/backpack 描述人物形象。
+ */
 export interface CharacterInstance {
   pos?: Vec3;
   rotY?: number;
   scale?: number;
-  pose?: "standing" | "sitting" | "phone";
+  pose?:
+    | "standing" | "sitting" | "phone"
+    | "walking" | "waving" | "lookingBack" | "headDown"
+    | "arguing" | "comforting" | "hugging" | "handingItem"
+    | "crying" | "sittingGround";
+  /** 人物类型：儿童/学生/成人/老人（决定身高与默认特征）。 */
+  type?: "child" | "student" | "adult" | "elderly";
+  build?: "slim" | "average" | "stout";
+  outfit?: "casual" | "uniform" | "coat" | "skirt";
+  hairstyle?: "short" | "long" | "ponytail" | "bun";
+  backpack?: boolean;
   bodyColor?: string;
   skinColor?: string;
   hairColor?: string;

@@ -6,19 +6,22 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Animated, Easing, Image, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { Edit3, Play, Send } from "lucide-react-native";
+import { Edit3, Play, Send, Volume2, VolumeX } from "lucide-react-native";
 import { useReducedMotion, useTheme, paperColors } from "../../design-system";
 import { Scene3D } from "../Scene3D";
 import {
   getScene, streamSceneChoice, streamSceneCustom, calibrateScene, absUrl,
 } from "../../api";
 import type { SSEEvent } from "../../api";
+import { speakReply, stopSpeaking } from "../../speak";
 import { useTypewriter } from "../../useTypewriter";
 import type { TheaterSceneId } from "../../theater";
 import { SceneChoice, SceneDetail } from "./shared";
 
 const bgFill = { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 };
+const NARRATION_VOICE_KEY = "mindoff.sceneNarrationVoice";
 
 /** galgame 动态背景：url 变化时旧图淡出、新图淡入（≤300ms）；
  *  加载前暖色底 + 指示器占位，加载失败退回暖色渐变。 */
@@ -145,11 +148,18 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const [showAdjust, setShowAdjust] = useState(false);
   const [showCustom, setShowCustom] = useState(false);   // 「自己说」输入行是否展开
   const [customText, setCustomText] = useState("");
+  const [narrationVoice, setNarrationVoice] = useState(false);
   const [bgUpdating, setBgUpdating] = useState(false);   // 回合背景图重生成中（保留旧图）
   const bgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // done 回调里延时刷新的计时器：卸载时清理
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    AsyncStorage.getItem(NARRATION_VOICE_KEY)
+      .then((value) => setNarrationVoice(value === "1"))
+      .catch(() => {});
+  }, []);
 
   const loadScene = async (): Promise<SceneDetail | null> => {
     if (!sceneId) return null;
@@ -217,6 +227,28 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   // 打字机：SSE token 与整段 beat（含开场白）都逐字浮现；reduced motion 直接全量
   const rawSubtitle = isStreaming ? streamText : (latestBeat?.text ?? "……");
   const typedSubtitle = useTypewriter(rawSubtitle, reducedMotion);
+  const narrationText = phase === "playing" && latestBeat?.speaker === "旁白"
+    ? (latestBeat.text ?? "").trim()
+    : "";
+
+  // 只朗读已经定稿的旁白；SSE 仍在逐 token 生成时不反复请求 TTS。
+  useEffect(() => {
+    if (!narrationVoice || !narrationText) {
+      stopSpeaking();
+      return;
+    }
+    speakReply(narrationText);
+    return stopSpeaking;
+  }, [narrationText, narrationVoice]);
+
+  const toggleNarrationVoice = () => {
+    setNarrationVoice((previous) => {
+      const next = !previous;
+      AsyncStorage.setItem(NARRATION_VOICE_KEY, next ? "1" : "0").catch(() => {});
+      if (!next) stopSpeaking();
+      return next;
+    });
+  };
 
   // 推进剧情的公共 SSE 回调：token 先入缓冲（打字机按节奏显示），done 时刷新场景 / 结束。
   const advanceCb = (e: SSEEvent) => {
@@ -355,6 +387,42 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
                   <View key={j} style={{ width: 2, height: 4 + j * 3, backgroundColor: "rgba(232,200,119,0.7)", borderRadius: 1 }} />
                 ))}
               </View>
+            )}
+            {(isStreaming || latestBeat?.speaker === "旁白") && (
+              <Pressable
+                accessibilityLabel={narrationVoice ? "关闭旁白语音" : "开启旁白语音"}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: narrationVoice }}
+                onPress={toggleNarrationVoice}
+                style={({ pressed }) => ({
+                  marginLeft: "auto",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                  paddingHorizontal: 9,
+                  paddingVertical: 5,
+                  borderRadius: 999,
+                  backgroundColor: narrationVoice
+                    ? "rgba(246,231,168,0.24)"
+                    : "rgba(255,255,255,0.10)",
+                  borderWidth: 1,
+                  borderColor: narrationVoice
+                    ? "rgba(232,200,119,0.52)"
+                    : "rgba(255,255,255,0.22)",
+                  opacity: pressed ? 0.7 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                })}
+              >
+                {narrationVoice
+                  ? <Volume2 size={13} color="#E8C877" />
+                  : <VolumeX size={13} color="rgba(255,255,255,0.68)" />}
+                <Text style={{
+                  fontSize: 11,
+                  color: narrationVoice ? "#E8C877" : "rgba(255,255,255,0.68)",
+                }}>
+                  旁白语音
+                </Text>
+              </Pressable>
             )}
           </View>
           <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>

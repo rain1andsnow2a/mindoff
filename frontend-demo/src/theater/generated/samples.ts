@@ -39,7 +39,7 @@ export const diningDay: SceneSpec = {
   camera: { pos: [2.6, 1.8, 3.4], look: [0, 0.9, 0] },
 };
 
-/** 户外·黄昏·长椅旁站立道别。 */
+/** 户外·黄昏·长椅旁道别（挥手 + 回头；黄昏默认带暖阳）。 */
 export const duskFarewell: SceneSpec = {
   env: { mode: "outdoor", time: "dusk", moon: false, mountains: { count: 6, color: "#5a4550" } },
   props: [
@@ -50,7 +50,9 @@ export const duskFarewell: SceneSpec = {
     { type: "rock", pos: [-1.6, 0, 0.8], params: { size: 0.35 } },
   ],
   characters: [
-    { pos: [0.6, 0, 0.4], rotY: -0.4, pose: "standing", bodyColor: "#9a8a72" },
+    // 学生挥手道别（校服 + 书包），大人转身走远又回头
+    { pos: [0.6, 0, 0.4], rotY: -0.4, pose: "waving", type: "student", outfit: "uniform", backpack: true, bodyColor: "#4a6a9a" },
+    { pos: [-1.2, 0, -1.2], rotY: 2.6, pose: "lookingBack", type: "adult", outfit: "coat", bodyColor: "#9a8a72" },
   ],
 };
 
@@ -69,10 +71,27 @@ export const rainyPier: SceneSpec = {
   ],
 };
 
+/** 户外·黄昏·校门口：孩子哭了，大人蹲下安慰（情感动作 + 儿童/校服）。 */
+export const schoolComfort: SceneSpec = {
+  env: { mode: "outdoor", time: "dusk" },
+  props: [
+    { type: "schoolGate", pos: [0, 0, -4] },
+    { type: "road", pos: [0, 0, 2.5], params: { width: 10 } },
+    { type: "streetlight", pos: [-2.8, 0, -1.8], params: { intensity: 1.3 } },
+    { type: "bush", pos: [2.6, 0, -2] },
+  ],
+  characters: [
+    { pos: [-0.15, 0, 0.2], rotY: 1.4, pose: "comforting", type: "adult", outfit: "coat", bodyColor: "#7a6a58" },
+    { pos: [0.45, 0, 0.5], rotY: -1.7, pose: "crying", type: "child", outfit: "uniform", backpack: true },
+  ],
+  camera: { pos: [3.2, 1.9, 3.6], look: [0, 0.7, 0] },
+};
+
 /** 样例注册表（按 key 取用，便于预览切换）。 */
 export const SCENE_SAMPLES: Record<string, SceneSpec> = {
   campfireNight,
   diningDay,
   duskFarewell,
   rainyPier,
+  schoolComfort,
 };

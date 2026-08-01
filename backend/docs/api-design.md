@@ -222,7 +222,7 @@
 - 与 `/reply` 的区别：ack **不开会话、不留对话记录**，只要一句就地显示的短反馈。
 - LLM 失败返回 `reply: null`（HTTP 仍 200），前端退回兜底提示，不报错。
 
-> 生成是服务端主动行为（定时/触发），非公开写接口；落库创建走 `LetterStore.create`（内部入口）。每天≤1–2 封、无内容不发。
+> 生成是服务端主动行为（定时/触发），非公开写接口；落库创建统一走 `LetterStore.create_generated`（内部入口）。来源幂等键彼此独立，数据库槽位保证每天≤1–2 封、无内容不发。
 > `type=weekly` 为每周小结：每周日 20:00（东八区）由 `weekly_report.run_weekly_reports_all` 投递，聚合本周情绪走向/完成待办；只取 depth=surface 素材，不含被焚原话。
 > ✅ 已实现（`app/routers/letters.py`、`app/services/letter_store.py`、`app/services/weekly_report.py`、`app/models/letter.py`）。
 

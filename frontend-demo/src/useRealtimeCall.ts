@@ -21,6 +21,12 @@ import type { EventSubscription } from "expo-modules-core";
 import { createConversation, detectSceneIntent, getActivePet, streamChatReply, wsAuthUrl } from "./api";
 import type { IntentSeed } from "./api";
 import { speakReply, stopSpeaking } from "./speak";
+import {
+  createSpeechGate,
+  observeSpeech,
+  replaceCumulativeTranscript,
+  type SpeechGate,
+} from "./voice/speechGuards";
 
 export type CallStatus =
   | "idle"
@@ -110,6 +116,9 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const graceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 场景意图识别的序号：只认最新一句的结果，避免慢返回覆盖新意图。
   const intentSeqRef = useRef(0);
+  // 本地 RMS 门限：只有连续清晰人声才接受云端转写，过滤静音/耳机底噪幻听。
+  const speechGateRef = useRef<SpeechGate>(createSpeechGate());
+  const latestTranscriptRef = useRef("");
   // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
   const voiceReplyRef = useRef(voiceReply);
   voiceReplyRef.current = voiceReply;
@@ -125,6 +134,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     subRef.current = null;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
     pendingRef.current = "";
+    speechGateRef.current = createSpeechGate();
+    latestTranscriptRef.current = "";
     void stopPcmCapture();
     const ws = wsRef.current;
     wsRef.current = null;
@@ -141,6 +152,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     closedRef.current = true;
     cleanup();
     setSceneSuggestion(null);
+    speechGateRef.current = createSpeechGate();
+    latestTranscriptRef.current = "";
     setStatus("ended");
   }, [cleanup]);
 
@@ -269,6 +282,17 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
         }
         subRef.current = addAudioChunkListener(({ base64, rms }) => {
           setLevel(rms);
+          const previous = speechGateRef.current;
+          const next = observeSpeech(previous, rms);
+          speechGateRef.current = next;
+          // 只有本地确认用户再次开口，才撤销上一句的发送宽限窗。
+          if (!previous.detected && next.detected) {
+            if (graceTimerRef.current) {
+              clearTimeout(graceTimerRef.current);
+              graceTimerRef.current = null;
+            }
+            if (!closedRef.current) setStatus("listening");
+          }
           if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(
               JSON.stringify({ event_id: eid(), type: "input_audio_buffer.append", audio: base64 })
@@ -287,15 +311,30 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
         }
         switch (msg?.type) {
           case "input_audio_buffer.speech_started":
-            // 宽限窗内又开口 = 还没说完，撤销待发，等这段说完再拼接。
-            if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
-            if (!closedRef.current) setStatus("listening");
+            // 服务端 speech_started 可能由底噪误触；真正的续说由本地 RMS 门限确认。
             break;
           case "conversation.item.input_audio_transcription.delta":
-            if (typeof msg.text === "string") setLiveUser(pendingRef.current + msg.text);
+            latestTranscriptRef.current = replaceCumulativeTranscript(
+              latestTranscriptRef.current,
+              msg.text,
+            );
+            if (speechGateRef.current.detected) {
+              setLiveUser(pendingRef.current + latestTranscriptRef.current);
+            }
             break;
           case "conversation.item.input_audio_transcription.completed":
-            queueUtterance(msg.transcript ?? "");
+            latestTranscriptRef.current = replaceCumulativeTranscript(
+              latestTranscriptRef.current,
+              msg.transcript,
+            );
+            if (speechGateRef.current.detected) {
+              queueUtterance(latestTranscriptRef.current);
+            } else {
+              // 静音产生的云端幻听不展示、不落库、也不触发桌宠回复。
+              setLiveUser(pendingRef.current);
+            }
+            speechGateRef.current = createSpeechGate();
+            latestTranscriptRef.current = "";
             break;
           case "error":
             setError(msg?.error?.message || "识别出错了");

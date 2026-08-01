@@ -156,6 +156,7 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
   onBack: () => void; onConfirm: (text: string) => void;
 }) {
   const { theme, C } = useSceneSurface();
+  const { isCompact } = useResponsive();
   const [text, setText] = useState("");
   const beforeRecording = useRef("");
   // 真机 PCM 在录音中把累计转写整体替换到描述框；松手后的整段识别再校准最终文本。
@@ -168,7 +169,16 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
   return (
     <View style={{ flex: 1 }}>
       <ActBar stage={0} onBack={onBack} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          // 手机底部导航绝对定位在内容之上；转写文本变长后需要留出完整导航高度，
+          // 否则末尾的「讲完了」会被遮住，滚动容器却已经到达底部。
+          paddingBottom: isCompact ? 128 : 24,
+          gap: 20,
+        }}
+      >
         <View style={{ paddingTop: 8 }}>
           <Text style={{ fontSize: 22, fontWeight: "700", lineHeight: 31, color: C.text }}>
             想重演的，{"\n"}是哪一天？

@@ -90,6 +90,60 @@ export function createMoon({ size = 4, color = 0xf5eeda, distance = 90, height =
   return g;
 }
 
+/** 太阳（发光盘 + 双层光晕）。黄昏用低高度 + 暖色 + 大光晕 */
+export function createSun({ size = 5, color = 0xfff2c8, distance = 95, height = 40, angle = 0, haloOpacity = 0.16 } = {}) {
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(size, 32),
+    new THREE.MeshBasicMaterial({ color, fog: false })
+  );
+  const halo1 = new THREE.Mesh(
+    new THREE.CircleGeometry(size * 2.4, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: haloOpacity, fog: false })
+  );
+  const halo2 = new THREE.Mesh(
+    new THREE.CircleGeometry(size * 5, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: haloOpacity * 0.35, fog: false })
+  );
+  halo1.position.z = -0.5;
+  halo2.position.z = -1;
+  g.add(disc, halo1, halo2);
+  g.position.set(Math.sin(angle) * distance, height, -Math.cos(angle) * distance);
+  g.lookAt(0, height * 0.3, 0);
+  return g;
+}
+
+/**
+ * 昼夜预设：天空渐变色 / 天体 / 环境光 / 平行光。
+ * 黄昏重点：地平线暖橙渐变、低角度可见暖阳、整体亮度不低于白天太多（避免"黄昏像半夜"）。
+ */
+export const TIME_OF_DAY = {
+  day: {
+    sky: { top: 0x3a6fc0, bottom: 0xbfdcf0 },
+    stars: false,
+    sun: { size: 5, color: 0xfff2c8, height: 42, angle: -0.7, haloOpacity: 0.16 },
+    moon: null,
+    ambient: { color: 0x9aa8c0, intensity: 0.9 },
+    dirLight: { color: 0xfff2dc, intensity: 1.4, position: [-25, 35, 20] },
+  },
+  dusk: {
+    sky: { top: 0x3d4478, bottom: 0xff9a58 },
+    stars: false,
+    sun: { size: 6.5, color: 0xffb050, height: 13, angle: -0.85, haloOpacity: 0.3 },
+    moon: null,
+    ambient: { color: 0x7a5a68, intensity: 0.85 },
+    dirLight: { color: 0xffa060, intensity: 1.0, position: [-30, 12, 25] },
+  },
+  night: {
+    sky: { top: 0x0a1024, bottom: 0x1a2340 },
+    stars: true,
+    sun: null,
+    moon: { size: 4, color: 0xf5eeda, height: 45, angle: 0 },
+    ambient: { color: 0x33415e, intensity: 0.7 },
+    dirLight: { color: 0x8fa8d8, intensity: 0.5, position: [20, 35, 25] },
+  },
+};
+
 /** 低多边形远山剪影 */
 export function createMountains({ color = 0x101a2e, count = 7, radius = 70 } = {}) {
   const g = new THREE.Group();

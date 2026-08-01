@@ -22,6 +22,7 @@ import {
   useTheme,
 } from "../design-system";
 import { clearMemories, deleteMemory, getMemoryReview, listMemories } from "../api";
+import { CURRENT_VERSION } from "../updateCheck";
 
 function useProfileSurface() {
   const theme = useTheme();
@@ -250,6 +251,14 @@ export function ProfileScreen({
             <Text style={[theme.typography.textStyles.bodyStrong, { color: theme.colors.error }]}>退出登录</Text>
           </Pressable>
         )}
+        <Text style={{
+          marginTop: theme.spacing[4],
+          textAlign: "center",
+          fontSize: 12,
+          color: C.muted,
+        }}>
+          当前版本 v{CURRENT_VERSION}
+        </Text>
         </View>
         </View>
         </PageContainer>

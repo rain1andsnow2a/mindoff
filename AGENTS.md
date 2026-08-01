@@ -43,6 +43,9 @@ cd theater && npm run build                           # 产出单文件 dist/ind
 4. 伦理红线：不诊断、不贴人格标签、不把推测当事实；vulnerable/core 记忆
    默认 local 不外发（走 `app/services/memory/privacy.py` 判定）。
 5. `mindoff.db*`、`.env` 不入库（见 `.gitignore`）。
+6. 生成式 3D（SceneSpec）的零件/人物字段三端同步：`backend/app/services/scene/scene_spec.py`
+   （白名单 + prompt）、`frontend-demo/src/theater/generated/spec.ts`（类型）、
+   `frontend-demo/src/theater/generated/props.ts` 与 `frontend-demo/src/theater/figure/`（实现）。
 
 ## 前端设计与迁移规则
 

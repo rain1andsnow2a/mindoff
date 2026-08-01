@@ -22,7 +22,11 @@ from sqlalchemy.orm import Session
 from app.llm import get_chat_model
 from app.models.conversation import Conversation, Message
 from app.models.letter import Letter
-from app.services.mailbox.letter_store import LetterStore
+from app.services.mailbox.letter_store import (
+    LetterStore,
+    daily_generation_key,
+    local_delivery_date,
+)
 from app.services.pet.pet_store import PetStore
 from app.services.memory.context_builder import build as build_memory_context
 
@@ -337,19 +341,18 @@ def generate_scene_invite(
     """把推荐结果落库为 scene_invite 来信。
 
     幂等：每用户每天（东八区）至多 1 封 scene_invite；已有则直接返回已存在的信。
-    LLM 写信失败走模板兜底（推荐已产出，宁可信写得朴素也要送达）。
+    LLM 写信失败走模板兜底；当日统一额度已满时不再写入信箱。
     """
-    start = _start_of_today_cst()
-    existing = db.scalar(
-        select(Letter).where(
-            Letter.user_id == user_id,
-            Letter.type == "scene_invite",
-            Letter.created_at >= start,
-        )
-    )
+    store = LetterStore(db)
+    date_key = local_delivery_date()
+    generation_key = daily_generation_key("scene_invite", date_key)
+    existing = store.get_generated(user_id, generation_key)
     if existing is not None:
         logger.info("[scene-recommend] user %d already has today's invite, skip", user_id)
         return existing
+    if not store.has_daily_capacity(user_id, date_key):
+        logger.info("[scene-recommend] user %d reached daily mailbox limit, skip", user_id)
+        return None
 
     seed = rec.get("seed") or {}
     seed_text = json.dumps(seed, ensure_ascii=False)
@@ -365,8 +368,10 @@ def generate_scene_invite(
         title, body = _fallback_invite(seed)
 
     pet = PetStore(db).get_active(user_id)
-    letter = LetterStore(db).create(
+    letter = store.create_generated(
         user_id=user_id,
+        generation_key=generation_key,
+        delivery_date=date_key,
         type="scene_invite",
         title=title,
         body=body,
@@ -379,5 +384,8 @@ def generate_scene_invite(
             "confidence": rec.get("confidence"),
         },
     )
+    if letter is None:
+        logger.info("[scene-recommend] user %d lost daily-slot race, skip", user_id)
+        return None
     logger.info("[scene-recommend] invite letter id=%d created for user %d", letter.id, user_id)
     return letter

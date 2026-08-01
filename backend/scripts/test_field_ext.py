@@ -23,9 +23,11 @@ ATTACH = {"label": "信里夹了一首歌", "title": "Bloom", "artist": "ODESZA"
           "reason": "旋律很慢，适合把今天一点点放下来。"}
 db = SessionLocal()
 uid = httpx.get(f"{B}/users/me", headers=H).json()["id"]
-letter = LetterStore(db).create(
-    user_id=uid, type="music", title="给你的歌", body="慢慢听。", attachment=ATTACH,
+letter = LetterStore(db).create_generated(
+    user_id=uid, generation_key=f"test_field:{uuid.uuid4().hex}",
+    type="music", title="给你的歌", body="慢慢听。", attachment=ATTACH,
 )
+assert letter is not None
 db.close()
 print(f"SEED: letter_id={letter.id}")
 

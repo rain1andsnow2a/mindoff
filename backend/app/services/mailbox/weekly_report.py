@@ -3,7 +3,7 @@
 产品口径：
 - 落库为 Letter（type=weekly），用户在信箱查看，与晚安信同一入口。
 - 聚合本周素材：情绪走向、完成的待办、被珍藏的片刻——像老朋友帮你回望这一周。
-- 独立于 proactive 开关，每周日都尝试发；只有 LLM 调用失败才不发。
+- 独立于 proactive 开关，每周日都尝试发；LLM 失败或当日两封额度已满时不发。
 - 幂等：本周已有周报则跳过（防重启/重复触发）。
 
 隐私底座（Property 9）：送进外部 LLM 的素材只取 depth=surface 记忆；
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.llm import get_chat_model
 from app.models.letter import Letter
 from app.models.memory import MemoryItem
-from app.services.mailbox.letter_store import LetterStore
+from app.services.mailbox.letter_store import LetterStore, local_delivery_date
 from app.services.pet.pet_store import PetStore
 
 logger = logging.getLogger(__name__)
@@ -83,20 +83,21 @@ def _gather_material(db: Session, user_id: int) -> dict[str, Any]:
 def generate_weekly_report(db: Session, user_id: int) -> Letter | None:
     """为单个用户生成并落库一封周报。
 
-    返回落库的 Letter；仅当 LLM 调用失败时返回 None（不发）。
+    返回落库的 Letter；LLM 失败或当日统一额度已满时返回 None（不发）。
     """
-    # 幂等：本周窗口内已有周报则跳过
-    since = _week_start_cst()
-    existing = db.scalar(
-        select(Letter).where(
-            Letter.user_id == user_id,
-            Letter.type == "weekly",
-            Letter.created_at >= since,
-        )
-    )
+    # 周报按自然周使用独立幂等键；每日额度仍由统一 store 约束。
+    now_cst = datetime.now(CST)
+    iso_year, iso_week, _ = now_cst.isocalendar()
+    generation_key = f"weekly_report:{iso_year}-W{iso_week:02d}"
+    date_key = local_delivery_date(now_cst)
+    store = LetterStore(db)
+    existing = store.get_generated(user_id, generation_key)
     if existing is not None:
         logger.info("[weekly] user %d already has this week's report, skip", user_id)
         return existing
+    if not store.has_daily_capacity(user_id, date_key):
+        logger.info("[weekly] user %d reached daily mailbox limit, skip", user_id)
+        return None
 
     material = _gather_material(db, user_id)
     parts: list[str] = []
@@ -121,13 +122,18 @@ def generate_weekly_report(db: Session, user_id: int) -> Letter | None:
     title, body = _parse_letter(resp.content)
 
     pet = PetStore(db).get_active(user_id)
-    letter = LetterStore(db).create(
+    letter = store.create_generated(
         user_id=user_id,
+        generation_key=generation_key,
+        delivery_date=date_key,
         type="weekly",
         title=title,
         body=body,
         pet_id=pet.id if pet is not None else None,
     )
+    if letter is None:
+        logger.info("[weekly] user %d lost daily-slot race, skip", user_id)
+        return None
     logger.info("[weekly] report id=%d created for user %d", letter.id, user_id)
     return letter
 

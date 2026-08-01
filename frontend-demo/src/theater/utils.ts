@@ -96,6 +96,31 @@ export function createMoon({ size = 4, color = 0xf5eeda, distance = 90, height =
   return g;
 }
 
+/** 太阳（发光盘 + 双层光晕）。黄昏用低高度 + 暖色 + 大光晕。 */
+export function createSun({ size = 5, color = 0xfff2c8, distance = 95, height = 40, angle = 0, haloOpacity = 0.16 }: {
+  size?: number; color?: number; distance?: number; height?: number; angle?: number; haloOpacity?: number;
+} = {}) {
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(size, 32),
+    new THREE.MeshBasicMaterial({ color, fog: false })
+  );
+  const halo1 = new THREE.Mesh(
+    new THREE.CircleGeometry(size * 2.4, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: haloOpacity, fog: false })
+  );
+  const halo2 = new THREE.Mesh(
+    new THREE.CircleGeometry(size * 5, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: haloOpacity * 0.35, fog: false })
+  );
+  halo1.position.z = -0.5;
+  halo2.position.z = -1;
+  g.add(disc, halo1, halo2);
+  g.position.set(Math.sin(angle) * distance, height, -Math.cos(angle) * distance);
+  g.lookAt(0, height * 0.3, 0);
+  return g;
+}
+
 /** 低多边形远山剪影 */
 export function createMountains({ color = 0x101a2e, count = 7, radius = 70 }: {
   color?: number; count?: number; radius?: number;
