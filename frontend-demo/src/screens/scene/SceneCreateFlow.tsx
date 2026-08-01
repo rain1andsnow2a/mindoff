@@ -7,12 +7,12 @@ import {
   Animated, Dimensions, Easing, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronLeft, Mic } from "lucide-react-native";
+import { Lock, Mic } from "lucide-react-native";
 import { Button, CreamRipple, useReducedMotion, paperColors } from "../../design-system";
 import { parseSceneNarration, parseSceneRole } from "../../api";
 import type { SceneParseResult } from "../../api";
 import { useVoiceInput } from "../../useVoiceInput";
-import { BuiltInScene, CharReady, SceneHeader, useSceneSurface } from "./shared";
+import { ActBar, BuiltInScene, CharReady, useSceneSurface } from "./shared";
 
 export const CAROUSEL_CARD_W = 310;
 export const CAROUSEL_GAP = 16;
@@ -75,17 +75,18 @@ export function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
   );
 }
 
-/** 语音创建入口：脉冲麦克风，点击进入口述采集。 */
+/** 语音创建入口：第一幕 · 讲述的入口——大标题 + 麦克风光晕 + 或写下来。 */
 export function CreateSceneEntry({ onStart }: { onStart: () => void }) {
   const { theme, C } = useSceneSurface();
   const reducedMotion = useReducedMotion();
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reducedMotion) return;
+    // 呼吸节奏贴近一次深呼吸（3.6s），比原 1.4s 更安静
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.12, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.14, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -94,34 +95,63 @@ export function CreateSceneEntry({ onStart }: { onStart: () => void }) {
 
   return (
     <View style={{ marginTop: 32, marginBottom: 16 }}>
-      <View style={{ alignItems: "center", marginBottom: 24 }}>
-        <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: C.text }}>描述一个你想进入的场景</Text>
-        <Text style={{ fontSize: 13, color: C.muted }}>你来说发生了什么，我们替你搭好片场。</Text>
+      <View style={{ alignItems: "center", marginBottom: 22 }}>
+        <Text style={{
+          fontSize: 22, fontWeight: "700", lineHeight: 31, textAlign: "center", color: C.text,
+        }}>
+          想重演的，{"\n"}是哪一天？
+        </Text>
+        <Text style={{ fontSize: 13, lineHeight: 21, textAlign: "center", marginTop: 8, color: C.muted }}>
+          讲给我听，或者慢慢写下来。{"\n"}不用组织好语言，也不用从头讲起。
+        </Text>
       </View>
-      <View style={{ alignItems: "center", gap: 20 }}>
-        <View style={{ width: 88, height: 88, alignItems: "center", justifyContent: "center" }}>
+
+      <View style={{ alignItems: "center", gap: 12 }}>
+        <View style={{ width: 128, height: 128, alignItems: "center", justifyContent: "center" }}>
           <Animated.View style={{
-            position: "absolute", width: 88, height: 88, borderRadius: 44,
-            backgroundColor: theme.colors.accentSoft, transform: [{ scale: pulse }], opacity: 0.55,
+            position: "absolute", width: 128, height: 128, borderRadius: 64,
+            backgroundColor: theme.colors.accentSoft, transform: [{ scale: pulse }], opacity: 0.85,
           }} />
           <Pressable onPress={onStart}
-            style={({ pressed }) => [{
-              width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-              backgroundColor: theme.colors.surfaceElevated, borderWidth: 1, borderColor: theme.colors.border,
-              transform: [{ scale: pressed ? 0.93 : 1 }],
-            }]}>
-            <Mic size={20} color={theme.colors.accent} />
+            style={({ pressed }) => ({
+              width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center",
+              backgroundColor: theme.colors.accentSurface,
+              borderWidth: 1.5, borderColor: "rgba(255,255,255,0.55)",
+              transform: [{ scale: pressed ? 0.94 : 1 }],
+            })}>
+            <Mic size={30} color={theme.colors.textOnAccent} />
           </Pressable>
         </View>
-        <Pressable onPress={onStart}>
-          <Text style={{ fontSize: 12, color: C.muted }}>用文字描述</Text>
+        <Pressable onPress={onStart} accessibilityRole="button" accessibilityLabel="开始讲述"
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+          <Text style={{ fontSize: 12.5, color: C.muted }}>点一下，开始讲</Text>
         </Pressable>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 14 }}>
+        <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.divider }} />
+        <Text style={{ fontSize: 11.5, color: C.muted }}>或者写下来</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.divider }} />
+      </View>
+
+      <Pressable onPress={onStart} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+        <View style={{
+          padding: 14, minHeight: 74, borderRadius: 20,
+          backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
+        }}>
+          <Text style={{ fontSize: 13.5, color: C.placeholder }}>那件事发生在……</Text>
+        </View>
+      </Pressable>
+
+      <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }}>
+        <Lock size={12} color={C.muted} />
+        <Text style={{ fontSize: 11, color: C.muted }}>这里说的话，只留在你和喵灵之间</Text>
       </View>
     </View>
   );
 }
 
-/** 口述采集：按住麦克录音转写，或直接文字输入。 */
+/** 第一幕 · 讲述：按住麦克录音转写，或直接文字输入；「我在听」波形示意正在采集。 */
 export function SceneNarrationCapture({ onBack, onConfirm }: {
   onBack: () => void; onConfirm: (text: string) => void;
 }) {
@@ -133,14 +163,60 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
   const micHint = voice.transcribing ? "正在转写…" : voice.isRecording ? "松开结束录音" : "按住说话";
   return (
     <View style={{ flex: 1 }}>
-      <SceneHeader onBack={onBack} title="描述你的场景" />
+      <ActBar stage={0} onBack={onBack} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
-        <View>
-          <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: C.text }}>
-            说说你在哪里、谁在你面前，以及发生了什么。
+        <View style={{ paddingTop: 8 }}>
+          <Text style={{ fontSize: 22, fontWeight: "700", lineHeight: 31, color: C.text }}>
+            想重演的，{"\n"}是哪一天？
           </Text>
-          <Text style={{ fontSize: 13, color: C.muted }}>不用分段，像说话一样讲就好。</Text>
+          <Text style={{ fontSize: 13, lineHeight: 21, marginTop: 8, color: C.muted }}>
+            讲给我听，或者慢慢写下来。{"\n"}不用组织好语言，也不用从头讲起。
+          </Text>
         </View>
+
+        {/* 麦克风光晕：按住说话，录音中金色反馈 */}
+        <View style={{ alignItems: "center", gap: 10, marginTop: 4 }}>
+          <View style={{ width: 112, height: 112, alignItems: "center", justifyContent: "center" }}>
+            <View style={{
+              position: "absolute", width: 112, height: 112, borderRadius: 56,
+              backgroundColor: theme.colors.accentSoft,
+            }} />
+            <Pressable
+              onPressIn={() => { voice.start(); }} onPressOut={() => { voice.stop(); }}
+              disabled={voice.transcribing}
+              style={({ pressed }) => ({
+                width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center",
+                backgroundColor: voice.isRecording ? theme.colors.accentSurface : theme.colors.surfaceElevated,
+                borderWidth: 2, borderColor: voice.isRecording ? theme.colors.accent : theme.colors.border,
+                opacity: voice.transcribing ? 0.6 : 1,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              })}>
+              <Mic size={26} color={theme.colors.accent} />
+            </Pressable>
+          </View>
+          <Text style={{ fontSize: 12, color: C.muted }}>{micHint}</Text>
+          {voice.error ? <Text style={{ fontSize: 12, color: "#C4553A" }}>{voice.error}</Text> : null}
+        </View>
+
+        {/* 我在听：录音时出现，示意不急、慢慢讲 */}
+        {voice.isRecording ? (
+          <View style={{
+            flexDirection: "row", alignItems: "center", gap: 12,
+            padding: 12, borderRadius: 18,
+            backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
+          }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, height: 26 }}>
+              {[10, 18, 26, 16, 22, 12].map((h, i) => (
+                <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: theme.colors.accent, opacity: 0.75 }} />
+              ))}
+            </View>
+            <Text style={{ fontSize: 12.5, color: C.text2 }}>
+              <Text style={{ fontWeight: "600", color: C.text }}>我在听</Text> · 不急，慢慢讲
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 转写 / 手动输入区：语音追加或直接打字 */}
         <TextInput
           value={text} onChangeText={setText}
           placeholder={placeholder} placeholderTextColor={C.placeholder}
@@ -151,22 +227,7 @@ export function SceneNarrationCapture({ onBack, onConfirm }: {
             color: theme.colors.textPrimary, textAlignVertical: "top",
           }}
         />
-        <View style={{ alignItems: "center", gap: 12 }}>
-          <Pressable
-            onPressIn={() => { voice.start(); }} onPressOut={() => { voice.stop(); }}
-            disabled={voice.transcribing}
-            style={{
-              width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center",
-              backgroundColor: voice.isRecording ? theme.colors.accentSoft : theme.colors.surface,
-              borderWidth: 2, borderColor: voice.isRecording ? theme.colors.accent : theme.colors.border,
-              opacity: voice.transcribing ? 0.6 : 1,
-            }}>
-            <Mic size={22} color={theme.colors.accent} />
-          </Pressable>
-          <Text style={{ fontSize: 12, color: C.muted }}>{micHint}</Text>
-          {voice.error ? <Text style={{ fontSize: 12, color: "#C4553A" }}>{voice.error}</Text> : null}
-        </View>
-        <Button onPress={() => onConfirm(text || placeholder)} fullWidth>我说完了</Button>
+        <Button onPress={() => onConfirm(text || placeholder)} fullWidth>讲完了</Button>
       </ScrollView>
     </View>
   );
@@ -198,7 +259,7 @@ export function SceneSummaryPreview({ narration, onBack, onConfirm }: {
   if (loading) {
     return (
       <View style={{ flex: 1 }}>
-        <SceneHeader onBack={onBack} title="场景整理" />
+        <ActBar stage={1} onBack={onBack} />
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
           <CreamRipple active />
           <Text style={{ fontSize: 15, color: C.text2 }}>我在整理你刚说的…</Text>
@@ -210,7 +271,7 @@ export function SceneSummaryPreview({ narration, onBack, onConfirm }: {
   if (error || !parsed) {
     return (
       <View style={{ flex: 1 }}>
-        <SceneHeader onBack={onBack} title="场景整理" />
+        <ActBar stage={1} onBack={onBack} />
         <View style={{ flex: 1, paddingHorizontal: 20, gap: 16, justifyContent: "center" }}>
           <Text style={{ fontSize: 15, color: C.text, textAlign: "center" }}>{error || "整理失败"}</Text>
           <Button onPress={run} fullWidth>再试一次</Button>
@@ -226,12 +287,14 @@ export function SceneSummaryPreview({ narration, onBack, onConfirm }: {
   const hasMissing = (parsed.missing?.length ?? 0) > 0;
   return (
     <View style={{ flex: 1 }}>
-      <SceneHeader onBack={onBack} title="场景整理" />
+      <ActBar stage={1} onBack={onBack} />
       <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
-        <View>
-          <Text style={{ fontSize: 17, fontWeight: "500", marginBottom: 4, color: C.text }}>我整理了一下</Text>
-          <Text style={{ fontSize: 13, color: C.muted }}>
-            {parsed.parsed ? "有不准确的地方可以告诉我。" : "我没太听清，下一步你可以自己补上。"}
+        <View style={{ paddingTop: 8 }}>
+          <Text style={{ fontSize: 22, fontWeight: "700", lineHeight: 31, color: C.text }}>
+            我把听到的，{"\n"}整理成了这一幕
+          </Text>
+          <Text style={{ fontSize: 13, lineHeight: 21, marginTop: 8, color: C.muted }}>
+            看看对不对——不对的地方，点一下就能改。
           </Text>
         </View>
         <View style={{
@@ -263,7 +326,7 @@ export function SceneSummaryPreview({ narration, onBack, onConfirm }: {
         <View style={{ gap: 8, marginTop: "auto" }}>
           <Button onPress={() => onConfirm(parsed)} fullWidth>就是这样，继续</Button>
           <Pressable onPress={onBack} style={{ paddingVertical: 12, alignItems: "center" }}>
-            <Text style={{ fontSize: 13, color: C.muted }}>有些地方不对，我重新说</Text>
+            <Text style={{ fontSize: 13, color: C.muted }}>我再补充几句</Text>
           </Pressable>
         </View>
       </View>
@@ -283,7 +346,11 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
   const [name, setName] = useState(parsed?.people ?? "");
   const [rel, setRel] = useState(parsed?.relation || scene?.relationships[0] || "");
   const [desc, setDesc] = useState("");
+  // 补充校准：预设 chips 多选 + 一条手动补充，合并成一段（业务结构不变，仍是 string）
+  const ADJUST_CHIPS = ["语气再轻一点", "别安排 TA 笑场", "关系再近一点", "场景要有风"];
+  const [picked, setPicked] = useState<string[]>([]);
   const [adjusted, setAdjusted] = useState("");
+  const adjustedFull = [...picked, adjusted].filter(Boolean).join("；");
   const [entryRipple, setEntryRipple] = useState(false);
   // 渲染方式：默认生成式 3D（方案 A），可切回图片 galgame
   const [renderKind, setRenderKind] = useState<"generated_3d" | "dynamic_image">("generated_3d");
@@ -311,7 +378,7 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
     if (enterTimer.current) clearTimeout(enterTimer.current);
     enterTimer.current = setTimeout(() => {
       setEntryRipple(false);
-      onReady({ name: name || "TA", relation: rel, desc, adjusted, traits: traitsRef.current, renderKind });
+      onReady({ name: name || "TA", relation: rel, desc, adjusted: adjustedFull, traits: traitsRef.current, renderKind });
     }, 380);
   };
 
@@ -325,81 +392,92 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
       <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(255,251,243,0.55)" }} />
 
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
-          <Pressable onPress={onBack}
-            style={{
-              width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
-              backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)",
-            }}>
-            <ChevronLeft size={16} color={C.text2} />
-          </Pressable>
-          <View style={{ flex: 1 }} />
-        </View>
+        <ActBar stage={2} onBack={onBack} />
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, gap: 20 }}>
-          {/* 第一步：谁在你面前 */}
-          <View>
-            <Text style={{ fontSize: 20, fontWeight: "500", marginBottom: 6, color: C.text }}>这个场景里，谁在你面前？</Text>
-            <Text style={{ fontSize: 13, color: C.muted }}>不需要真实姓名，用你习惯的称呼就好。</Text>
+          {/* 第三幕 · 定妆 标题 */}
+          <View style={{ paddingTop: 8 }}>
+            <Text style={{ fontSize: 22, fontWeight: "700", lineHeight: 31, color: C.text }}>
+              开演前，{"\n"}给 TA 定妆
+            </Text>
+            <Text style={{ fontSize: 13, lineHeight: 21, marginTop: 8, color: C.muted }}>
+              喵灵按你的记忆来演 TA，演得不像的地方，现在告诉我。
+            </Text>
           </View>
 
-          <TextInput
-            value={name} onChangeText={setName}
-            placeholder="比如：妈妈、她、老朋友…" placeholderTextColor={C.placeholder}
-            style={{
-              paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 15,
-              backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", color: paperColors.ink,
-            }}
-          />
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>称呼 TA 为</Text>
+              <TextInput
+                value={name} onChangeText={setName}
+                placeholder="比如：妈妈、她、老朋友…" placeholderTextColor={C.placeholder}
+                style={{
+                  paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 15,
+                  backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", color: paperColors.ink,
+                }}
+              />
+            </View>
 
-          <View>
-            <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>关系</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {(scene?.relationships ?? ["朋友", "家人", "恋人", "同事"]).map(r => (
-                <Pressable key={r} onPress={() => setRel(r)}
-                  style={{
-                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                    backgroundColor: rel === r ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
-                    borderWidth: rel === r ? 1.5 : 1,
-                    borderColor: rel === r ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
-                  }}>
-                  <Text style={{ fontSize: 13, color: C.text }}>{r}</Text>
-                </Pressable>
-              ))}
+            <View>
+              <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>我们的关系</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {(scene?.relationships ?? ["朋友", "家人", "恋人", "同事"]).map(r => (
+                  <Pressable key={r} onPress={() => setRel(r)}
+                    style={{
+                      paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
+                      backgroundColor: rel === r ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
+                      borderWidth: rel === r ? 1.5 : 1,
+                      borderColor: rel === r ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
+                    }}>
+                    <Text style={{ fontSize: 13, color: C.text }}>{r}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View>
+              <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>你记忆里的 TA</Text>
+              <TextInput
+                value={desc} onChangeText={setDesc}
+                placeholder={`比如：${name || "她"}平时说话比较直，不太表达关心，但其实很在意我…`}
+                placeholderTextColor={C.placeholder}
+                multiline
+                style={{
+                  minHeight: 100, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 14, lineHeight: 22,
+                  backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
+                  color: paperColors.ink, textAlignVertical: "top",
+                }}
+              />
+            </View>
+
+            <View>
+              <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 4, color: C.muted }}>补充校准（可多选）</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {ADJUST_CHIPS.map(c => {
+                  const on = picked.includes(c);
+                  return (
+                    <Pressable key={c} onPress={() => setPicked(prev => on ? prev.filter(x => x !== c) : [...prev, c])}
+                      style={{
+                        paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
+                        backgroundColor: on ? "rgba(246,231,168,0.88)" : "rgba(255,252,245,0.65)",
+                        borderWidth: on ? 1.5 : 1,
+                        borderColor: on ? "rgba(196,149,58,0.45)" : "rgba(255,255,255,0.45)",
+                      }}>
+                      <Text style={{ fontSize: 13, fontWeight: on ? "600" : "400", color: on ? paperColors.ink : paperColors.sub }}>{c}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <TextInput
+                value={adjusted} onChangeText={setAdjusted}
+                placeholder="或者，还有什么想补充的？（可选）" placeholderTextColor={C.placeholder}
+                style={{
+                  marginTop: 8, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, fontSize: 14,
+                  backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", color: paperColors.ink,
+                }}
+              />
             </View>
           </View>
-
-          {/* 第二步：介绍一下 TA */}
-          <View style={{ marginTop: 8 }}>
-            <Text style={{ fontSize: 16, fontWeight: "500", marginBottom: 6, color: C.text }}>
-              像向一个没见过 TA 的朋友那样，介绍一下 TA。
-            </Text>
-            <Text style={{ fontSize: 13, color: C.muted }}>
-              TA 平时怎么说话？遇到冲突时会怎样？想到什么说什么，不用很准确。
-            </Text>
-          </View>
-
-          <TextInput
-            value={desc} onChangeText={setDesc}
-            placeholder={`比如：${name || "她"}平时说话比较直，不太表达关心，但其实很在意我…`}
-            placeholderTextColor={C.placeholder}
-            multiline
-            style={{
-              minHeight: 100, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 20, fontSize: 14, lineHeight: 22,
-              backgroundColor: "rgba(255,252,245,0.72)", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)",
-              color: paperColors.ink, textAlignVertical: "top",
-            }}
-          />
-
-          {/* 可选：补充校准 */}
-          <TextInput
-            value={adjusted} onChangeText={setAdjusted}
-            placeholder="还有什么想补充的？（可选）" placeholderTextColor={C.placeholder}
-            style={{
-              paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, fontSize: 14,
-              backgroundColor: "rgba(255,252,245,0.65)", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", color: paperColors.ink,
-            }}
-          />
 
           <View style={{ gap: 8, marginTop: 8 }}>
             {/* 渲染方式选择：3D 场景（生成式低多边形）/ 图片场景（galgame） */}
@@ -421,10 +499,10 @@ export function CharacterSetupSheet({ scene, parsed, onBack, onReady }: {
             </View>
             <View>
               <CreamRipple active={entryRipple} />
-              <Button onPress={handleEnter} fullWidth>进入场景</Button>
+              <Button onPress={handleEnter} fullWidth>定妆，准备开演</Button>
             </View>
             <Text style={{ fontSize: 11, textAlign: "center", color: C.muted }}>
-              人物设定仅用于本次场景，离开后会清除。进入后觉得 TA 不太像，随时可以校准。
+              这些只用来演好这一幕，不做别的用途。
             </Text>
           </View>
         </ScrollView>

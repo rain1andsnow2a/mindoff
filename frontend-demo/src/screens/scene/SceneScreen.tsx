@@ -51,6 +51,8 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   const [pendingChar, setPendingChar] = useState<CharReady | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  // 「切到后台等待」：收起候场覆盖层但生成继续；失败仍要弹 BuildFailed 告知。
+  const [stageHidden, setStageHidden] = useState(false);
 
   const refreshCandidates = () =>
     listCandidates()
@@ -129,6 +131,7 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
   // 甩回「谁在你面前」第一步。所以 generating/genError 都用覆盖层呈现（见下方 return）。
   const buildScene = React.useCallback((char: CharReady) => {
     setGenerating(true);
+    setStageHidden(false);
     setGenError("");
     // 字段优先用「场景整理」抽出来的真实内容；走内置模板路径时回落到模板标题
     const p = parsedScene;
@@ -169,10 +172,11 @@ export function SceneScreen({ onPlay }: { onPlay: (sceneId: number, theater?: Th
     else setGenError("");
   };
 
-  // 覆盖层：搭建中 / 搭建失败。用 absolute 盖在内容之上，而不是 return 掉内容，
+  // 覆盖层：搭建中（候场） / 搭建失败。用 absolute 盖在内容之上，而不是 return 掉内容，
   // 这样 CharacterSetupSheet 不会被卸载，用户填的称呼/介绍在失败后还在。
-  const overlay = generating ? (
-    <BuildingStage />
+  // 「切到后台」只隐藏候场覆盖层，生成完成仍 onPlay 进入场景；失败时 BuildFailed 照常弹出。
+  const overlay = generating && !stageHidden ? (
+    <BuildingStage onHide={() => setStageHidden(true)} />
   ) : genError ? (
     <BuildFailed error={genError} canRetry={!!pendingChar}
       onRetry={retryBuild} onDismiss={() => setGenError("")} />
