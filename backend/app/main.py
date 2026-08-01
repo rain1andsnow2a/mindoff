@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.core.logging import install_access_token_redaction
 from app.db import Base, engine
 from app.routers.ai import chat, realtime, stt
 from app.routers.scene import candidates, role_profiles, scenes, theater_ext
@@ -21,6 +22,7 @@ from app.routers.system import app_version, auth, debug, preferences, weather
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+install_access_token_redaction()
 
 # 生产环境安全底线：默认 JWT 密钥可伪造任意用户 token，禁止带它上线
 _DEFAULT_JWT_SECRET = "dev-only-change-me"

@@ -19,6 +19,7 @@ import { speakReply, stopSpeaking } from "../../speak";
 import { useTypewriter } from "../../useTypewriter";
 import type { TheaterSceneId } from "../../theater";
 import { SceneChoice, SceneDetail } from "./shared";
+import { getSceneAdvancePhase } from "./sceneReview";
 
 const bgFill = { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 };
 const NARRATION_VOICE_KEY = "mindoff.sceneNarrationVoice";
@@ -140,7 +141,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   onEnd: () => void;
 }) {
   const theme = useTheme();
-  const [phase, setPhase] = useState<"intro" | "playing" | "paused" | "busy">("intro");
+  const [phase, setPhase] = useState<"intro" | "playing" | "paused" | "busy" | "closure" | "ending">("intro");
   const [scene, setScene] = useState<SceneDetail | null>(null);
   const [error, setError] = useState("");
   const [streamText, setStreamText] = useState("");
@@ -223,11 +224,11 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
   const sceneName = scene?.title ?? "片场";
   const latestBeat = scene?.beats?.[scene.beats.length - 1];
   const isStreaming = phase === "busy" && streamText.length > 0;
-  const isSpeaking = isStreaming || (phase === "playing" && latestBeat?.speaker === "旁白");
+  const isSpeaking = isStreaming || ((phase === "playing" || phase === "closure" || phase === "ending") && latestBeat?.speaker === "旁白");
   // 打字机：SSE token 与整段 beat（含开场白）都逐字浮现；reduced motion 直接全量
   const rawSubtitle = isStreaming ? streamText : (latestBeat?.text ?? "……");
   const typedSubtitle = useTypewriter(rawSubtitle, reducedMotion);
-  const narrationText = phase === "playing" && latestBeat?.speaker === "旁白"
+  const narrationText = (phase === "playing" || phase === "closure" || phase === "ending") && latestBeat?.speaker === "旁白"
     ? (latestBeat.text ?? "").trim()
     : "";
 
@@ -258,16 +259,19 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
       advanceTimer.current = setTimeout(() => {
         loadScene().then((s) => {
           setStreamText("");
-          if (e.data?.ended) {
+          const nextPhase = getSceneAdvancePhase(e.data);
+          if (nextPhase === "ending") {
             stopBgPoll();
-            onEnd();
+            setPhase("ending");
+          } else if (nextPhase === "closure") {
+            setPhase("closure");
           } else {
             setPhase("playing");
             // galgame 场景：后台重生成背景，轮询等新图就绪后平滑切换
             if (s?.render_kind === "dynamic_image") startBgPoll(s.bg_image ?? null);
           }
         });
-      }, e.data?.ended ? 1400 : 100);
+      }, 100);
     }
   };
 
@@ -329,26 +333,29 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
       {/* Top bar */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, zIndex: 10 }}>
-        <Pressable onPress={() => phase !== "busy" && setPhase(phase === "paused" ? "playing" : "paused")}
-          disabled={phase === "busy"}
+        <Pressable onPress={() => (phase === "playing" || phase === "paused") && setPhase(phase === "paused" ? "playing" : "paused")}
+          disabled={phase !== "playing" && phase !== "paused"}
           style={{
             flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
             backgroundColor: "rgba(255,252,245,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.38)",
+            opacity: phase === "playing" || phase === "paused" ? 1 : 0.55,
           }}>
           {phase === "paused" ? <Play size={12} color="rgba(255,255,255,0.82)" /> : <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.82)" }}>⏸</Text>}
-          <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.82)" }}>{phase === "paused" ? "继续" : "暂停"}</Text>
+          <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.82)" }}>
+            {phase === "ending" ? "已结束" : phase === "closure" ? "已暂停" : phase === "paused" ? "继续" : "暂停"}
+          </Text>
         </Pressable>
         <View style={{ alignItems: "center" }}>
           <Text style={{ fontSize: 13, fontWeight: "500", color: "rgba(255,255,255,0.9)" }}>{sceneName}</Text>
           <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{charName}</Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Pressable onPress={() => phase !== "busy" && setShowAdjust(true)}
-            disabled={phase === "busy"}
+          <Pressable onPress={() => (phase === "playing" || phase === "paused") && setShowAdjust(true)}
+            disabled={phase !== "playing" && phase !== "paused"}
             style={{
               paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
               backgroundColor: "rgba(255,252,245,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.28)",
-              opacity: phase === "busy" ? 0.4 : 1,
+              opacity: phase === "playing" || phase === "paused" ? 1 : 0.4,
             }}>
             <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>TA不太像</Text>
           </Pressable>
@@ -372,7 +379,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
       </View>
 
       {/* playing / busy：电影字幕层（半透明渐变，尽量露出背后的 3D 舞台） */}
-      {(phase === "playing" || phase === "busy") && (
+      {(phase === "playing" || phase === "busy" || phase === "closure" || phase === "ending") && (
         <LinearGradient
           colors={["transparent", "rgba(20,14,10,0.25)", "rgba(20,14,10,0.55)"]}
           style={{ paddingTop: 72, paddingHorizontal: 16, paddingBottom: 14, zIndex: 10 }}>
@@ -436,6 +443,9 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
 
           {phase === "playing" && (
             <View style={{ marginTop: 12, gap: 8 }}>
+              <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.68)", marginBottom: 2 }}>
+                你想怎么回应？
+              </Text>
               {(scene?.choices ?? []).map(choice => (
                 <Pressable key={choice.id} onPress={() => handleChoice(choice)}
                   style={({ pressed }) => ({
@@ -476,7 +486,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
                 </View>
               )}
               <Pressable onPress={onEnd} style={{ paddingVertical: 6, alignItems: "center" }}>
-                <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>离开场景</Text>
+                <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.68)" }}>到这里就好</Text>
               </Pressable>
             </View>
           )}
@@ -484,6 +494,35 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
           {phase === "busy" && (
             <View style={{ paddingTop: 12, alignItems: "center" }}>
               <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>正在继续…</Text>
+            </View>
+          )}
+
+          {(phase === "closure" || phase === "ending") && (
+            <View style={{ paddingTop: 14, gap: 10 }}>
+              <Text style={{ fontSize: 13, lineHeight: 20, textAlign: "center", color: "rgba(255,255,255,0.78)" }}>
+                {phase === "closure" ? "好像已经说到这里了。要把这一幕停在这里吗？" : "这一幕在这里停下了"}
+              </Text>
+              <Pressable onPress={onEnd}
+                style={({ pressed }) => ({
+                  paddingVertical: 12,
+                  borderRadius: 999,
+                  alignItems: "center",
+                  backgroundColor: "rgba(246,231,168,0.88)",
+                  opacity: pressed ? 0.78 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                })}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: paperColors.ink2 }}>回顾刚才的回应</Text>
+              </Pressable>
+              {phase === "closure" && (
+                <Pressable onPress={() => setPhase("playing")}
+                  style={({ pressed }) => ({
+                    paddingVertical: 10,
+                    alignItems: "center",
+                    opacity: pressed ? 0.65 : 1,
+                  })}>
+                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.78)" }}>我还想再说一句</Text>
+                </Pressable>
+              )}
             </View>
           )}
         </LinearGradient>
@@ -531,7 +570,7 @@ export function ScenePlay({ sceneId, theater, onEnd }: {
                   <Text style={{ fontSize: 14, color: paperColors.sub }}>TA 不太像</Text>
                 </Pressable>
                 <Pressable onPress={onEnd} style={{ paddingVertical: 8, alignItems: "center" }}>
-                  <Text style={{ fontSize: 13, color: paperColors.dim }}>离开场景</Text>
+                  <Text style={{ fontSize: 13, color: paperColors.dim }}>到这里就好</Text>
                 </Pressable>
               </View>
             ) : (

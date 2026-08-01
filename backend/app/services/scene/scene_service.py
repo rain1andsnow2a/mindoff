@@ -15,11 +15,11 @@ from app.services.scene import stage
 from app.services.scene.scene_turn_images import schedule_bg_regen
 
 
-def advance(db: Session, scene: Scene, label: str) -> dict[str, Any]:
+def advance(db: Session, scene: Scene, label: str, *, response_source: str = "choice") -> dict[str, Any]:
     """按用户回应 label 推进一幕并落库。返回 theater.advance 的原始结果。
 
     beats 追加而非替换（保住完整对白史供结算取材）；dynamic_image 场景推进后
-    异步刷新背景图（未结束时）。调用方需先校验 scene 归属与未结算状态。
+    异步刷新背景图。场景只由用户主动结算。调用方需先校验 scene 归属与未结算状态。
     """
     res = theater.advance(
         {"setting": scene.setting, "beats": scene.beats,
@@ -29,7 +29,11 @@ def advance(db: Session, scene: Scene, label: str) -> dict[str, Any]:
     scene.turn = scene.turn + 1
     scene.beats = (scene.beats or []) + res["beats"]
     scene.choices = res["choices"]
-    scene.history = (scene.history or []) + [{"turn": scene.turn, "choice": label}]
+    scene.history = (scene.history or []) + [{
+        "turn": scene.turn,
+        "choice": label,
+        "source": "custom" if response_source == "custom" else "choice",
+    }]
     db.commit()
     db.refresh(scene)
     if not res.get("ended") and scene.render_kind == "dynamic_image":

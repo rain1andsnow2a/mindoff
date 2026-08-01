@@ -462,7 +462,7 @@ export default function App() {
             {screen === "scene" && <SceneScreen onPlay={(id, theater) => { setSceneId(id); if (theater) setSceneTheater(theater); go("scene-play"); }} />}
             {screen === "scene-play" && <ScenePlay sceneId={sceneId} theater={sceneTheater} onEnd={() => go("scene-end")} />}
             {screen === "scene-end" && (
-              <SceneEnd onBack={() => { go("scene"); setTab("scene"); }}
+              <SceneEnd sceneId={sceneId} onBack={() => { go("scene"); setTab("scene"); }}
                 onReplay={() => go("scene-play")} />
             )}
 

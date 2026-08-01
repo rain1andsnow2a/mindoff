@@ -6,11 +6,15 @@ RN 端 <-> 本网关 <-> 阶跃 WS。连接阶跃时注入 Authorization（key �
 """
 import asyncio
 import json
+import logging
 from typing import Any, Callable, Optional
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidStatus, WebSocketException
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # 上游转写事件 -> 角色映射（用于语音通话旁路落库）
 _TRANSCRIPT_EVENT_ROLES: dict[str, str] = {
@@ -18,6 +22,33 @@ _TRANSCRIPT_EVENT_ROLES: dict[str, str] = {
     "response.audio_transcript.done": "assistant",
     "response.text.done": "assistant",
 }
+
+
+async def close_with_error(
+    client_ws,
+    *,
+    code: str,
+    message: str,
+    close_code: int = 1013,
+    retryable: bool = True,
+    retry_after_ms: int | None = None,
+) -> None:
+    """向已接受的下游连接发送稳定错误协议，然后尽力关闭连接。"""
+    error: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "retryable": retryable,
+    }
+    if retry_after_ms is not None:
+        error["retry_after_ms"] = retry_after_ms
+    try:
+        await client_ws.send_text(json.dumps({"type": "error", "error": error}))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        await client_ws.close(code=close_code)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def extract_transcript(msg: str) -> tuple[str, str] | None:
@@ -76,34 +107,71 @@ async def relay(
     s = get_settings()
     headers = {"Authorization": f"Bearer {s.stepfun_api_key}"}
 
-    async with connect(upstream_url, additional_headers=headers, max_size=None) as up:
-        if on_open is not None:
-            await up.send(json.dumps(on_open))
+    try:
+        async with connect(upstream_url, additional_headers=headers, max_size=None) as up:
+            if on_open is not None:
+                await up.send(json.dumps(on_open))
 
-        async def client_to_up() -> None:
+            async def client_to_up() -> None:
+                try:
+                    while True:
+                        msg = await client_ws.receive_text()
+                        await up.send(msg)
+                except Exception:
+                    pass
+
+            async def up_to_client() -> None:
+                try:
+                    async for msg in up:
+                        if isinstance(msg, bytes):
+                            await client_ws.send_bytes(msg)
+                        else:
+                            if on_upstream_text is not None:
+                                try:
+                                    on_upstream_text(msg)
+                                except Exception:  # noqa: BLE001
+                                    pass  # 旁路观察者绝不影响转发
+                            await client_ws.send_text(msg)
+                except Exception:
+                    pass
+
+            tasks = {asyncio.create_task(client_to_up()), asyncio.create_task(up_to_client())}
             try:
-                while True:
-                    msg = await client_ws.receive_text()
-                    await up.send(msg)
-            except Exception:
-                pass
-
-        async def up_to_client() -> None:
-            try:
-                async for msg in up:
-                    if isinstance(msg, bytes):
-                        await client_ws.send_bytes(msg)
-                    else:
-                        if on_upstream_text is not None:
-                            try:
-                                on_upstream_text(msg)
-                            except Exception:  # noqa: BLE001
-                                pass  # 旁路观察者绝不影响转发
-                        await client_ws.send_text(msg)
-            except Exception:
-                pass
-
-        tasks = {asyncio.create_task(client_to_up()), asyncio.create_task(up_to_client())}
-        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for t in pending:
-            t.cancel()
+                _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                pending = {task for task in tasks if not task.done()}
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+    except InvalidStatus as exc:
+        status = exc.response.status_code
+        if status == 429:
+            logger.warning("Upstream WebSocket rate limited the request (HTTP 429)")
+            await close_with_error(
+                client_ws,
+                code="upstream_rate_limited",
+                message="语音服务正在忙，请稍等几秒再试",
+                retry_after_ms=3000,
+            )
+            return
+        logger.warning("Upstream WebSocket rejected the request (HTTP %s)", status)
+        await close_with_error(
+            client_ws,
+            code="upstream_rejected",
+            message="语音服务暂时无法连接，请稍后重试",
+        )
+    except (OSError, TimeoutError) as exc:
+        logger.warning("Upstream WebSocket connection failed: %s", type(exc).__name__)
+        await close_with_error(
+            client_ws,
+            code="upstream_unavailable",
+            message="语音服务暂时无法连接，请稍后重试",
+        )
+    except WebSocketException as exc:
+        logger.warning("Upstream WebSocket protocol failed: %s", type(exc).__name__)
+        await close_with_error(
+            client_ws,
+            code="upstream_unavailable",
+            message="语音服务暂时无法连接，请稍后重试",
+        )

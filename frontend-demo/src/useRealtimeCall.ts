@@ -27,6 +27,7 @@ import {
   replaceCumulativeTranscript,
   type SpeechGate,
 } from "./voice/speechGuards";
+import { parseVoiceStreamError } from "./voice/streamErrors";
 
 export type CallStatus =
   | "idle"
@@ -109,6 +110,8 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const wsRef = useRef<WebSocket | null>(null);
   const subRef = useRef<EventSubscription | null>(null);
   const convIdRef = useRef<number | null>(null);
+  const connectionStateRef = useRef<"idle" | "starting" | "active">("idle");
+  const sessionIdRef = useRef(0);
   const closedRef = useRef(false);
   const turnIdRef = useRef(0);
   // 续说合并：pendingRef 暂存已定稿但尚未发送的整句；graceTimerRef 是宽限窗计时器。
@@ -130,6 +133,7 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   }, []);
 
   const cleanup = useCallback(() => {
+    connectionStateRef.current = "idle";
     subRef.current?.remove();
     subRef.current = null;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
@@ -150,6 +154,7 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
 
   const stop = useCallback(() => {
     closedRef.current = true;
+    sessionIdRef.current += 1;
     cleanup();
     setSceneSuggestion(null);
     speechGateRef.current = createSpeechGate();
@@ -235,11 +240,14 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   );
 
   const start = useCallback(async () => {
+    if (connectionStateRef.current !== "idle") return;
     if (!isPcmAvailable) {
       setError("实时通话需在真机上使用");
       setStatus("error");
       return;
     }
+    connectionStateRef.current = "starting";
+    const currentSessionId = ++sessionIdRef.current;
     setError(null);
     setTurns([]);
     setLiveUser("");
@@ -252,8 +260,10 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       if (!perm.granted) {
         setError("需要麦克风权限才能通话");
         setStatus("error");
+        connectionStateRef.current = "idle";
         return;
       }
+      if (sessionIdRef.current !== currentSessionId) return;
 
       // 复用一个会话，桌宠在整通话里有记忆连续性
       let petId: number | null = null;
@@ -266,20 +276,30 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       // 以 voice_call 模式落库：夜间场景推荐管线只扫 voice_call 会话，
       // 误用 free_chat 会让推荐永远空转（后端 scene_recommend 按 mode 过滤）。
       const conv = await createConversation(petId, "voice_call");
+      if (sessionIdRef.current !== currentSessionId) return;
       convIdRef.current = conv.id;
 
       const ws = new WebSocket(wsAuthUrl("/ai/stt/stream"));
       wsRef.current = ws;
 
       ws.onopen = async () => {
-        if (closedRef.current) return;
+        if (closedRef.current || sessionIdRef.current !== currentSessionId) {
+          try { ws.close(); } catch { /* best-effort cancellation */ }
+          return;
+        }
         ws.send(JSON.stringify({ event_id: eid(), ...SESSION_UPDATE }));
         const ok = await startPcmCapture();
+        if (closedRef.current || sessionIdRef.current !== currentSessionId) {
+          if (ok) void stopPcmCapture();
+          try { ws.close(); } catch { /* best-effort cancellation */ }
+          return;
+        }
         if (!ok) {
           setError("麦克风启动失败");
           stop();
           return;
         }
+        connectionStateRef.current = "active";
         subRef.current = addAudioChunkListener(({ base64, rms }) => {
           setLevel(rms);
           const previous = speechGateRef.current;
@@ -303,10 +323,19 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
       };
 
       ws.onmessage = (ev) => {
+        if (sessionIdRef.current !== currentSessionId) return;
         let msg: any;
         try {
           msg = JSON.parse(typeof ev.data === "string" ? ev.data : "");
         } catch {
+          return;
+        }
+        const streamError = parseVoiceStreamError(msg);
+        if (streamError) {
+          closedRef.current = true;
+          setError(streamError.message);
+          cleanup();
+          setStatus("error");
           return;
         }
         switch (msg?.type) {
@@ -336,27 +365,29 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
             speechGateRef.current = createSpeechGate();
             latestTranscriptRef.current = "";
             break;
-          case "error":
-            setError(msg?.error?.message || "识别出错了");
-            break;
           default:
             break;
         }
       };
 
       ws.onerror = () => {
-        if (closedRef.current) return;
+        if (closedRef.current || sessionIdRef.current !== currentSessionId) return;
+        closedRef.current = true;
         setError("连接中断，请重试");
         cleanup();
         setStatus("error");
       };
 
       ws.onclose = () => {
-        if (closedRef.current) return;
+        if (closedRef.current || sessionIdRef.current !== currentSessionId) return;
+        closedRef.current = true;
+        setError("语音连接已结束，请重试");
         cleanup();
-        setStatus("ended");
+        setStatus("error");
       };
     } catch (e: any) {
+      if (sessionIdRef.current !== currentSessionId) return;
+      closedRef.current = true;
       setError(e?.message || "无法开始通话");
       cleanup();
       setStatus("error");

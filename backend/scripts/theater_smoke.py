@@ -45,7 +45,7 @@ def main() -> None:
         sid = scene["id"]
         print("  title:", scene["title"], "| choices:", [ch["label"] for ch in scene["choices"]])
 
-        # 推进剧情，直到 ended
+        # 连续推进四轮；场景不因固定轮数自动结束
         for _ in range(4):
             cur = c.get(f"{BASE}/scenes/{sid}", headers=auth).json()
             if not cur["choices"]:

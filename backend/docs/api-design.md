@@ -188,7 +188,21 @@
 | POST | `/scenes/{id}/plays/{playId}/choices` ★ | 提交一次回应选择 → 推进剧情（体验另一种表达） |
 | POST | `/scenes/{id}/plays/{playId}/settlement` ★ | 结束 → 生成**结算卡** |
 
+**POST `/scenes/{id}/summary`** —— 为「走出片场」生成回看引导。响应包含：
+
+- `key_quote`：用户表达原句；路由会用真实 history 做确定性兜底
+- `reflection_options`：3 条可被用户否定的第一人称视角候选
+- `companion_comment`、`action_hint`：陪伴落款与可选小动作
+- `response_count`、`custom_response_count`、`setting_label`：由场景记录确定，不交给模型推断
+
+**POST `/scenes/{id}/settlement`** —— 用户最后确认后才写入视角卡。只有请求明确携带
+`action_text` 时才创建待办；前端选择「只是看见就好」时不发送该字段。
+
 > 剧情生成与推进（`plays`、`choices`）同样可返回 `text/event-stream`，逐句吐视觉小说文本。
+> 场景不设固定最大轮数，也不会由模型强制结束。推进完成的 `done` 事件保持
+> `ended: false`；从第 2 轮起可通过 `closure_ready: true` 提示前端展示自然收束建议，
+> 用户仍可继续回应，并可随时主动进入 `settlement`。完整历史持久化，模型推理仅使用最近窗口，
+> 避免长场景撑大上下文。
 > MVP 下 **plays 子资源复用 Scene 的当前状态**（`play_id` 映射到 `scene_id`），
 > 既保留 REST 契约，又避免新增独立 Play 表。后续如需支持同一 Scene 多次重玩，再拆分模型。
 

@@ -6,6 +6,8 @@
 注意（务必转达 RN）：流式转录返回的 transcription.delta.text 是**累计全量文本**，
 前端应整体替换展示，不要再追加拼接。
 """
+import asyncio
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile, WebSocket
 from pydantic import BaseModel
 
@@ -15,9 +17,27 @@ from app.models.user import User
 from app.stepfun.asr import transcribe_once
 from app.stepfun.constants import WS_ASR_STREAM
 from app.stepfun.tts import TtsError, synthesize_and_store
-from app.stepfun.ws_relay import relay
+from app.stepfun.ws_relay import close_with_error, relay
 
 router = APIRouter(prefix="/ai", tags=["stt"])
+
+# 阶跃流式 ASR 对并发连接有限制。前端异常连点或页面重复挂载时，同一用户只允许
+# 一条活跃链路，避免旧连接尚未释放就继续冲击上游并触发 HTTP 429。
+_active_stream_users: set[int] = set()
+_active_stream_users_lock = asyncio.Lock()
+
+
+async def _claim_stream(user_id: int) -> bool:
+    async with _active_stream_users_lock:
+        if user_id in _active_stream_users:
+            return False
+        _active_stream_users.add(user_id)
+        return True
+
+
+async def _release_stream(user_id: int) -> None:
+    async with _active_stream_users_lock:
+        _active_stream_users.discard(user_id)
 
 
 @router.post("/stt")
@@ -64,9 +84,21 @@ async def stt_stream(ws: WebSocket):
     需携带 ?token=<access_token>；无效即 4401 关闭，不中继上游付费模型。
     """
     await ws.accept()
-    if user_id_from_token(ws.query_params.get("token")) is None:
+    user_id = user_id_from_token(ws.query_params.get("token"))
+    if user_id is None:
         await ws.close(code=4401)
+        return
+    if not await _claim_stream(user_id):
+        await close_with_error(
+            ws,
+            code="stt_session_active",
+            message="已有一段语音正在连接，请稍等后再试",
+            retry_after_ms=1000,
+        )
         return
     s = get_settings()
     url = f"{s.stepfun_ws_base.rstrip('/')}{WS_ASR_STREAM}?model={s.step_asr_stream_model}"
-    await relay(ws, url)
+    try:
+        await relay(ws, url)
+    finally:
+        await _release_stream(user_id)

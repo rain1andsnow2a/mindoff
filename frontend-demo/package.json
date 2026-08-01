@@ -1,6 +1,6 @@
 {
   "name": "mindoff-mobile",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test:voice": "node scripts/test-voice-guards.mjs"
+    "test:voice": "node scripts/test-voice-guards.mjs",
+    "test:scene": "node scripts/test-scene-review.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",

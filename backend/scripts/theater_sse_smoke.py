@@ -1,6 +1,7 @@
 """片场 SSE 流式冒烟：需先启动服务。
     MINDOFF_PORT=8050 PYTHONPATH=. PYTHONUTF8=1 uv run python scripts/theater_sse_smoke.py
-断言：create?stream 收到 beat/choices/done(scene_id)；choices?stream 逐句 beat + done(ended)。
+断言：create?stream 收到 beat/choices/done(scene_id)；choices?stream 逐句 beat +
+done(ended=false/closure_ready)。
 """
 import json
 import os
@@ -59,7 +60,8 @@ def main() -> None:
         print(f"[choices stream] {len(tokens2)} 个 token, 叙事:", "".join(tokens2)[:60].replace(chr(10), " "))
         print("  done:", done2)
         assert len(tokens2) >= 3 and "".join(tokens2).strip(), "推进应有多段 token"
-        assert done2 and "ended" in done2, "应有 done+ended"
+        assert done2 and done2.get("ended") is False, "场景不应自动结束"
+        assert "closure_ready" in done2, "应有可选收束提示"
 
         # 持久化确认
         after = c.get(f"{BASE}/scenes/{sid}", headers=auth).json()

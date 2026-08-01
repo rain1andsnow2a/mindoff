@@ -153,7 +153,7 @@ def _play_id_match(s: Scene, play_id: str) -> bool:
     return play_id in (str(s.id), f"play-{s.id}")
 
 
-def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
+def _advance_stream_gen(scene_id: int, label: str, turn: int, response_source: str = "choice"):
     """流式推进的 SSE 生成器（被 /choices 与 /plays/{play_id}/choices 复用）。"""
     db2 = SessionLocal()
     try:
@@ -162,9 +162,10 @@ def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
             yield _sse("error", {"message": "场景不存在"})
             return
         narrative, choices = "", []
+        closure_ready = False
         for kind, val in theater.stream_advance_tokens(
             {"setting": sc.setting, "beats": sc.beats, "history": sc.history, "turn": sc.turn},
-            label, final=final,
+            label,
         ):
             if kind == "token":
                 narrative += val
@@ -172,17 +173,28 @@ def _advance_stream_gen(scene_id: int, label: str, turn: int, final: bool):
             elif kind == "choices":
                 choices = val
                 yield _sse("choices", {"choices": val})
-        ended = final or not choices
+            elif kind == "closure":
+                closure_ready = bool(val)
         sc.turn = turn
         # DAY-228：beats 追加而非整体替换，保住完整对白史，供结算摘要取材
         sc.beats = (sc.beats or []) + [{"speaker": "旁白", "text": narrative.strip() or "……"}]
-        sc.choices = [] if ended else choices
-        sc.history = (sc.history or []) + [{"turn": turn, "choice": label}]
+        sc.choices = choices
+        sc.history = (sc.history or []) + [{
+            "turn": turn,
+            "choice": label,
+            "source": "custom" if response_source == "custom" else "choice",
+        }]
         db2.commit()
         # DAY-229：galgame 场景推进后异步刷新背景图（不阻塞 SSE，旧图保留到新图就绪）
-        if not ended and sc.render_kind == "dynamic_image":
+        if sc.render_kind == "dynamic_image":
             schedule_bg_regen(sc.id)
-        yield _sse("done", {"scene_id": sc.id, "turn": turn, "ended": ended})
+        yield _sse("done", {
+            "scene_id": sc.id,
+            "turn": turn,
+            "ended": False,
+            # 第一次回应不主动建议收束；从第二次起只给建议，场景是否结束仍由用户决定。
+            "closure_ready": closure_ready and turn >= 2,
+        })
     finally:
         db2.close()
 
@@ -374,7 +386,7 @@ def play_choose(
 
     if not stream:
         # 推进逻辑集中在 scene_service.advance（与 /scenes/{id}/choices 复用）
-        scene_service.advance(db, s, chosen["label"])
+        scene_service.advance(db, s, chosen["label"], response_source="choice")
         background_tasks.add_task(
             capture_best_effort, user_id=user.id, source_type="scene",
             source_id=f"scene:{s.id}:turn:{s.turn}", text=chosen["label"],
@@ -385,9 +397,8 @@ def play_choose(
         )
 
     turn = s.turn + 1
-    final = turn >= theater.MAX_TURNS
     return StreamingResponse(
-        _advance_stream_gen(scene_id, chosen["label"], turn, final),
+        _advance_stream_gen(scene_id, chosen["label"], turn),
         media_type="text/event-stream",
         background=BackgroundTask(
             capture_best_effort, user_id=user.id, source_type="scene",
@@ -453,7 +464,12 @@ def choose(
 
     if not stream:
         # 推进逻辑集中在 scene_service.advance（与 /plays/{id}/choices 复用）
-        scene_service.advance(db, s, label)
+        scene_service.advance(
+            db,
+            s,
+            label,
+            response_source="custom" if body.custom_text and body.custom_text.strip() else "choice",
+        )
         background_tasks.add_task(
             capture_best_effort, user_id=user.id, source_type="scene",
             source_id=f"scene:{s.id}:turn:{s.turn}", text=label,
@@ -461,10 +477,13 @@ def choose(
         return SceneOut.model_validate(s)
 
     turn = s.turn + 1
-    final = turn >= theater.MAX_TURNS
-
     return StreamingResponse(
-        _advance_stream_gen(scene_id, label, turn, final),
+        _advance_stream_gen(
+            scene_id,
+            label,
+            turn,
+            "custom" if body.custom_text and body.custom_text.strip() else "choice",
+        ),
         media_type="text/event-stream",
         background=BackgroundTask(
             capture_best_effort, user_id=user.id, source_type="scene",
@@ -493,28 +512,33 @@ def settle_scene(scene_id: int, body: SettlementIn, user: User = Depends(get_cur
 
 @router.post("/{scene_id}/summary")
 def scene_summary(scene_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """生成结算摘要：LLM 根据场景对话史产出 key_quote / companion_comment / action_hint。"""
+    """生成「走出片场」回看数据：事实统计由服务端确定，LLM 只给可否定的视角候选。"""
     s = _get_owned(db, user.id, scene_id)
     summary = theater.summarize({
         "setting": s.setting,
         "beats": s.beats,
         "history": s.history,
     })
-    # DAY-228：LLM 失败/返空时 key_quote 退成占位「……」，这里用场景原文补足：
-    # 最后一条对白 → 用户最后一次选择；都没有则返回空串，由前端隐藏该区块。
+    # LLM 失败/返空时必须优先回到用户真实提交的选择/自由输入；旁白只能作为旧数据兜底。
     kq = str(summary.get("key_quote") or "").strip()
     if not kq or kq == "……":
         summary["key_quote"] = _fallback_key_quote(s)
+    history = [h for h in (s.history or []) if isinstance(h, dict) and str(h.get("choice") or "").strip()]
+    summary.update({
+        "response_count": len(history),
+        "custom_response_count": sum(1 for h in history if h.get("source") == "custom"),
+        "setting_label": str(s.setting or s.title or "这一幕")[:60],
+    })
     return summary
 
 
 def _fallback_key_quote(s: Scene) -> str:
-    for b in reversed(s.beats or []):
-        if isinstance(b, dict) and (b.get("text") or "").strip():
-            return str(b["text"]).strip()[:30]
     for h in reversed(s.history or []):
         if isinstance(h, dict) and (h.get("choice") or "").strip():
             return str(h["choice"]).strip()[:30]
+    for b in reversed(s.beats or []):
+        if isinstance(b, dict) and (b.get("text") or "").strip():
+            return str(b["text"]).strip()[:30]
     return ""
 
 

@@ -16,7 +16,8 @@ from app.llm import get_chat_model
 
 logger = logging.getLogger(__name__)
 
-MAX_TURNS = 3  # 约 3 轮选择后进入可结算态
+# 用户可以自由继续场景；仅限制每次发给模型的最近上下文，数据库仍保留完整历史。
+CONTEXT_WINDOW = 12
 
 # 所有要 JSON 的 prompt 都追加这段：模型在中文正文里吐英文双引号是 JSON 解析失败的头号原因
 _JSON_RULE = (
@@ -36,8 +37,7 @@ _OPEN_SYSTEM = """你是 MindOff「片场」的编剧。把用户一段牵动他
 _CONT_SYSTEM = """继续这个视觉小说场景。用户刚选了一种回应，请顺着自然写下去。
 规则同前：不改事实、不治疗、温柔克制。只输出 JSON：
 {"beats": [{"speaker","text"}] (1-3 条),
- "choices": [{"id","label"}] (剧情自然收束则给空数组 []),
- "ended": true/false}""" + _JSON_RULE
+ "choices": [{"id","label"}] (始终给 2-3 个可继续的回应，即使语义已接近收束)}""" + _JSON_RULE
 
 
 # ─── 解析/规范化 ────────────────────────────────────────────────────────────
@@ -198,6 +198,13 @@ def _fallback_opening(desc: str) -> dict:
             {"id": "2", "label": "先什么都不说，待一会儿"},
         ],
     }
+
+
+def _fallback_continue_choices() -> list[dict]:
+    return [
+        {"id": "1", "label": "再说一句心里真正想说的"},
+        {"id": "2", "label": "先静静感受这一刻"},
+    ]
 
 
 def _generate(desc: str) -> dict:
@@ -469,8 +476,8 @@ def advance(scene: dict, chosen_label: str) -> dict:
     try:
         ctx = {
             "setting": scene.get("setting"),
-            "history": scene.get("history"),
-            "last_beats": scene.get("beats"),
+            "history": (scene.get("history") or [])[-CONTEXT_WINDOW:],
+            "last_beats": (scene.get("beats") or [])[-CONTEXT_WINDOW:],
             "chosen": chosen_label,
             "turn": turn,
         }
@@ -481,28 +488,26 @@ def advance(scene: dict, chosen_label: str) -> dict:
             ],
             temperature=0.8,
         )
-        ended = bool(data.get("ended")) or turn >= MAX_TURNS
         return {
             "beats": _norm_beats(data.get("beats")),
-            "choices": [] if ended else _norm_choices(data.get("choices")),
-            "ended": ended,
+            "choices": _norm_choices(data.get("choices")) or _fallback_continue_choices(),
+            # 结束权归用户；保留字段仅兼容既有调用方，不再由模型或轮数自动置 True。
+            "ended": False,
         }
     except Exception as e:  # noqa: BLE001
         logger.warning("[theater] advance fallback: %s", e)
         return {
             "beats": [{"speaker": "旁白", "text": "你们之间安静了一会儿，好像有什么被轻轻放下了。"}],
-            "choices": [],
-            "ended": True,
+            "choices": _fallback_continue_choices(),
+            "ended": False,
         }
 
 
 # ─── 流式（SSE，按行浮现）────────────────────────────────────────────────────
 
 _MARKER = "###CHOICES###"
-_FALLBACK_CHOICES = [
-    {"id": "1", "label": "说出没说出口的话"},
-    {"id": "2", "label": "先静静待一会儿"},
-]
+_CLOSURE_MARKER = "###CLOSURE###"
+_FALLBACK_CHOICES = _fallback_continue_choices()
 
 _OPEN_TOKEN_SYSTEM = f"""你是 MindOff「片场」的编剧。把用户一段牵动他的经历，改写成温柔的
 视觉小说式场景，让用户尝试"另一种表达/回应"。不改真实事实、不做心理诊断/治疗，
@@ -511,8 +516,11 @@ _OPEN_TOKEN_SYSTEM = f"""你是 MindOff「片场」的编剧。把用户一段�
 
 _CONT_TOKEN_SYSTEM = """继续这个视觉小说场景，用户刚选了一种回应，顺着自然写下去。
 不改事实、不治疗、温柔克制。先写 1-3 句场景/对白。{tail}"""
-_CONT_TOKEN_CHOICES = f"写完后另起一行输出标记 {_MARKER}，其后写 2-3 个简短回应选项，用｜分隔。"
-_CONT_TOKEN_FINAL = "这是最后一幕，请自然收束，不要输出任何标记或选项。"
+_CONT_TOKEN_CHOICES = f"""写完后另起一行输出标记 {_MARKER}，其后写 2-3 个简短回应选项，用｜分隔。
+再另起一行输出标记 {_CLOSURE_MARKER}，其后只能写 ready 或 continue：
+- 只有当用户的核心意思已经表达清楚、当前对话形成自然闭环时写 ready；
+- 仍有明显未回应内容或只是普通停顿时写 continue；
+- 不得因为轮数多而写 ready。即使写 ready，也必须照常提供回应选项，结束由用户决定。"""
 
 
 def _parse_choices_text(text: str) -> list[dict]:
@@ -522,10 +530,11 @@ def _parse_choices_text(text: str) -> list[dict]:
     return [{"id": str(i + 1), "label": l[:60]} for i, l in enumerate(labels[:3])]
 
 
-def _stream_tokens(messages, *, want_choices: bool):
+def _stream_tokens(messages, *, want_choices: bool, want_closure: bool = False):
     """逐 token 直传叙事文本：yield ('token', piece)（打字机效果）。
 
-    遇到 ###CHOICES### 标记后转为收集选项文本，结束时 yield ('choices', [...])（want_choices 时）。
+    遇到 ###CHOICES### 标记后转为收集选项文本，结束时 yield ('choices', [...])（want_choices 时）；
+    want_closure 时再解析 ###CLOSURE###，仅返回是否建议收束，不改变场景状态。
     全程只在 marker 处切一刀、不做逐行/JSON 解析——叙事就是模型 token 原样透传。
     只保留末尾 len(marker)-1 个字符待定，防止把跨 chunk 的半个 marker 当正文吐出去。
     """
@@ -556,12 +565,21 @@ def _stream_tokens(messages, *, want_choices: bool):
         if not choices_mode and hold:
             yield ("token", hold)
         if want_choices:
-            yield ("choices", _parse_choices_text(choices_buf) or _FALLBACK_CHOICES)
+            choices_text = choices_buf
+            closure_ready = False
+            if want_closure and _CLOSURE_MARKER in choices_buf:
+                choices_text, closure_text = choices_buf.split(_CLOSURE_MARKER, 1)
+                closure_ready = closure_text.strip().lower().startswith("ready")
+            yield ("choices", _parse_choices_text(choices_text) or _FALLBACK_CHOICES)
+            if want_closure:
+                yield ("closure", closure_ready)
     except Exception as e:  # noqa: BLE001
         logger.warning("[theater] stream tokens fallback: %s", e)
         yield ("token", "（场景在这里轻轻顿了一下。）")
         if want_choices:
             yield ("choices", _FALLBACK_CHOICES)
+        if want_closure:
+            yield ("closure", False)
 
 
 def stream_opening_tokens(desc: str):
@@ -571,38 +589,67 @@ def stream_opening_tokens(desc: str):
     )
 
 
-def stream_advance_tokens(scene: dict, chosen_label: str, *, final: bool):
-    """推进：逐 token yield 叙事；final=True 时不产选项（收束）。"""
-    sys = _CONT_TOKEN_SYSTEM.format(tail=_CONT_TOKEN_FINAL if final else _CONT_TOKEN_CHOICES)
-    ctx = {"setting": scene.get("setting"), "history": scene.get("history"),
-           "last": scene.get("beats"), "chosen": chosen_label}
+def stream_advance_tokens(scene: dict, chosen_label: str):
+    """推进并持续提供选项；closure 仅供前端建议收束，不会自动结束。"""
+    sys = _CONT_TOKEN_SYSTEM.format(tail=_CONT_TOKEN_CHOICES)
+    ctx = {
+        "setting": scene.get("setting"),
+        "history": (scene.get("history") or [])[-CONTEXT_WINDOW:],
+        "last": (scene.get("beats") or [])[-CONTEXT_WINDOW:],
+        "chosen": chosen_label,
+    }
     return _stream_tokens(
         [SystemMessage(content=sys), HumanMessage(content=json.dumps(ctx, ensure_ascii=False))],
-        want_choices=not final,
+        want_choices=True,
+        want_closure=True,
     )
 
 
 # ─── 结算摘要（LLM 生成结算卡内容）─────────────────────────────────────────────
 
-_SUMMARY_SYSTEM = """你是 MindOff「片场」的陪伴角色。场景刚结束，请根据整段对话为用户生成一张结算卡。
+_SUMMARY_SYSTEM = """你是 MindOff「片场」的回看引导者。场景刚结束，请帮助用户从剧情中退到观众席，
+但不要替用户宣布这段经历的唯一意义。
 规则：
 - 温柔、克制、不说教、不治疗，绝不贴标签或做诊断。
 - key_quote：从用户在对话中说过的原话里，摘出最有力量/最有表达意义的一句（≤30 字）。如果用户的表达都很短，直接用最有触动的那句。
-- companion_comment：以陪伴角色身份写一句话（≤40 字），肯定用户的表达/勇气，不评价对错。
-- action_hint：一句极短的未来暗示（≤20 字），让用户感到这次表达有延续的可能。
-只输出 JSON：{"key_quote": "...", "companion_comment": "...", "action_hint": "..."}""" + _JSON_RULE
+- reflection_options：给 3 个第一人称视角候选（每条≤32字），回答「坐在观众席看，当时的我最想让别人知道什么」。
+  候选只能基于用户明确说过的内容，允许用户否定；不能写「你真正害怕/其实你是」等断言，也不能猜对方内心。
+- companion_comment：以陪伴角色身份写一句话（≤40 字），陪用户把这一幕暂时放下，不评价对错或声称已经疗愈。
+- action_hint：一个可选的、可撤回的小动作（≤20 字），使用「下次可以先……」这类非命令语气。
+只输出 JSON：{"key_quote": "...", "reflection_options": ["...", "...", "..."],
+"companion_comment": "...", "action_hint": "..."}""" + _JSON_RULE
 
 _SUMMARY_FALLBACK = {
     "key_quote": "……",
-    "companion_comment": "这里没有答案，也没有正确的说法。你表达了，这就够了。",
-    "action_hint": "带着这份感受，继续下一步",
+    "reflection_options": [
+        "我不是不在乎，只是当时不知道怎么表达",
+        "那时的我，也在尽力面对这一刻",
+        "我希望自己的感受能被认真听见",
+    ],
+    "companion_comment": "这一幕不需要马上得出答案，我们可以先把它放在这里。",
+    "action_hint": "下次可以先说清自己的感受",
 }
 
 
+def _norm_reflection_options(value: Any) -> list[str]:
+    """视角候选只做可否定的第一人称提示；去空、去重并固定为三条。"""
+    out: list[str] = []
+    for item in value if isinstance(value, list) else []:
+        text = str(item or "").strip().strip("。")[:32]
+        if text and text not in out:
+            out.append(text)
+    for fallback in _SUMMARY_FALLBACK["reflection_options"]:
+        if len(out) >= 3:
+            break
+        if fallback not in out:
+            out.append(fallback)
+    return out[:3]
+
+
 def summarize(scene: dict) -> dict:
-    """根据场景对话历史生成结算摘要：key_quote / companion_comment / action_hint。"""
-    beats = scene.get("beats") or []
-    history = scene.get("history") or []
+    """生成回看引导：原话、可否定的视角候选、陪伴落款与可选小动作。"""
+    beats = (scene.get("beats") or [])[-CONTEXT_WINDOW:]
+    history = (scene.get("history") or [])[-CONTEXT_WINDOW:]
     setting = scene.get("setting") or ""
 
     # 拼装对话记录给 LLM
@@ -629,10 +676,10 @@ def summarize(scene: dict) -> dict:
         )
         return {
             "key_quote": str(data.get("key_quote") or _SUMMARY_FALLBACK["key_quote"]),
+            "reflection_options": _norm_reflection_options(data.get("reflection_options")),
             "companion_comment": str(data.get("companion_comment") or _SUMMARY_FALLBACK["companion_comment"]),
             "action_hint": str(data.get("action_hint") or _SUMMARY_FALLBACK["action_hint"]),
         }
     except Exception as e:  # noqa: BLE001
         logger.warning("[theater] summarize fallback: %s", e)
         return dict(_SUMMARY_FALLBACK)
-
