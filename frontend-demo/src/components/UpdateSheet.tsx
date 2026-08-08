@@ -9,18 +9,19 @@ import React, { useEffect, useRef } from "react";
 import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, Text, View } from "react-native";
 
 import { paperColors, useTheme } from "../design-system";
-import type { AppVersionInfo } from "../api";
-import { CURRENT_VERSION } from "../updateCheck";
+import type { ApkUpdateState } from "../apkUpdater";
+import { CURRENT_VERSION, type AvailableUpdateInfo } from "../updateCheck";
 
 interface UpdateSheetProps {
-  info: AppVersionInfo;
-  /** 点击「立即更新」：父组件负责打开 APK 下载链接并关闭。 */
+  info: AvailableUpdateInfo;
+  updateState: ApkUpdateState;
+  /** 点击「立即更新」：父组件负责应用内下载、校验并交给系统安装器。 */
   onUpdate: () => void;
   /** 点击「以后再说」或点遮罩：只关闭当前提示，下次进入 App 仍可再次展示。 */
   onLater: () => void;
 }
 
-export function UpdateSheet({ info, onUpdate, onLater }: UpdateSheetProps) {
+export function UpdateSheet({ info, updateState, onUpdate, onLater }: UpdateSheetProps) {
   const theme = useTheme();
   const slide = useRef(new Animated.Value(1)).current; // 1=完全在屏外，0=就位
 
@@ -41,13 +42,29 @@ export function UpdateSheet({ info, onUpdate, onLater }: UpdateSheetProps) {
 
   const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [0, 460] });
   const sizeText = info.size_mb ? ` · ${info.size_mb} MB` : "";
+  const busy = updateState.phase === "downloading" || updateState.phase === "verifying";
+  const canDismiss = !busy && !info.required;
+  const progressPercent = Math.round(updateState.progress * 100);
+  const actionLabel =
+    updateState.phase === "downloading" ? `正在下载 ${progressPercent}%`
+      : updateState.phase === "verifying" ? "正在校验安装包…"
+        : updateState.phase === "permission_required" ? "授权后继续安装"
+          : updateState.phase === "installer_opened" ? "重新打开安装器"
+            : updateState.phase === "error" ? "重新下载"
+              : "立即更新";
+  const statusText =
+    updateState.phase === "permission_required"
+      ? "Android 需要你允许「安装未知应用」，授权后回到这里继续。"
+      : updateState.phase === "installer_opened"
+        ? "系统安装界面已打开；如果刚才取消了，可以再次打开。"
+        : updateState.error;
 
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", zIndex: 60 }}>
       {/* 遮罩：点击 = 以后再说 */}
       <Pressable
-        accessibilityLabel="以后再说"
-        onPress={onLater}
+        accessibilityLabel={canDismiss ? "以后再说" : "更新提示"}
+        onPress={canDismiss ? onLater : undefined}
         style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.colors.overlay }}
       />
 
@@ -73,7 +90,7 @@ export function UpdateSheet({ info, onUpdate, onLater }: UpdateSheetProps) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 17, fontWeight: "600", color: theme.colors.textPrimary }}>
-              新版本 v{info.latest}
+              {info.required ? "需要更新" : "新版本"} v{info.latest}
             </Text>
             <Text style={{ fontSize: 12.5, marginTop: 2, color: theme.colors.textMuted }}>
               当前 v{CURRENT_VERSION} · 建议更新{sizeText}
@@ -98,10 +115,29 @@ export function UpdateSheet({ info, onUpdate, onLater }: UpdateSheetProps) {
           </View>
         )}
 
+        {updateState.phase === "downloading" && (
+          <View style={{ marginBottom: theme.spacing[4] }}>
+            <View style={{ height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: theme.colors.backgroundSubtle }}>
+              <View style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, backgroundColor: theme.colors.focus }} />
+            </View>
+            <Text style={{ marginTop: theme.spacing[2], fontSize: 12.5, color: theme.colors.textMuted }}>
+              正在应用内下载安装包，请保持网络连接
+            </Text>
+          </View>
+        )}
+
+        {statusText ? (
+          <Text style={{ marginBottom: theme.spacing[4], fontSize: 12.5, lineHeight: 19, color: updateState.phase === "error" ? theme.colors.error : theme.colors.textSecondary }}>
+            {statusText}
+          </Text>
+        ) : null}
+
         {/* 立即更新 */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="立即更新"
+          accessibilityLabel={actionLabel}
+          accessibilityState={{ busy, disabled: busy }}
+          disabled={busy}
           onPress={onUpdate}
           style={({ pressed }) => ({
             borderRadius: theme.radii.pill,
@@ -109,15 +145,18 @@ export function UpdateSheet({ info, onUpdate, onLater }: UpdateSheetProps) {
             alignItems: "center",
             backgroundColor: theme.colors.accentSurface,
             transform: [{ scale: pressed ? 0.97 : 1 }],
+            opacity: busy ? 0.7 : 1,
           })}
         >
-          <Text style={{ fontSize: 15, fontWeight: "600", color: theme.colors.textOnAccent }}>立即更新</Text>
+          <Text style={{ fontSize: 15, fontWeight: "600", color: theme.colors.textOnAccent }}>{actionLabel}</Text>
         </Pressable>
 
         {/* 以后再说 */}
-        <Pressable accessibilityRole="button" onPress={onLater} style={{ paddingVertical: theme.spacing[2], alignItems: "center", marginTop: theme.spacing[1] }}>
-          <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>以后再说</Text>
-        </Pressable>
+        {!info.required && (
+          <Pressable accessibilityRole="button" disabled={busy} onPress={onLater} style={{ paddingVertical: theme.spacing[2], alignItems: "center", marginTop: theme.spacing[1], opacity: busy ? 0.45 : 1 }}>
+            <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>以后再说</Text>
+          </Pressable>
+        )}
       </Animated.View>
     </View>
   );

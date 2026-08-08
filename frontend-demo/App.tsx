@@ -32,8 +32,16 @@ import {
 } from "./src/api";
 import { initNotifications, startLetterPolling, stopLetterPolling } from "./src/notifications";
 import { UpdateSheet } from "./src/components/UpdateSheet";
-import { checkForUpdate } from "./src/updateCheck";
-import type { AppVersionInfo } from "./src/api";
+import { checkForUpdate, type AvailableUpdateInfo } from "./src/updateCheck";
+import {
+  downloadApkUpdate,
+  INITIAL_APK_UPDATE_STATE,
+  installDownloadedApk,
+  isApkUpdaterAvailable,
+  requestApkInstallPermission,
+  updateErrorMessage,
+  type ApkUpdateState,
+} from "./src/apkUpdater";
 import { reportCurrentLocation } from "./src/location";
 import { startCompanion, stopCompanion } from "mindoff-companion";
 import type { TheaterSceneId } from "./src/theater";
@@ -150,7 +158,8 @@ export default function App() {
   const [sceneTheater, setSceneTheater] = useState<TheaterSceneId>("dining");
   const [toast, setToast] = useState<string | null>(null);
   // 版本更新提示：每次启动或从后台回到前台，只要仍是旧版就弹底部抽屉。
-  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AvailableUpdateInfo | null>(null);
+  const [apkUpdateState, setApkUpdateState] = useState<ApkUpdateState>(INITIAL_APK_UPDATE_STATE);
   const [dumpText, setDumpText] = useState("");
   const [dumpReceipt, setDumpReceipt] = useState<any>(null);
   const [chatSeedText, setChatSeedText] = useState("");
@@ -239,6 +248,47 @@ export default function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(msg);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
+  };
+
+  const handleApkUpdate = async () => {
+    if (!updateInfo) return;
+    if (!isApkUpdaterAvailable) {
+      // Web/iOS/旧安装包没有原生模块时，保留原来的浏览器下载兜底。
+      await Linking.openURL(updateInfo.apk_url);
+      setUpdateInfo(null);
+      return;
+    }
+
+    let downloadedUri = apkUpdateState.downloadedUri;
+    try {
+      if (apkUpdateState.phase === "permission_required") {
+        const alreadyAllowed = await requestApkInstallPermission();
+        if (!alreadyAllowed) return;
+      }
+
+      if (!downloadedUri) {
+        setApkUpdateState({ phase: "downloading", progress: 0, downloadedUri: null, error: null });
+        downloadedUri = await downloadApkUpdate(updateInfo, (progress) => {
+          setApkUpdateState((current) => ({ ...current, phase: "downloading", progress }));
+        });
+      }
+
+      setApkUpdateState({ phase: "verifying", progress: 1, downloadedUri, error: null });
+      const result = await installDownloadedApk(downloadedUri, updateInfo);
+      if (result.status === "permission_required") {
+        setApkUpdateState({ phase: "permission_required", progress: 1, downloadedUri, error: null });
+        await requestApkInstallPermission();
+        return;
+      }
+      setApkUpdateState({ phase: "installer_opened", progress: 1, downloadedUri, error: null });
+    } catch (error) {
+      setApkUpdateState({
+        phase: "error",
+        progress: 0,
+        downloadedUri: null,
+        error: updateErrorMessage(error),
+      });
+    }
   };
 
   const go = (s: Screen) => {
@@ -536,12 +586,11 @@ export default function App() {
       {updateInfo && (
         <UpdateSheet
           info={updateInfo}
-          onUpdate={() => {
-            void Linking.openURL(updateInfo.apk_url);
-            setUpdateInfo(null);
-          }}
+          updateState={apkUpdateState}
+          onUpdate={() => { void handleApkUpdate(); }}
           onLater={() => {
             setUpdateInfo(null);
+            setApkUpdateState(INITIAL_APK_UPDATE_STATE);
           }}
         />
       )}

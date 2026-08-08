@@ -474,8 +474,12 @@ export const synthTts = (text: string, voice?: string) =>
 export interface AppVersionInfo {
   latest: string;
   min_supported: string;
+  version_code: number | null;
   apk_url: string;
+  apk_sha256: string;
+  size_bytes: number | null;
   size_mb: number | null;
+  mandatory: boolean;
   changelog: string[];
 }
 

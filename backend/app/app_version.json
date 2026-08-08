@@ -1,9 +1,15 @@
 {
-  "latest": "0.3.5",
+  "latest": "0.3.6",
   "min_supported": "0.1.0",
-  "apk_url": "http://223.109.142.152:8000/static/download/mindoff.apk",
-  "size_mb": 75.2,
+  "version_code": 9,
+  "apk_url": "http://223.109.142.152:8000/static/download/mindoff-0.3.6.apk",
+  "apk_sha256": "22e01ed9d9cda8c81569931486d6eb534b3231be8e61a25a8081ec83f1a8235d",
+  "size_bytes": 34340538,
+  "size_mb": 32.8,
+  "mandatory": false,
   "changelog": [
+    "新增应用内下载更新：显示进度，校验安装包后直接进入系统安装确认",
+    "新增 APK 包名、版本号、签名和 SHA-256 完整性保护",
     "修复 Android 0.3.4 打开应用后立即闪退的问题",
     "发现新版本时，每次重新进入应用都会再次显示更新提醒",
     "片场不再固定三轮结束，你可以自由决定继续回应或走出场景",
