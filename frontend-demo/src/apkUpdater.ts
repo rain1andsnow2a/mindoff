@@ -1,12 +1,15 @@
-/** 自有服务器 APK 更新：应用内下载，原生校验后交给 Android 系统安装器。 */
-import * as FileSystem from "expo-file-system";
-
+/** 自有服务器 APK 更新：DownloadManager 后台下载，原生校验后交给系统安装器。 */
 import type { AppVersionInfo } from "./api";
 import {
   canRequestPackageInstalls,
+  consumeNotificationInstallRequest,
+  getDownloadState,
   inspectAndInstall,
   isApkUpdaterAvailable,
   openInstallPermissionSettings,
+  startDownload,
+  type ApkDownloadState as NativeApkDownloadState,
+  type ApkDownloadStatus,
   type ApkInstallResult,
 } from "mindoff-updater";
 
@@ -15,6 +18,7 @@ export { isApkUpdaterAvailable };
 export type ApkUpdatePhase =
   | "idle"
   | "downloading"
+  | "downloaded"
   | "verifying"
   | "permission_required"
   | "installer_opened"
@@ -24,6 +28,8 @@ export type ApkUpdateState = {
   phase: ApkUpdatePhase;
   progress: number;
   downloadedUri: string | null;
+  downloadStatus: ApkDownloadStatus | null;
+  taskId: string | null;
   error: string | null;
 };
 
@@ -31,46 +37,67 @@ export const INITIAL_APK_UPDATE_STATE: ApkUpdateState = {
   phase: "idle",
   progress: 0,
   downloadedUri: null,
+  downloadStatus: null,
+  taskId: null,
   error: null,
 };
-
-function safeVersion(value: string): string {
-  return value.replace(/[^0-9A-Za-z._-]/g, "_") || "latest";
-}
 
 export function updateErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || "");
   return message.replace(/^Error:\s*/i, "").trim() || "更新失败了，请稍后重试";
 }
 
-export async function downloadApkUpdate(
-  info: AppVersionInfo,
-  onProgress: (progress: number) => void,
-): Promise<string> {
-  if (!FileSystem.cacheDirectory) throw new Error("无法访问应用缓存目录");
-  if (!info.apk_url) throw new Error("服务端没有提供安装包地址");
-
-  const directory = `${FileSystem.cacheDirectory}updates/`;
-  const destination = `${directory}mindoff-${safeVersion(info.latest)}.apk`;
-  await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-  await FileSystem.deleteAsync(destination, { idempotent: true });
-
-  const task = FileSystem.createDownloadResumable(
-    info.apk_url,
-    destination,
-    {},
-    ({ totalBytesExpectedToWrite, totalBytesWritten }) => {
-      if (totalBytesExpectedToWrite <= 0) return;
-      onProgress(Math.max(0, Math.min(1, totalBytesWritten / totalBytesExpectedToWrite)));
-    },
-  );
-  const result = await task.downloadAsync();
-  if (!result || result.status < 200 || result.status >= 300) {
-    await FileSystem.deleteAsync(destination, { idempotent: true });
-    throw new Error(`安装包下载失败${result ? `（${result.status}）` : ""}`);
+export function stateFromDownload(
+  snapshot: NativeApkDownloadState,
+  expectedVersion?: string,
+): ApkUpdateState {
+  if (expectedVersion && snapshot.version && snapshot.version !== expectedVersion) {
+    return INITIAL_APK_UPDATE_STATE;
   }
-  onProgress(1);
-  return result.uri;
+  if (snapshot.status === "successful" && snapshot.fileUri) {
+    return {
+      phase: "downloaded",
+      progress: 1,
+      downloadedUri: snapshot.fileUri,
+      downloadStatus: snapshot.status,
+      taskId: snapshot.taskId,
+      error: null,
+    };
+  }
+  if (snapshot.status === "failed") {
+    return {
+      phase: "error",
+      progress: 0,
+      downloadedUri: null,
+      downloadStatus: snapshot.status,
+      taskId: snapshot.taskId,
+      error: "安装包下载失败，点击重新下载",
+    };
+  }
+  if (snapshot.status === "pending" || snapshot.status === "running" || snapshot.status === "paused") {
+    return {
+      phase: "downloading",
+      progress: Math.max(0, Math.min(1, snapshot.progress || 0)),
+      downloadedUri: null,
+      downloadStatus: snapshot.status,
+      taskId: snapshot.taskId,
+      error: null,
+    };
+  }
+  return INITIAL_APK_UPDATE_STATE;
+}
+
+export async function downloadApkUpdate(info: AppVersionInfo): Promise<ApkUpdateState> {
+  if (!info.apk_url) throw new Error("服务端没有提供安装包地址");
+  return stateFromDownload(await startDownload(info.apk_url, info.latest), info.latest);
+}
+
+export async function restoreApkUpdateDownload(expectedVersion: string): Promise<ApkUpdateState> {
+  return stateFromDownload(await getDownloadState(), expectedVersion);
+}
+
+export async function consumeApkInstallNotification(): Promise<boolean> {
+  return consumeNotificationInstallRequest();
 }
 
 export async function installDownloadedApk(

@@ -2,6 +2,15 @@
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
   <application>
+    <receiver
+      android:name=".UpdateDownloadReceiver"
+      android:exported="true"
+      android:permission="android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS">
+      <intent-filter>
+        <action android:name="android.intent.action.DOWNLOAD_NOTIFICATION_CLICKED" />
+      </intent-filter>
+    </receiver>
+
     <provider
       android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.mindoff-updater-provider"

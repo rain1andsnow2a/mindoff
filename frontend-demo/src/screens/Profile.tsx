@@ -3,7 +3,7 @@
  * 设置接 /api/v1/preferences；记忆管理接 /api/v1/memories 与 /api/v1/memory-review。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Archive, Bell, ChevronRight, Clock, Layers, LogOut, Moon, Shield, Trash2, Type,
 } from "lucide-react-native";
@@ -23,6 +23,7 @@ import {
 } from "../design-system";
 import { clearMemories, deleteMemory, getMemoryReview, listMemories } from "../api";
 import { CURRENT_VERSION } from "../updateCheck";
+import { getPetAvatar } from "../pets/assets";
 
 function useProfileSurface() {
   const theme = useTheme();
@@ -276,7 +277,7 @@ export function ProfileScreen({
 }
 
 export function PetChange({ pets, activePetId, onBack, onHandoff }: {
-  pets: { id: number | string; name: string; emoji: string; summary?: string }[];
+  pets: { id: number | string; presetId?: string | null; name: string; emoji: string; summary?: string }[];
   activePetId: number | string | null;
   onBack: () => void;
   onHandoff: (petId: number | string) => void;
@@ -295,7 +296,9 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
           description={`${currentName}会把粗粒度近况告诉新伙伴，不会复述细节。`}
         />
         <View style={{ gap: theme.spacing[3] }}>
-        {opts.map((p, i) => (
+        {opts.map((p, i) => {
+          const avatar = getPetAvatar(p.presetId ?? String(p.id));
+          return (
           <Card key={i} onPress={() => setSel(i)}
             style={{
               padding: 20, flexDirection: "row", alignItems: "center", gap: 16,
@@ -303,8 +306,12 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
               borderColor: sel === i ? theme.colors.accent : theme.colors.border,
               backgroundColor: sel === i ? theme.colors.accentSoft : theme.colors.surface,
             }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceElevated }}>
-              <Text style={{ fontSize: 24 }}>{p.emoji}</Text>
+            <View style={{ width: 64, height: 64, borderRadius: 32, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSoft }}>
+              {avatar ? (
+                <Image source={avatar} resizeMode="contain" accessibilityIgnoresInvertColors style={{ width: 58, height: 58 }} />
+              ) : (
+                <Text style={{ fontSize: 24 }}>{p.emoji}</Text>
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>{p.name}</Text>
@@ -316,7 +323,8 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
               </View>
             )}
           </Card>
-        ))}
+          );
+        })}
         <View style={{ marginTop: theme.spacing[5] }}>
           <Button onPress={() => opts[sel ?? -1] && onHandoff(opts[sel!].id)} fullWidth disabled={sel === null}>确认更换</Button>
         </View>

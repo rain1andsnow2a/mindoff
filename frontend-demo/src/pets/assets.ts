@@ -10,9 +10,9 @@ export type PetArtworkAssets = {
 // 米露 2.1：所有状态均从同一套规格化状态条稳定切帧，避免动画播放时角色跑样。
 const MIRO_IDLE_FRAMES = [
   require("../../assets/pets/miro/miro-idle-v3.png"),
-  require("../../assets/pets/miro/miro-blink-half-v1.png"),
-  require("../../assets/pets/miro/miro-blink-closed-v1.png"),
-  require("../../assets/pets/miro/miro-blink-half-v1.png"),
+  require("../../assets/pets/miro/miro-blink-half-v2.png"),
+  require("../../assets/pets/miro/miro-blink-closed-v2.png"),
+  require("../../assets/pets/miro/miro-blink-half-v2.png"),
   require("../../assets/pets/miro/miro-idle-v3.png"),
 ];
 const MIRO_WAVING_FRAMES = [
@@ -72,6 +72,15 @@ const PET_ARTWORK: Record<string, PetArtworkAssets> = {
   },
 };
 
+const PET_AVATARS: Record<string, ImageSourcePropType> = {
+  miro: require("../../assets/pets/avatars/miro-avatar-v1.png"),
+  bobi: require("../../assets/pets/avatars/bobi-avatar-v1.png"),
+};
+
 export function getPetArtwork(presetId: string | null): PetArtworkAssets | undefined {
   return presetId ? PET_ARTWORK[presetId] : undefined;
+}
+
+export function getPetAvatar(presetId: string | null): ImageSourcePropType | undefined {
+  return presetId ? PET_AVATARS[presetId] : undefined;
 }

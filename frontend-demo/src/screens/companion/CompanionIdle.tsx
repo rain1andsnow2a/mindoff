@@ -215,6 +215,8 @@ export function CompanionIdle({
               borderWidth: 1,
               borderColor: theme.colors.border,
               backgroundColor: theme.colors.surfaceElevated,
+              zIndex: 3,
+              elevation: 3,
               opacity: fade,
               transform: [
                 {
@@ -273,11 +275,18 @@ export function CompanionIdle({
             )}
           </Animated.View>
         ) : null}
-        <HomePetArtwork
-          fallbackEmoji={petEmoji}
-          presetId={petPresetId}
-          size={isCompact ? 210 : 238}
-        />
+        <View
+          style={{
+            zIndex: 1,
+            marginTop: bubbleVisible ? (isCompact ? 92 : 78) : 0,
+          }}
+        >
+          <HomePetArtwork
+            fallbackEmoji={petEmoji}
+            presetId={petPresetId}
+            size={isCompact ? 198 : 224}
+          />
+        </View>
         <Text
           style={[
             theme.typography.textStyles.caption,

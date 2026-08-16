@@ -35,10 +35,12 @@ import { UpdateSheet } from "./src/components/UpdateSheet";
 import { checkForUpdate, type AvailableUpdateInfo } from "./src/updateCheck";
 import {
   downloadApkUpdate,
+  consumeApkInstallNotification,
   INITIAL_APK_UPDATE_STATE,
   installDownloadedApk,
   isApkUpdaterAvailable,
   requestApkInstallPermission,
+  restoreApkUpdateDownload,
   updateErrorMessage,
   type ApkUpdateState,
 } from "./src/apkUpdater";
@@ -250,6 +252,45 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
 
+  const installApkUpdate = async (downloadedUri: string, info: AvailableUpdateInfo) => {
+    try {
+      setApkUpdateState((current) => ({
+        ...current,
+        phase: "verifying",
+        progress: 1,
+        downloadedUri,
+        error: null,
+      }));
+      const result = await installDownloadedApk(downloadedUri, info);
+      if (result.status === "permission_required") {
+        setApkUpdateState((current) => ({
+          ...current,
+          phase: "permission_required",
+          progress: 1,
+          downloadedUri,
+          error: null,
+        }));
+        await requestApkInstallPermission();
+        return;
+      }
+      setApkUpdateState((current) => ({
+        ...current,
+        phase: "installer_opened",
+        progress: 1,
+        downloadedUri,
+        error: null,
+      }));
+    } catch (error) {
+      setApkUpdateState((current) => ({
+        ...current,
+        phase: "error",
+        progress: 0,
+        downloadedUri: null,
+        error: updateErrorMessage(error),
+      }));
+    }
+  };
+
   const handleApkUpdate = async () => {
     if (!updateInfo) return;
     if (!isApkUpdaterAvailable) {
@@ -259,37 +300,80 @@ export default function App() {
       return;
     }
 
-    let downloadedUri = apkUpdateState.downloadedUri;
     try {
       if (apkUpdateState.phase === "permission_required") {
         const alreadyAllowed = await requestApkInstallPermission();
         if (!alreadyAllowed) return;
       }
 
-      if (!downloadedUri) {
-        setApkUpdateState({ phase: "downloading", progress: 0, downloadedUri: null, error: null });
-        downloadedUri = await downloadApkUpdate(updateInfo, (progress) => {
-          setApkUpdateState((current) => ({ ...current, phase: "downloading", progress }));
-        });
-      }
-
-      setApkUpdateState({ phase: "verifying", progress: 1, downloadedUri, error: null });
-      const result = await installDownloadedApk(downloadedUri, updateInfo);
-      if (result.status === "permission_required") {
-        setApkUpdateState({ phase: "permission_required", progress: 1, downloadedUri, error: null });
-        await requestApkInstallPermission();
+      if (apkUpdateState.downloadedUri) {
+        await installApkUpdate(apkUpdateState.downloadedUri, updateInfo);
         return;
       }
-      setApkUpdateState({ phase: "installer_opened", progress: 1, downloadedUri, error: null });
+
+      const state = await downloadApkUpdate(updateInfo);
+      setApkUpdateState(state);
+      if (state.phase === "downloaded" && state.downloadedUri) {
+        await installApkUpdate(state.downloadedUri, updateInfo);
+      }
     } catch (error) {
-      setApkUpdateState({
+      setApkUpdateState((current) => ({
+        ...current,
         phase: "error",
         progress: 0,
         downloadedUri: null,
         error: updateErrorMessage(error),
-      });
+      }));
     }
   };
+
+  // DownloadManager 持有下载任务；JS 只在前台同步进度。点击完成通知后，
+  // 回到 App 先做原生完整性/签名校验，再进入 Android 系统安装确认。
+  useEffect(() => {
+    if (!updateInfo || !isApkUpdaterAvailable) return;
+    let alive = true;
+    let openingInstaller = false;
+
+    const syncDownload = async () => {
+      try {
+        const restored = await restoreApkUpdateDownload(updateInfo.latest);
+        if (!alive) return;
+        setApkUpdateState((current) => {
+          if (
+            current.phase === "verifying" ||
+            current.phase === "permission_required" ||
+            current.phase === "installer_opened"
+          ) return current;
+          return restored;
+        });
+
+        // 只有任务已确认成功后才消费通知点击标记；即使状态查询短暂延迟，
+        // 也不会把这次安装请求提前吃掉。
+        const installRequested = restored.phase === "downloaded"
+          ? await consumeApkInstallNotification()
+          : false;
+        if (
+          alive &&
+          installRequested &&
+          !openingInstaller &&
+          restored.phase === "downloaded" &&
+          restored.downloadedUri
+        ) {
+          openingInstaller = true;
+          await installApkUpdate(restored.downloadedUri, updateInfo);
+        }
+      } catch {
+        // 下载状态同步失败不影响主流程；用户仍可重新点击更新按钮。
+      }
+    };
+
+    void syncDownload();
+    const timer = setInterval(() => { void syncDownload(); }, 1_000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [updateInfo?.latest]);
 
   const go = (s: Screen) => {
     Animated.timing(fade, { toValue: 0, duration: 90, useNativeDriver: true }).start(() => {

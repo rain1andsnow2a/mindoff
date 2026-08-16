@@ -1,10 +1,13 @@
 package com.mindoff.updater
 
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import expo.modules.kotlin.modules.Module
@@ -23,6 +26,65 @@ import java.security.MessageDigest
 class MindoffUpdaterModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("MindoffUpdater")
+
+    AsyncFunction("startDownload") { url: String, versionName: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Android 上下文尚未就绪")
+      val uri = Uri.parse(url)
+      if (uri.scheme !in setOf("http", "https")) {
+        throw IllegalArgumentException("安装包地址必须使用 HTTP 或 HTTPS")
+      }
+      val safeVersion = versionName.replace(Regex("[^0-9A-Za-z._-]"), "_")
+        .ifBlank { "latest" }
+      val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+      val existing = UpdateDownloadStore.read(context)
+      if (
+        existing != null &&
+        existing.url == url &&
+        existing.version == safeVersion &&
+        UpdateDownloadStore.isActiveOrComplete(context, existing)
+      ) {
+        return@AsyncFunction UpdateDownloadStore.query(context, existing)
+      }
+
+      if (existing != null) {
+        manager.remove(existing.id)
+        File(existing.filePath).takeIf { it.isFile }?.delete()
+      }
+
+      val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        ?: throw IllegalStateException("无法访问应用下载目录")
+      downloadsDir.mkdirs()
+      val destination = File(downloadsDir, "mindoff-$safeVersion.apk")
+      if (destination.exists() && !destination.delete()) {
+        throw IllegalStateException("无法清理旧安装包，请稍后重试")
+      }
+
+      val request = DownloadManager.Request(uri)
+        .setTitle("喵灵 v$safeVersion")
+        .setDescription("安装包下载完成后，点击通知即可安装")
+        .setMimeType(APK_MIME)
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(false)
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationUri(Uri.fromFile(destination))
+      val id = manager.enqueue(request)
+      val record = UpdateDownloadStore.Record(id, url, safeVersion, destination.absolutePath)
+      UpdateDownloadStore.write(context, record)
+      UpdateDownloadStore.query(context, record)
+    }
+
+    AsyncFunction("getDownloadState") {
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("Android 上下文尚未就绪")
+      UpdateDownloadStore.query(context)
+    }
+
+    AsyncFunction("consumeNotificationInstallRequest") {
+      val context = appContext.reactContext
+        ?: return@AsyncFunction false
+      UpdateDownloadStore.consumeInstallRequested(context)
+    }
 
     AsyncFunction("canRequestPackageInstalls") {
       val context = appContext.reactContext ?: return@AsyncFunction false

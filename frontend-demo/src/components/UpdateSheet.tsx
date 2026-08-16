@@ -43,17 +43,23 @@ export function UpdateSheet({ info, updateState, onUpdate, onLater }: UpdateShee
   const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [0, 460] });
   const sizeText = info.size_mb ? ` · ${info.size_mb} MB` : "";
   const busy = updateState.phase === "downloading" || updateState.phase === "verifying";
-  const canDismiss = !busy && !info.required;
+  // DownloadManager 不依赖当前页面；可选更新在下载时也允许收起抽屉。
+  const canDismiss = !info.required && updateState.phase !== "verifying";
   const progressPercent = Math.round(updateState.progress * 100);
   const actionLabel =
     updateState.phase === "downloading" ? `正在下载 ${progressPercent}%`
+      : updateState.phase === "downloaded" ? "安装更新"
       : updateState.phase === "verifying" ? "正在校验安装包…"
         : updateState.phase === "permission_required" ? "授权后继续安装"
           : updateState.phase === "installer_opened" ? "重新打开安装器"
             : updateState.phase === "error" ? "重新下载"
               : "立即更新";
   const statusText =
-    updateState.phase === "permission_required"
+    updateState.phase === "downloading" && updateState.downloadStatus === "paused"
+      ? "网络暂不可用，Android 会在条件恢复后继续下载。"
+      : updateState.phase === "downloaded"
+        ? "安装包已经下载完成，点击安装后会先校验完整性与签名。"
+        : updateState.phase === "permission_required"
       ? "Android 需要你允许「安装未知应用」，授权后回到这里继续。"
       : updateState.phase === "installer_opened"
         ? "系统安装界面已打开；如果刚才取消了，可以再次打开。"
@@ -121,7 +127,7 @@ export function UpdateSheet({ info, updateState, onUpdate, onLater }: UpdateShee
               <View style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, backgroundColor: theme.colors.focus }} />
             </View>
             <Text style={{ marginTop: theme.spacing[2], fontSize: 12.5, color: theme.colors.textMuted }}>
-              正在应用内下载安装包，请保持网络连接
+              可切到后台或锁屏，Android 会继续下载并在完成后通知你
             </Text>
           </View>
         )}
@@ -153,7 +159,7 @@ export function UpdateSheet({ info, updateState, onUpdate, onLater }: UpdateShee
 
         {/* 以后再说 */}
         {!info.required && (
-          <Pressable accessibilityRole="button" disabled={busy} onPress={onLater} style={{ paddingVertical: theme.spacing[2], alignItems: "center", marginTop: theme.spacing[1], opacity: busy ? 0.45 : 1 }}>
+          <Pressable accessibilityRole="button" disabled={updateState.phase === "verifying"} onPress={onLater} style={{ paddingVertical: theme.spacing[2], alignItems: "center", marginTop: theme.spacing[1], opacity: updateState.phase === "verifying" ? 0.45 : 1 }}>
             <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>以后再说</Text>
           </Pressable>
         )}

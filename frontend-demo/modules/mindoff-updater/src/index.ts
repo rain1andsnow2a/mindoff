@@ -13,7 +13,29 @@ export type ApkInstallResult = {
   sizeBytes: number;
 };
 
+export type ApkDownloadStatus =
+  | "idle"
+  | "pending"
+  | "running"
+  | "paused"
+  | "successful"
+  | "failed";
+
+export type ApkDownloadState = {
+  taskId: string | null;
+  status: ApkDownloadStatus;
+  bytesWritten: number;
+  totalBytes: number;
+  progress: number;
+  fileUri: string | null;
+  reason: number | null;
+  version: string | null;
+};
+
 type MindoffUpdaterModule = {
+  startDownload: (url: string, versionName: string) => Promise<ApkDownloadState>;
+  getDownloadState: () => Promise<ApkDownloadState>;
+  consumeNotificationInstallRequest: () => Promise<boolean>;
   canRequestPackageInstalls: () => Promise<boolean>;
   openInstallPermissionSettings: () => Promise<boolean>;
   inspectAndInstall: (
@@ -26,6 +48,34 @@ type MindoffUpdaterModule = {
 const Native = requireOptionalNativeModule<MindoffUpdaterModule>("MindoffUpdater");
 
 export const isApkUpdaterAvailable = Platform.OS === "android" && Native != null;
+
+export async function startDownload(
+  url: string,
+  versionName: string,
+): Promise<ApkDownloadState> {
+  if (!Native) throw new Error("当前安装包不支持后台更新");
+  return Native.startDownload(url, versionName);
+}
+
+export async function getDownloadState(): Promise<ApkDownloadState> {
+  if (!Native) {
+    return {
+      taskId: null,
+      status: "idle",
+      bytesWritten: 0,
+      totalBytes: 0,
+      progress: 0,
+      fileUri: null,
+      reason: null,
+      version: null,
+    };
+  }
+  return Native.getDownloadState();
+}
+
+export async function consumeNotificationInstallRequest(): Promise<boolean> {
+  return Native ? Native.consumeNotificationInstallRequest() : false;
+}
 
 export async function canRequestPackageInstalls(): Promise<boolean> {
   return Native ? Native.canRequestPackageInstalls() : false;
