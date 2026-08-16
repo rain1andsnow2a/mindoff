@@ -23,6 +23,7 @@ import type { IntentSeed } from "./api";
 import { speakReply, stopSpeaking } from "./speak";
 import {
   createSpeechGate,
+  isLikelyPlaybackEcho,
   observeSpeech,
   replaceCumulativeTranscript,
   type SpeechGate,
@@ -34,6 +35,7 @@ export type CallStatus =
   | "connecting"
   | "listening"
   | "thinking"
+  | "speaking"
   | "ended"
   | "error";
 
@@ -98,6 +100,10 @@ const SESSION_UPDATE = {
  * 调大＝更不容易被打断但回复更慢；调小＝更跟手但更容易在停顿处抢答。
  */
 const GRACE_MS = 1000;
+/** TTS 播完后继续屏蔽这段时间，让扬声器与房间余音衰减。 */
+const ECHO_TAIL_MS = 500;
+/** 播放结束后保留最近 TTS 指纹，拦截云端稍晚返回的残余回声转写。 */
+const RECENT_TTS_WINDOW_MS = 4000;
 
 export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   const [status, setStatus] = useState<CallStatus>("idle");
@@ -122,6 +128,11 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
   // 本地 RMS 门限：只有连续清晰人声才接受云端转写，过滤静音/耳机底噪幻听。
   const speechGateRef = useRef<SpeechGate>(createSpeechGate());
   const latestTranscriptRef = useRef("");
+  // 半双工回声保护：TTS 播放及 500ms 余音期内仍采集 PCM，但不再发给 ASR。
+  const inputSuppressedRef = useRef(false);
+  const echoTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playbackSeqRef = useRef(0);
+  const recentSpokenRef = useRef<{ text: string; expiresAt: number } | null>(null);
   // 语音回复开关的最新值（用 ref 避免回调闭包读到旧值）
   const voiceReplyRef = useRef(voiceReply);
   voiceReplyRef.current = voiceReply;
@@ -134,9 +145,13 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
 
   const cleanup = useCallback(() => {
     connectionStateRef.current = "idle";
+    playbackSeqRef.current += 1;
+    inputSuppressedRef.current = false;
+    recentSpokenRef.current = null;
     subRef.current?.remove();
     subRef.current = null;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+    if (echoTailTimerRef.current) { clearTimeout(echoTailTimerRef.current); echoTailTimerRef.current = null; }
     pendingRef.current = "";
     speechGateRef.current = createSpeechGate();
     latestTranscriptRef.current = "";
@@ -212,10 +227,58 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
           );
         })
         .finally(() => {
-          if (!closedRef.current) {
+          if (closedRef.current) return;
+          if (!voiceReplyRef.current || !full.trim()) {
             setStatus("listening");
-            if (voiceReplyRef.current) speakReply(full);
+            return;
           }
+
+          const playbackId = ++playbackSeqRef.current;
+          let playbackStarted = false;
+          speakReply(full, {
+            onStart: () => {
+              if (closedRef.current || playbackId !== playbackSeqRef.current) return;
+              playbackStarted = true;
+              inputSuppressedRef.current = true;
+              recentSpokenRef.current = { text: full, expiresAt: Number.POSITIVE_INFINITY };
+              if (echoTailTimerRef.current) {
+                clearTimeout(echoTailTimerRef.current);
+                echoTailTimerRef.current = null;
+              }
+              // 播放开始前清掉可能由扬声器起音触发的本地/云端临时识别状态。
+              speechGateRef.current = createSpeechGate();
+              latestTranscriptRef.current = "";
+              setLiveUser(pendingRef.current);
+              setLevel(0);
+              setStatus("speaking");
+            },
+            onEnd: () => {
+              if (closedRef.current || playbackId !== playbackSeqRef.current) return;
+              if (!playbackStarted) {
+                // TTS 合成失败、尚未真正播放：无需等待余音，立即恢复收音状态。
+                inputSuppressedRef.current = false;
+                recentSpokenRef.current = null;
+                setStatus("listening");
+                return;
+              }
+
+              recentSpokenRef.current = {
+                text: full,
+                expiresAt: Date.now() + RECENT_TTS_WINDOW_MS,
+              };
+              if (echoTailTimerRef.current) clearTimeout(echoTailTimerRef.current);
+              echoTailTimerRef.current = setTimeout(() => {
+                echoTailTimerRef.current = null;
+                if (closedRef.current || playbackId !== playbackSeqRef.current) return;
+                speechGateRef.current = createSpeechGate();
+                latestTranscriptRef.current = "";
+                inputSuppressedRef.current = false;
+                setLiveUser(pendingRef.current);
+                setLevel(0);
+                setStatus("listening");
+              }, ECHO_TAIL_MS);
+            },
+          });
         });
     },
     [addTurn]
@@ -226,6 +289,16 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     (transcript: string) => {
       const clean = transcript.trim();
       if (!clean) return;
+      const recent = recentSpokenRef.current;
+      if (
+        recent
+        && Date.now() <= recent.expiresAt
+        && isLikelyPlaybackEcho(clean, recent.text)
+      ) {
+        // 系统 AEC 未完全消除或云端延迟返回的 TTS 回声：不展示、不落库、不触发回复。
+        setLiveUser(pendingRef.current);
+        return;
+      }
       pendingRef.current = pendingRef.current ? pendingRef.current + clean : clean;
       setLiveUser(pendingRef.current);
       if (graceTimerRef.current) clearTimeout(graceTimerRef.current);
@@ -252,6 +325,13 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
     setTurns([]);
     setLiveUser("");
     setSceneSuggestion(null);
+    playbackSeqRef.current += 1;
+    inputSuppressedRef.current = false;
+    recentSpokenRef.current = null;
+    if (echoTailTimerRef.current) {
+      clearTimeout(echoTailTimerRef.current);
+      echoTailTimerRef.current = null;
+    }
     closedRef.current = false;
     setStatus("connecting");
 
@@ -301,6 +381,11 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
         }
         connectionStateRef.current = "active";
         subRef.current = addAudioChunkListener(({ base64, rms }) => {
+          if (inputSuppressedRef.current) {
+            // 保持 AudioRecord/AEC 会话不断开，但不让扬声器声音进入云端 ASR。
+            setLevel(0);
+            return;
+          }
           setLevel(rms);
           const previous = speechGateRef.current;
           const next = observeSpeech(previous, rms);
@@ -343,6 +428,12 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
             // 服务端 speech_started 可能由底噪误触；真正的续说由本地 RMS 门限确认。
             break;
           case "conversation.item.input_audio_transcription.delta":
+            if (inputSuppressedRef.current) {
+              speechGateRef.current = createSpeechGate();
+              latestTranscriptRef.current = "";
+              setLiveUser(pendingRef.current);
+              break;
+            }
             latestTranscriptRef.current = replaceCumulativeTranscript(
               latestTranscriptRef.current,
               msg.text,
@@ -356,7 +447,9 @@ export function useRealtimeCall(voiceReply: boolean): RealtimeCall {
               latestTranscriptRef.current,
               msg.transcript,
             );
-            if (speechGateRef.current.detected) {
+            if (inputSuppressedRef.current) {
+              setLiveUser(pendingRef.current);
+            } else if (speechGateRef.current.detected) {
               queueUtterance(latestTranscriptRef.current);
             } else {
               // 静音产生的云端幻听不展示、不落库、也不触发桌宠回复。

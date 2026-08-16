@@ -52,6 +52,8 @@ function statusLabel(status: CallStatus, error: string | null): string {
       return "在听你说";
     case "thinking":
       return "在想怎么回你…";
+    case "speaking":
+      return "正在回应你…";
     case "ended":
       return "通话结束";
     case "error":
@@ -144,7 +146,7 @@ export function VoiceCall({
 
   const connecting = call.status === "connecting" || call.status === "idle";
   const duration = useCallDuration(
-    call.status === "listening" || call.status === "thinking",
+    call.status === "listening" || call.status === "thinking" || call.status === "speaking",
   );
 
   useEffect(() => {
@@ -290,7 +292,7 @@ export function VoiceCall({
         >
           {petName}
         </Text>
-        {call.status === "listening" || call.status === "thinking" ? (
+        {call.status === "listening" || call.status === "thinking" || call.status === "speaking" ? (
           <Text
             style={[
               theme.typography.textStyles.caption,
@@ -476,7 +478,7 @@ export function VoiceCall({
   /** 底部工具条：波纹 + 出声开关 + 挂断，三件事一行收口。 */
   const controls = (
     <View style={{ gap: theme.spacing[4] }}>
-      <VoiceWave level={call.level} muted={connecting || !call.available} />
+      <VoiceWave level={call.level} muted={connecting || call.status === "speaking" || !call.available} />
       <View
         style={{
           flexDirection: "row",

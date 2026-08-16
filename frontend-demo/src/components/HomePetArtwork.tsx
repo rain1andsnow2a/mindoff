@@ -35,7 +35,7 @@ export function HomePetArtwork({
 }: HomePetArtworkProps) {
   const night = useTheme().isNight;
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
-  // 所有帧（idle + groom）一次性挂载、靠 opacity 切换，避免切 Image source 触发重解码闪烁
+  // 所有可用帧（idle + 可选 groom）一次性挂载、靠 opacity 切换，避免切 Image source 触发重解码闪烁
   const frames = useMemo(() => (artwork ? [artwork.idle, ...artwork.groom] : []), [artwork]);
   const [assetsReady, setAssetsReady] = useState(false);
   const [animationFailed, setAnimationFailed] = useState(false);
@@ -89,7 +89,7 @@ export function HomePetArtwork({
   }, [artwork]);
 
   useEffect(() => {
-    if (!artwork || !assetsReady || animationFailed || reduceMotion || !appActive) {
+    if (!artwork || !artwork.groom.length || !assetsReady || animationFailed || reduceMotion || !appActive) {
       setFrameIndex(-1);
       return;
     }

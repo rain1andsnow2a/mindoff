@@ -1,5 +1,5 @@
 import { Asset } from "expo-asset";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AccessibilityInfo,
   AppState,
@@ -19,12 +19,6 @@ type HomePetArtworkProps = {
 
 const MIN_IDLE_DELAY_MS = 5_000;
 const MAX_IDLE_DELAY_MS = 12_000;
-const MIRO_GROOM_SPRITE = require("../../assets/pets/miro/miro-groom-sprite.png");
-const SPRITE_COLUMNS = 7;
-const SPRITE_ROWS = 6;
-const GROOM_FRAME_COUNT = 37;
-const GROOM_FRAME_RATE = 12;
-const GROOM_ANIMATION_NAME = "miro-groom-sprite";
 
 function nextIdleDelay() {
   return MIN_IDLE_DELAY_MS + Math.random() * (MAX_IDLE_DELAY_MS - MIN_IDLE_DELAY_MS);
@@ -34,16 +28,6 @@ function moduleIds(sources: ImageSourcePropType[]) {
   return sources.filter((source): source is number => typeof source === "number");
 }
 
-function buildSpriteKeyframes(frameSize: number) {
-  const frames = Array.from({ length: GROOM_FRAME_COUNT }, (_, index) => {
-    const percentage = (index / (GROOM_FRAME_COUNT - 1)) * 100;
-    const x = -(index % SPRITE_COLUMNS) * frameSize;
-    const y = -Math.floor(index / SPRITE_COLUMNS) * frameSize;
-    return `${percentage}% { background-position: ${x}px ${y}px; }`;
-  });
-  return `@keyframes ${GROOM_ANIMATION_NAME} { ${frames.join(" ")} }`;
-}
-
 export function HomePetArtwork({
   presetId,
   fallbackEmoji,
@@ -51,29 +35,13 @@ export function HomePetArtwork({
 }: HomePetArtworkProps) {
   const night = useTheme().isNight;
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frames = useMemo(() => (artwork ? [artwork.idle, ...artwork.groom] : []), [artwork]);
   const [assetsReady, setAssetsReady] = useState(false);
   const [animationFailed, setAnimationFailed] = useState(false);
   const [staticFailed, setStaticFailed] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
-  const [grooming, setGrooming] = useState(false);
-  const frameSize = size * 1.42;
-  // React Native Web 不提供 Image.resolveAssetSource；Expo Asset 负责把
-  // Metro 的静态模块 ID 解析为浏览器可加载的 URI。
-  const spriteUri = Asset.fromModule(MIRO_GROOM_SPRITE).uri;
-
-  const clearIdleTimer = () => {
-    if (idleTimer.current) {
-      clearTimeout(idleTimer.current);
-      idleTimer.current = null;
-    }
-  };
-
-  const scheduleGroom = () => {
-    clearIdleTimer();
-    idleTimer.current = setTimeout(() => setGrooming(true), nextIdleDelay());
-  };
+  const [frameIndex, setFrameIndex] = useState(-1);
 
   useEffect(() => {
     let alive = true;
@@ -94,7 +62,7 @@ export function HomePetArtwork({
     const subscription = AppState.addEventListener("change", (state) => {
       const active = state === "active";
       setAppActive(active);
-      if (!active) setGrooming(false);
+      if (!active) setFrameIndex(-1);
     });
     return () => subscription.remove();
   }, []);
@@ -103,18 +71,11 @@ export function HomePetArtwork({
     setAssetsReady(false);
     setAnimationFailed(false);
     setStaticFailed(false);
-    setGrooming(false);
+    setFrameIndex(-1);
     if (!artwork) return;
 
     let alive = true;
-    const spriteImage = new window.Image();
-    const spriteLoaded = new Promise<void>((resolve, reject) => {
-      spriteImage.onload = () => resolve();
-      spriteImage.onerror = () => reject(new Error("Miro groom sprite failed to load"));
-      spriteImage.src = spriteUri;
-    });
-
-    Promise.all([Asset.loadAsync(moduleIds([artwork.idle])), spriteLoaded])
+    Asset.loadAsync(moduleIds([artwork.idle, ...artwork.groom]))
       .then(() => {
         if (alive) setAssetsReady(true);
       })
@@ -123,22 +84,40 @@ export function HomePetArtwork({
       });
     return () => {
       alive = false;
-      spriteImage.onload = null;
-      spriteImage.onerror = null;
     };
-  }, [artwork, spriteUri]);
+  }, [artwork]);
 
   useEffect(() => {
-    clearIdleTimer();
-    if (artwork && assetsReady && !animationFailed && !reduceMotion && appActive && !grooming) {
-      scheduleGroom();
+    if (!artwork || !artwork.groom.length || !assetsReady || animationFailed || reduceMotion || !appActive) {
+      setFrameIndex(-1);
+      return;
     }
-    return clearIdleTimer;
-  }, [appActive, animationFailed, artwork, assetsReady, grooming, reduceMotion]);
+
+    const delay = frameIndex < 0 ? nextIdleDelay() : 1_000 / artwork.frameRate;
+    const timeout = setTimeout(() => {
+      if (frameIndex < 0) {
+        setFrameIndex(0);
+      } else if (frameIndex < artwork.groom.length - 1) {
+        setFrameIndex((current) => current + 1);
+      } else {
+        setFrameIndex(-1);
+      }
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [appActive, animationFailed, artwork, assetsReady, frameIndex, reduceMotion]);
 
   if (!artwork || staticFailed) {
     return <PetPlaceholder size={size} emoji={fallbackEmoji} />;
   }
+
+  const activeFrame = frameIndex >= 0 ? frameIndex + 1 : 0;
+  const onFrameError = (index: number) => {
+    if (index === 0) setStaticFailed(true);
+    else {
+      setAnimationFailed(true);
+      setFrameIndex(-1);
+    }
+  };
 
   return (
     <View
@@ -150,7 +129,6 @@ export function HomePetArtwork({
         justifyContent: "center",
       }}
     >
-      <style>{buildSpriteKeyframes(frameSize)}</style>
       <View
         style={{
           position: "absolute",
@@ -162,31 +140,26 @@ export function HomePetArtwork({
             : "rgba(246,231,168,0.14)",
         }}
       />
-      {grooming && assetsReady && !animationFailed ? (
-        <div
-          aria-hidden
-          onAnimationEnd={() => setGrooming(false)}
-          style={{
-            width: frameSize,
-            height: frameSize,
-            backgroundImage: `url("${spriteUri}")`,
-            backgroundRepeat: "no-repeat",
-            backgroundSize: `${frameSize * SPRITE_COLUMNS}px ${frameSize * SPRITE_ROWS}px`,
-            animationName: GROOM_ANIMATION_NAME,
-            animationDuration: `${GROOM_FRAME_COUNT / GROOM_FRAME_RATE}s`,
-            animationTimingFunction: "steps(1, end)",
-            animationIterationCount: 1,
-          }}
-        />
-      ) : (
-        <Image
-          source={artwork.idle}
-          resizeMode="contain"
-          onError={() => setStaticFailed(true)}
-          accessibilityIgnoresInvertColors
-          style={{ width: frameSize, height: frameSize }}
-        />
-      )}
+      <View style={{ width: size * 1.42, height: size * 1.42 }}>
+        {frames.map((src, index) => (
+          <Image
+            key={index}
+            source={src}
+            resizeMode="contain"
+            fadeDuration={0}
+            onError={() => onFrameError(index)}
+            accessibilityIgnoresInvertColors
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              opacity: index === activeFrame ? 1 : 0,
+            }}
+          />
+        ))}
+      </View>
     </View>
   );
 }

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   createSpeechGate,
+  isLikelyPlaybackEcho,
   observeSpeech,
+  playbackEchoSimilarity,
   replaceCumulativeTranscript,
 } from "../src/voice/speechGuards.ts";
 import { parseVoiceStreamError } from "../src/voice/streamErrors.ts";
@@ -30,6 +32,28 @@ assert.equal(
   replaceCumulativeTranscript("我想回到小时候", "我想回到小时候的那条河边"),
   "我想回到小时候的那条河边",
   "累计 delta 必须整体替换，不能把旧全文再拼一次",
+);
+
+const petReply = "哈喽呀～刚醒还是刚出门？重庆今天八点就31度了，出门记得带瓶冰水呀。";
+const speakerEcho = "Hello呀，刚醒还是刚出门？重庆今天八点就三十一度了，出门记得带瓶冰水啊。";
+assert.ok(
+  playbackEchoSimilarity(petReply, speakerEcho) >= 0.72,
+  "同一句 TTS 被 ASR 改写少量字符后仍应保持高相似度",
+);
+assert.equal(
+  isLikelyPlaybackEcho(speakerEcho, petReply),
+  true,
+  "最近播放的喵灵回复不应重新成为用户输入",
+);
+assert.equal(
+  isLikelyPlaybackEcho("我不是在重复，我想问明天会不会下雨", petReply),
+  false,
+  "无关的真实用户发言不能被回声兜底误杀",
+);
+assert.equal(
+  isLikelyPlaybackEcho("带瓶冰水", petReply),
+  false,
+  "过短的局部重复不能直接判为扬声器回声",
 );
 
 assert.deepEqual(
