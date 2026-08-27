@@ -40,7 +40,7 @@
 | 模块 | 说明 |
 | --- | --- |
 | 陪伴 | 桌宠首页、日常对话、实时语音、睡前倾倒与快捷陪伴模式 |
-| 信箱 | 桌宠来信、今日待启、长久珍藏与临时寄存内容 |
+| 信箱 | 来信与思绪两层（游戏邮箱式），「我留下的」安静入口 |
 | 片场 | 场景候选、人物设定、互动演练、自由回应、校准与结算 |
 | 我的 | 伙伴切换、交接信、记忆管理、隐私审阅和体验偏好 |
 
@@ -48,7 +48,7 @@
 
 1. **日常陪伴**：打开应用 → 看桌宠正在做什么 → 文字或语音聊天 → 获得简短回应。
 2. **睡前清空**：一次说完混杂思绪 → Agent 自动分类 → 收到整理回执 → 安心离开。
-3. **次日接回**：打开信箱 → 查看来信、今日事项与昨晚内容 → 完成、珍藏或放下。
+3. **次日接回**：打开信箱 → 读来信、看思绪 → 完成、珍藏或放下。
 4. **场景演练**：确认候选片段或主动创建 → 补充人物与情境 → 尝试不同表达 → 保存结算卡或清除场景。
 5. **更换伙伴**：选择新桌宠 → 阅读粗粒度交接信 → 无需重新解释近况 → 继续陪伴。
 
@@ -218,7 +218,7 @@ MindOff does not pressure users into completing tasks, create emotional dependen
 | Module | Description |
 | --- | --- |
 | Companion | Virtual-pet home, everyday chat, realtime voice, bedtime unloading, and quick companion modes |
-| Mailbox | Companion letters, daily tasks, long-term keepsakes, and temporary stored items |
+| Mailbox | A two-layer game-style mailbox (letters + thoughts), with a quiet "kept by me" entry |
 | Scene | Scene candidates, character setup, interactive rehearsal, free-form responses, calibration, and settlement |
 | Profile | Companion switching, handoff letters, memory management, privacy review, and experience preferences |
 
@@ -226,7 +226,7 @@ MindOff does not pressure users into completing tasks, create emotional dependen
 
 1. **Everyday companionship**: Open the app → see what the pet is doing → talk by text or voice → receive a concise response.
 2. **Bedtime unloading**: Share mixed thoughts at once → let the agent organize them → receive a short receipt → leave with less mental load.
-3. **Next-day return**: Open the mailbox → review letters, tasks, and last night's items → complete, keep, or release them.
+3. **Next-day return**: Open the mailbox → read letters and review thoughts → complete, keep, or release them.
 4. **Scene rehearsal**: Confirm a candidate or create a scene → add people and context → try different expressions → keep the settlement card or clear the scene.
 5. **Companion switching**: Choose a new pet → read a coarse-grained handoff letter → continue without explaining everything again.
 

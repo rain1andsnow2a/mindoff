@@ -76,7 +76,7 @@ export function dueFrom(date: string, time: string): string {
   return `${date}T${hh}:${mm}:00`;
 }
 
-/** 三日寄存剩余时间文案 */
+/** 临时思绪剩余保存时间文案（默认保存一个月，后端 EPHEMERAL_TTL_DAYS） */
 export function remainText(expiresAt: string | null): string {
   if (!expiresAt) return "";
   const ms = new Date(expiresAt).getTime() - Date.now();
@@ -91,7 +91,7 @@ const _TREASURE_TYPE: Record<string, Keepsake["type"]> = {
   summary: "insight", idea: "insight", memory: "quote", scene: "scene", ephemeral: "moment",
 };
 const _TREASURE_SOURCE: Record<string, string> = {
-  summary: "今日小结", idea: "灵感收藏", memory: "记忆", scene: "场景结算", ephemeral: "三日寄存",
+  summary: "今日小结", idea: "灵感收藏", memory: "记忆", scene: "场景结算", ephemeral: "临时思绪",
 };
 export function mapTreasure(t: any): Keepsake {
   const st = String(t?.source_type || "");

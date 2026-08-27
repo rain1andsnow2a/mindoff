@@ -19,7 +19,7 @@ import { CompanionChat, CompanionIdle, CompanionJournal, ModeSheet } from "./src
 import { VoiceCall } from "./src/screens/VoiceCall";
 import { ProcessingScreen, ReceiptScreen, SleepDump } from "./src/screens/Dump";
 import {
-  MailboxScreen, StorageDetail, TaskDetail,
+  MailboxScreen,
 } from "./src/screens/Mailbox";
 import { SceneEnd, ScenePlay, SceneScreen } from "./src/screens/Scene";
 import { PetChange, PetHandoff, ProfileScreen, MemoryScreen, MemoryReviewScreen, Preferences } from "./src/screens/Profile";
@@ -53,7 +53,7 @@ const SCREEN_IDS = [
   "auth",
   "onboard-1", "onboard-2", "onboard-3", "onboard-4",
   "companion", "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
-  "mailbox", "task-detail", "storage-detail",
+  "mailbox",
   "scene", "scene-play", "scene-end",
   "profile", "pet-change", "pet-handoff",
   "memory-list", "memory-review", "user-profile",
@@ -107,7 +107,7 @@ const DEV_SCREEN: Screen | null = (() => {
 
 const INITIAL_SCREEN: Screen = DEV_SCREEN ?? "onboard-1";
 const INITIAL_TAB: AppTab =
-  DEV_SCREEN === "mailbox" || DEV_SCREEN === "task-detail" || DEV_SCREEN === "storage-detail"
+  DEV_SCREEN === "mailbox"
     ? "mailbox"
     : DEV_SCREEN === "scene" || DEV_SCREEN === "scene-play" || DEV_SCREEN === "scene-end"
       ? "scene"
@@ -123,7 +123,7 @@ const DEV_TOKENS: Tokens = { access_token: "dev", refresh_token: "dev", token_ty
 
 const FULL_SCREENS: Screen[] = [
   "chat", "journal", "voice-call", "sleep-dump", "processing", "receipt",
-  "task-detail", "storage-detail", "scene-play", "scene-end",
+  "scene-play", "scene-end",
   "pet-change", "pet-handoff", "memory-list", "memory-review", "user-profile", "design-system", "scene3d-preview",
 ];
 
@@ -564,7 +564,7 @@ export default function App() {
                 onOpenConversation={(id) => { setChatSeedText(""); setLetterReplyBody(""); setSeedConvId(id); go("chat"); setTab("companion"); }} />
             )}
             {screen === "voice-call" && (
-              <VoiceCall petName={pet.name} petEmoji={pet.emoji}
+              <VoiceCall petName={pet.name} petEmoji={pet.emoji} petPresetId={pet.presetId}
                 onEnd={() => { go("companion"); setTab("companion"); }}
                 onToast={showToast}
                 onEnterScene={(sceneId, theaterId) => {
@@ -595,8 +595,6 @@ export default function App() {
 
             {screen === "mailbox" && (
               <MailboxScreen
-                onTaskDetail={() => go("task-detail")}
-                onStorageDetail={() => go("storage-detail")}
                 petName={pet.name}
                 onToast={showToast}
                 onPlayScene={(sceneId, theaterId) => {
@@ -611,8 +609,6 @@ export default function App() {
                 }}
                 onReplyLetter={(letter) => { setSeedConvId(null); setChatSeedText(""); setLetterReplyBody(letter?.body ?? ""); go("chat"); setTab("companion"); }} />
             )}
-            {screen === "task-detail" && <TaskDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
-            {screen === "storage-detail" && <StorageDetail onBack={() => { go("mailbox"); setTab("mailbox"); }} />}
 
             {screen === "scene" && <SceneScreen onPlay={(id, theater) => { setSceneId(id); if (theater) setSceneTheater(theater); go("scene-play"); }} />}
             {screen === "scene-play" && <ScenePlay sceneId={sceneId} theater={sceneTheater} onEnd={() => go("scene-end")} />}
@@ -622,7 +618,7 @@ export default function App() {
             )}
 
             {screen === "profile" && (
-              <ProfileScreen petName={pet.name} petEmoji={pet.emoji} petSummary={pet.summary}
+              <ProfileScreen petName={pet.name} petEmoji={pet.emoji} petPresetId={pet.presetId} petSummary={pet.summary}
                 night={night} onNightToggle={() => setNight(n => !n)}
                 onChangePet={() => go("pet-change")}
                 onMemory={() => go("memory-list")}

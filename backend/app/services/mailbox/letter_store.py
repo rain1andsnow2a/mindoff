@@ -1,14 +1,18 @@
 """LetterStore：桌宠来信的读写入口。
 
 `create_generated` 是自动来信的唯一写入口（供 proactive / 定时任务调用），
-不暴露公开写接口。它在数据库层统一保证：同一来源幂等、每用户每天最多两封。
+不暴露公开写接口。它在数据库层统一保证同一来源幂等。
+
+历史上这里还有「每用户每天最多两封」的槽位硬上限；产品后来回归
+「游戏邮箱」式的简单信箱，不再设每日数量上限——各来源仍靠
+generation_key 幂等（同一来源同一天的信只会有一封）。
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,7 +26,6 @@ LETTER_TYPES = {
 }
 
 CST = timezone(timedelta(hours=8))
-DAILY_LETTER_LIMIT = 2
 
 
 def local_delivery_date(now: datetime | None = None) -> str:
@@ -57,10 +60,10 @@ class LetterStore:
         attachment: dict | None = None,
         delivery_date: str | None = None,
     ) -> Letter | None:
-        """幂等创建一封自动来信；当天两个槽位都占用时返回 None。
+        """幂等创建一封自动来信；同一 generation_key 已存在时直接返回旧信。
 
-        两个唯一约束分别保护来源幂等和每日槽位。并发请求即使同时通过
-        预检查，也只能各占一个槽位，不会突破每日两封的硬上限。
+        delivery_slot 只作为当天内的序号（唯一约束防并发重复占位），
+        不再有每日数量上限；并发冲突时重新取序号重试。
         """
         if type not in LETTER_TYPES:
             raise ValueError(f"未知来信类型: {type}")
@@ -72,7 +75,9 @@ class LetterStore:
             return existing
 
         date_key = delivery_date or local_delivery_date()
-        for slot in range(1, DAILY_LETTER_LIMIT + 1):
+        # 并发兜底：极少数情况下两个请求同时拿到同一序号，重试三次足够。
+        for _ in range(3):
+            slot = self._next_slot(user_id, date_key)
             letter = Letter(
                 user_id=user_id,
                 generation_key=generation_key,
@@ -86,7 +91,7 @@ class LetterStore:
                 attachment=attachment,
             )
             try:
-                # SAVEPOINT 只回滚本次槽位争用，不破坏调用方 session。
+                # SAVEPOINT 只回滚本次插入争用，不破坏调用方 session。
                 with self._db.begin_nested():
                     self._db.add(letter)
                     self._db.flush()
@@ -102,6 +107,17 @@ class LetterStore:
 
         return self.get_generated(user_id, generation_key)
 
+    def _next_slot(self, user_id: int, date_key: str) -> int:
+        """当天已占用的最大序号 + 1（从 1 开始）。"""
+        max_slot = self._db.scalar(
+            select(func.max(Letter.delivery_slot)).where(
+                Letter.user_id == user_id,
+                Letter.delivery_date == date_key,
+                Letter.delivery_slot.is_not(None),
+            )
+        )
+        return int(max_slot or 0) + 1
+
     def get_generated(self, user_id: int, generation_key: str) -> Letter | None:
         return self._db.scalar(
             select(Letter).where(
@@ -113,15 +129,12 @@ class LetterStore:
     def has_daily_capacity(
         self, user_id: int, delivery_date: str | None = None
     ) -> bool:
-        date_key = delivery_date or local_delivery_date()
-        occupied = self._db.scalars(
-            select(Letter.delivery_slot).where(
-                Letter.user_id == user_id,
-                Letter.delivery_date == date_key,
-                Letter.delivery_slot.is_not(None),
-            )
-        ).all()
-        return len(occupied) < DAILY_LETTER_LIMIT
+        """历史遗留守卫：来信已取消每日数量上限，恒为 True。
+
+        保留方法签名，避免改动各生成入口（晚信/周报/场景邀请等）的调用结构；
+        各来源自身仍通过 generation_key 保持每天一封的幂等。
+        """
+        return True
 
     def list_for_delivery_date(
         self, user_id: int, delivery_date: str | None = None

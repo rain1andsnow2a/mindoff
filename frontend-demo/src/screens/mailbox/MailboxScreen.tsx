@@ -1,37 +1,73 @@
 /**
- * 信箱主屏 + 任务详情 + 寄存详情。
- * 四个分区（来信/待办/珍藏/寄存）在窄屏用横向 Chip、宽屏用左侧栏切换。
+ * 信箱主屏：「来信 + 思绪」双层，像游戏邮箱一样简单。
+ *
+ * - 来信：最新一封（信封→信纸）+ 往期来信列表 + 「我留下的」入口；
+ * - 思绪：倾倒整理出的念头统一放这里——办（待办）/想（灵感）/情（情绪）/景（片段），
+ *   批注式单列，不堆卡片；带保存期的思绪可随时珍藏或放下（默认保留一个月，后端 TTL）。
+ *
+ * 不再有「今日待启 / 三日寄存 / 长久珍藏」分区，来信也不设每日数量上限。
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { Archive, Check, ChevronLeft, Star } from "lucide-react-native";
+import { Archive, Check } from "lucide-react-native";
 import {
-  Button,
   Card,
   Chip,
   EmptyState,
-  IconButton,
   PageContainer,
   PageHeader,
   useResponsive,
 } from "../../design-system";
 import {
-  acceptSceneInvite, ackLetter, createTodo, createTreasure, deleteTodo, deleteTreasure,
-  dropEphemeral, keepEphemeral, listEphemeral, listLetters, listTodos, listTreasures,
+  acceptSceneInvite, ackLetter, createTreasure, deleteTodo, deleteTreasure,
+  dropEphemeral, keepEphemeral, listEphemeral, listIdeas, listLetters, listTodos, listTreasures,
   markLetterRead, updateTodo,
 } from "../../api";
 import {
   ApiLetter, Keepsake, LetterState, Task, TODAY_DATE,
-  dueFrom, mapTodo, mapTreasure, remainText, useMailboxSurface,
+  mapTodo, mapTreasure, remainText, useMailboxSurface, _fmtLetterDate,
 } from "./shared";
-import { AddTaskSheet, DailyTaskList, WeekNavigator } from "./TasksTab";
 import { KeepsakeAlbum, KeepsakeDetail } from "./Keepsakes";
 import { DailyLetterView } from "./Letters";
 
-/** 信箱主屏：聚合来信/今日待启/长久珍藏/三日寄存四个分区。 */
-export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, onToast, onPlayScene, petName = "你的伙伴" }: {
-  onTaskDetail: () => void;
-  onStorageDetail: () => void;
+/** 思绪批注行：单字章 + 正文 + 元信息 + 轻量动作。 */
+interface ThoughtRow {
+  key: string;
+  seal: string;
+  text: string;
+  meta: string;
+  done?: boolean;
+  onToggle?: () => void;
+  onRemove?: () => void;
+  onKeep?: () => void;
+  onDrop?: () => void;
+}
+
+/** created_at → 「M月D日」（往期来信行的短日期）。 */
+function shortDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  } catch {
+    return "";
+  }
+}
+
+/** 待办的轻量时间文案：今天 / 今天 15:00 / 8月2日。 */
+function dueText(t: Task): string {
+  if (t.date === TODAY_DATE) return t.time ? `今天 ${t.time}` : "今天";
+  const [y, m, d] = t.date.split("-").map(Number);
+  return `${y === new Date().getFullYear() ? "" : `${y}年`}${m}月${d}日${t.time ? ` ${t.time}` : ""}`;
+}
+
+/** 后端 ephemeral 的 kind → 单字章（情绪→情，片段/候选→景，兜底→想）。 */
+function sealOfKind(kind: string): string {
+  if (kind === "emotion" || kind === "情绪") return "情";
+  if (kind === "fragment" || kind === "片段" || kind === "候选") return "景";
+  return "想";
+}
+
+export function MailboxScreen({ onReplyLetter, onToast, onPlayScene, petName = "你的伙伴" }: {
   onReplyLetter: (letter: { title: string; body: string } | null) => void;
   onToast?: (msg: string) => void;
   /** 接受场景邀请后进入片场演绎（sceneId + 预设剧场 id，dynamic_image 时 theaterId 为 null） */
@@ -41,19 +77,21 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   const { theme, C } = useMailboxSurface();
   const { isExpanded } = useResponsive();
   const [sec, setSec] = useState(0);
-  const sections = ["桌宠来信", "今日待启", "长久珍藏", "三日寄存"];
+  const sections = ["来信", "思绪"];
 
+  // ─── 思绪：待办 / 灵感 / 临时思绪 ───
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [showAddTask, setShowAddTask] = useState(false);
+  const [ideas, setIdeas] = useState<any[]>([]);
+  const [ephem, setEphem] = useState<any[]>([]);
 
+  // ─── 我留下的（原「长久珍藏」，只作为来信页的安静入口）───
   const [keepsakes, setKeepsakes] = useState<Keepsake[]>([]);
   const [selectedKeepsake, setSelectedKeepsake] = useState<Keepsake | null>(null);
-  const [ephem, setEphem] = useState<any[]>([]);
+  const [showKeepsakes, setShowKeepsakes] = useState(false);
 
   // ─── 来信（真实后端）───
   const [letters, setLetters] = useState<ApiLetter[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const [letterState, setLetterState] = useState<LetterState>("waiting");
   const [savedLetterIds, setSavedLetterIds] = useState<Set<number>>(new Set());
   const [ackingLetter, setAckingLetter] = useState(false);
@@ -62,7 +100,8 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current); }, []);
 
-  const activeLetter = letters[0] ?? null;
+  const activeLetter = letters.find(l => l.id === activeId) ?? letters[0] ?? null;
+  const pastLetters = letters.filter(l => activeLetter == null || l.id !== activeLetter.id);
 
   const reloadLetters = async () => {
     try {
@@ -70,6 +109,7 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
       const arr = Array.isArray(list) ? list : [];
       setLetters(arr);
       const first = arr[0] ?? null;
+      setActiveId(first ? first.id : null);
       if (!first) setLetterState("waiting");
       else if (first.is_read) setLetterState(savedLetterIds.has(first.id) ? "saved" : "opened");
       else setLetterState("sealed");
@@ -85,6 +125,16 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     openTimer.current = setTimeout(() => setLetterState("opened"), 680);
   };
 
+  /** 往期来信行：点开直接读（跳过信封仪式），顺手标已读。 */
+  const handleSelectPast = (letter: ApiLetter) => {
+    setActiveId(letter.id);
+    setLetterState(savedLetterIds.has(letter.id) ? "saved" : "opened");
+    if (!letter.is_read) {
+      markLetterRead(letter.id).catch(() => {});
+      setLetters(ls => ls.map(l => l.id === letter.id ? { ...l, is_read: true } : l));
+    }
+  };
+
   const handleSaveLetter = async () => {
     if (!activeLetter || savedLetterIds.has(activeLetter.id)) return;
     try {
@@ -94,7 +144,7 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
       });
       setSavedLetterIds(s => new Set(s).add(activeLetter.id));
       setLetterState("saved");
-      onToast?.("已放入长久珍藏 ✦");
+      onToast?.("已替你收好 ✦");
       reloadTreasures();
     } catch {
       onToast?.("没存上，待会儿再试试");
@@ -132,11 +182,16 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     }
   };
 
-  const dayTasks = tasks.filter(t => t.date === selectedDate);
   const reloadTasks = async () => {
     try {
       const list = await listTodos("");
       setTasks((Array.isArray(list) ? list : []).map(mapTodo));
+    } catch { /* 网络异常保持当前列表 */ }
+  };
+  const reloadIdeas = async () => {
+    try {
+      const list = await listIdeas();
+      setIdeas(Array.isArray(list) ? list : []);
     } catch { /* 网络异常保持当前列表 */ }
   };
   const reloadTreasures = async () => {
@@ -151,16 +206,7 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
       setEphem(Array.isArray(list) ? list : []);
     } catch { /* 网络异常保持当前列表 */ }
   };
-  useEffect(() => { reloadTasks(); reloadTreasures(); reloadEphemeral(); reloadLetters(); }, []);
-
-  const keepEph = (id: number) => {
-    setEphem(list => list.filter(e => e.id !== id));
-    keepEphemeral(id).then(reloadTreasures).catch(() => {});
-  };
-  const dropEph = (id: number) => {
-    setEphem(list => list.filter(e => e.id !== id));
-    dropEphemeral(id).catch(() => {});
-  };
+  useEffect(() => { reloadTasks(); reloadIdeas(); reloadTreasures(); reloadEphemeral(); reloadLetters(); }, []);
 
   const toggleTask = (id: string) => {
     let done = false;
@@ -174,12 +220,13 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     setTasks(ts => ts.filter(t => t.id !== id));
     deleteTodo(Number(id)).catch(() => {});
   };
-  const addTask = async (t: Task) => {
-    setTasks(ts => [...ts, t]); // 乐观追加，reload 后换成真实 id
-    try {
-      await createTodo({ content: t.title, surface_text: t.title, due_date: dueFrom(t.date, t.time) });
-      await reloadTasks();
-    } catch { /* 失败保留乐观项 */ }
+  const keepEph = (id: number) => {
+    setEphem(list => list.filter(e => e.id !== id));
+    keepEphemeral(id).then(reloadTreasures).catch(() => {});
+  };
+  const dropEph = (id: number) => {
+    setEphem(list => list.filter(e => e.id !== id));
+    dropEphemeral(id).catch(() => {});
   };
   const removeKeepsake = (id: string) => {
     setKeepsakes(ks => ks.filter(k => k.id !== id));
@@ -187,53 +234,167 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
     deleteTreasure(Number(id)).catch(() => {});
   };
 
+  // ─── 思绪批注列表：办（待办）→ 想（灵感）→ 情/景（临时思绪）───
+  const rows: ThoughtRow[] = [
+    ...tasks.map(t => ({
+      key: `task-${t.id}`,
+      seal: "办",
+      text: t.title,
+      meta: dueText(t),
+      done: t.completed,
+      onToggle: () => toggleTask(t.id),
+      onRemove: t.completed ? () => deleteTask(t.id) : undefined,
+    })),
+    ...ideas.map(it => ({
+      key: `idea-${it.id}`,
+      seal: "想",
+      text: it.surface_text || it.content || "",
+      meta: "灵感",
+    })),
+    ...ephem.map(it => ({
+      key: `eph-${it.id}`,
+      seal: sealOfKind(String(it.kind || "")),
+      text: it.surface_text || it.content || "",
+      meta: remainText(it.expires_at),
+      onKeep: () => keepEph(it.id),
+      onDrop: () => dropEph(it.id),
+    })),
+  ];
+  const sealCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.seal] = (acc[r.seal] || 0) + 1;
+    return acc;
+  }, {});
+
   const unreadLetters = letters.filter(l => !l.is_read).length;
-  const sectionContent = (
+
+  const letterSection = (
     <>
-      {sec === 1 && (
-        <>
-          <WeekNavigator weekOffset={weekOffset} selectedDate={selectedDate}
-            onWeekChange={d => setWeekOffset(o => o + d)} onSelectDate={setSelectedDate} tasks={tasks} />
-          <DailyTaskList selectedDate={selectedDate} tasks={dayTasks}
-            onToggle={toggleTask} onDelete={deleteTask} onAdd={() => setShowAddTask(true)} />
-          <Button variant="ghost" onPress={onTaskDetail}>查看任务详情示例</Button>
-        </>
+      <DailyLetterView letter={activeLetter} petName={petName} letterState={letterState}
+        onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
+        onAckLetter={handleAckLetter} acking={ackingLetter} ackedIds={ackedLetterIds}
+        onReply={() => onReplyLetter(activeLetter ? { title: activeLetter.title, body: activeLetter.body } : null)}
+        onEnterScene={handleEnterScene} entering={enteringScene}
+        onGotoKeepsakes={() => setShowKeepsakes(true)} />
+
+      {pastLetters.length > 0 && !showKeepsakes && (
+        <View style={{ marginTop: theme.spacing[6] }}>
+          <Text style={[theme.typography.textStyles.label, { color: C.muted, marginBottom: theme.spacing[1] }]}>
+            往期来信
+          </Text>
+          {pastLetters.map(l => (
+            <Pressable key={l.id} onPress={() => handleSelectPast(l)}
+              style={({ pressed }) => ({
+                flexDirection: "row", alignItems: "center", gap: theme.spacing[3],
+                paddingVertical: theme.spacing[3], borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+                opacity: pressed ? 0.7 : 1,
+              })}>
+              <Text style={[theme.typography.textStyles.caption, { color: C.muted, width: 52 }]}>{shortDate(l.created_at)}</Text>
+              <Text style={[theme.typography.textStyles.body, { color: C.text, flex: 1 }]} numberOfLines={1}>{l.title}</Text>
+              {!l.is_read && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.accent }} />}
+            </Pressable>
+          ))}
+        </View>
       )}
-        {sec === 0 && (
-          <DailyLetterView letters={letters} petName={petName} letterState={letterState}
-            onOpenLetter={handleOpenLetter} onSaveLetter={handleSaveLetter}
-            onAckLetter={handleAckLetter} acking={ackingLetter} ackedIds={ackedLetterIds}
-            onReply={() => onReplyLetter(activeLetter ? { title: activeLetter.title, body: activeLetter.body } : null)}
-            onEnterScene={handleEnterScene} entering={enteringScene} />
-      )}
-      {sec === 2 && (
+
+      {/* 「我留下的」：不占分区，只是来信页底部的安静入口 */}
+      <Pressable onPress={() => setShowKeepsakes(v => !v)}
+        style={({ pressed }) => ({
+          marginTop: theme.spacing[6], paddingVertical: theme.spacing[3], alignItems: "center",
+          opacity: pressed ? 0.7 : 1,
+        })}>
+        <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>
+          {showKeepsakes ? "回到来信" : `我留下的${keepsakes.length > 0 ? `（${keepsakes.length}）` : ""}`}
+        </Text>
+      </Pressable>
+      {showKeepsakes && (
         <KeepsakeAlbum keepsakes={keepsakes} onSelectItem={setSelectedKeepsake} onRemove={removeKeepsake} />
       )}
-      {sec === 3 && (
+    </>
+  );
+
+  const thoughtSection = (
+    <>
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={<Archive color={theme.colors.textMuted} size={24} />}
+          title="思绪盒还空着"
+          description="睡前倾倒的念头，整理后会来到这里。"
+        />
+      ) : (
         <>
-          {ephem.length === 0 && (
-            <EmptyState
-              icon={<Archive color={theme.colors.textMuted} size={24} />}
-              title="暂时没有寄存"
-              description="睡前说的情绪和碎片会先在这里待三天。"
-            />
-          )}
-          {ephem.map((it) => (
-            <Card key={it.id} style={{ marginBottom: theme.spacing[3] }}>
-              <Text style={[theme.typography.textStyles.bodyStrong, { marginBottom: theme.spacing[2], color: C.text }]}>
-                {it.surface_text || it.content}
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing[2], marginBottom: theme.spacing[3] }}>
-                <Chip>{it.kind}</Chip>
-                <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>{remainText(it.expires_at)}</Text>
+          {/* 图例：单字章含义与条数 */}
+          <View style={{ flexDirection: "row", gap: theme.spacing[5], marginBottom: theme.spacing[4] }}>
+            {["办", "想", "情", "景"].filter(s => sealCounts[s]).map(s => (
+              <View key={s} style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing[2] }}>
+                <View style={{
+                  width: 26, height: 26, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.border,
+                  alignItems: "center", justifyContent: "center",
+                }}>
+                  <Text style={{ fontSize: 13, color: theme.colors.accent }}>{s}</Text>
+                </View>
+                <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>
+                  {{ 办: "待办", 想: "灵感", 情: "情绪", 景: "片段" }[s]} · {sealCounts[s]}
+                </Text>
               </View>
-              <View style={{ flexDirection: "row", gap: theme.spacing[3] }}>
-                <View style={{ flex: 1 }}><Button fullWidth onPress={() => keepEph(it.id)}>珍藏</Button></View>
-                <View style={{ flex: 1 }}><Button fullWidth variant="secondary" onPress={() => dropEph(it.id)}>放下</Button></View>
+            ))}
+          </View>
+
+          {rows.map(row => (
+            <View key={row.key} style={{
+              flexDirection: "row", alignItems: "flex-start", gap: theme.spacing[3],
+              paddingVertical: theme.spacing[3], borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+            }}>
+              <View style={{
+                width: 28, height: 28, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.border,
+                alignItems: "center", justifyContent: "center", marginTop: 2,
+              }}>
+                <Text style={{ fontSize: 14, color: theme.colors.accent }}>{row.seal}</Text>
               </View>
-            </Card>
+              <View style={{ flex: 1 }}>
+                <Text style={[
+                  theme.typography.textStyles.body,
+                  { color: row.done ? C.muted : C.text, textDecorationLine: row.done ? "line-through" : "none" },
+                ]}>{row.text}</Text>
+                {!!row.meta && (
+                  <Text style={[theme.typography.textStyles.caption, { color: C.muted, marginTop: 2 }]}>{row.meta}</Text>
+                )}
+                {(row.onKeep || row.onDrop) && (
+                  <View style={{ flexDirection: "row", gap: theme.spacing[4], marginTop: theme.spacing[2] }}>
+                    {row.onKeep && (
+                      <Pressable onPress={row.onKeep} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <Text style={[theme.typography.textStyles.caption, { color: theme.colors.accent, fontWeight: "500" }]}>珍藏</Text>
+                      </Pressable>
+                    )}
+                    {row.onDrop && (
+                      <Pressable onPress={row.onDrop} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>放下</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+              </View>
+              {row.onToggle && (
+                <Pressable onPress={row.onToggle} hitSlop={8}
+                  style={({ pressed }) => ({
+                    width: 24, height: 24, borderRadius: 12, marginTop: 2,
+                    alignItems: "center", justifyContent: "center",
+                    backgroundColor: row.done ? theme.colors.accentSurface : "transparent",
+                    borderWidth: 2, borderColor: row.done ? theme.colors.accent : theme.colors.border,
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                  })}>
+                  {row.done && <Check size={12} color={theme.colors.textOnAccent} />}
+                </Pressable>
+              )}
+              {row.onRemove && (
+                <Pressable onPress={row.onRemove} hitSlop={8} style={{ marginTop: 5 }}>
+                  <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>移除</Text>
+                </Pressable>
+              )}
+            </View>
           ))}
-          {ephem.length > 0 ? <Button variant="ghost" onPress={onStorageDetail}>查看寄存详情示例</Button> : null}
+          <Text style={[theme.typography.textStyles.label, { color: C.muted, marginTop: theme.spacing[4], textAlign: "center" }]}>
+            没做决定的思绪会保留一个月，到期轻轻放下
+          </Text>
         </>
       )}
     </>
@@ -244,9 +405,9 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
         <PageContainer maxWidth={1180}>
           <PageHeader
-            eyebrow="日常收纳"
+            eyebrow="来信与思绪"
             title="信箱"
-            description="来信、待办和想留下的片段，都安静地收在这里。"
+            description="信来了就读，思绪替你收着。"
           />
           {!isExpanded ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.spacing[2], paddingBottom: theme.spacing[5] }}>
@@ -285,127 +446,16 @@ export function MailboxScreen({ onTaskDetail, onStorageDetail, onReplyLetter, on
               </Card>
             ) : null}
             <Card style={{ flex: 1, width: "100%", minWidth: 0 }}>
-              {sectionContent}
+              {sec === 0 ? letterSection : thoughtSection}
             </Card>
           </View>
         </PageContainer>
       </ScrollView>
 
-      <AddTaskSheet visible={showAddTask} defaultDate={selectedDate}
-        onClose={() => setShowAddTask(false)} onAdd={addTask} />
       {selectedKeepsake && (
         <KeepsakeDetail item={selectedKeepsake}
           onClose={() => setSelectedKeepsake(null)} onRemove={() => removeKeepsake(selectedKeepsake.id)} />
       )}
     </View>
-  );
-}
-
-/** 任务详情示例屏。 */
-export function TaskDetail({ onBack }: { onBack: () => void }) {
-  const { theme, C } = useMailboxSurface();
-  const [done, setDone] = useState(false);
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-      <PageContainer maxWidth={760}>
-        <PageHeader
-          action={<IconButton accessibilityLabel="返回信箱" icon={<ChevronLeft color={theme.colors.textSecondary} size={20} />} onPress={onBack} />}
-          eyebrow="今日待启"
-          title="与朋友的约定"
-          description="下午 3:00 · 你昨晚提到担心会迟到"
-        />
-        <View style={{ gap: theme.spacing[4] }}>
-        <Card>
-          <Text style={{ fontSize: 28, marginBottom: 12 }}>📅</Text>
-          <Text style={[theme.typography.textStyles.body, { color: C.text2 }]}>昨晚你说起这件事，有点担心来不及。我帮你留着了。</Text>
-        </Card>
-        <Pressable onPress={() => setDone(!done)}
-          style={({ pressed }) => ({
-            padding: theme.spacing[4], borderRadius: theme.radii.card, flexDirection: "row", alignItems: "center", gap: theme.spacing[3],
-            backgroundColor: done ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface,
-            borderWidth: 1, borderColor: done ? theme.colors.accentSoft : theme.colors.border,
-            transform: [{ scale: pressed ? 0.99 : 1 }],
-          })}>
-          <View style={{
-            width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center",
-            backgroundColor: done ? theme.colors.accentSurface : "transparent",
-            borderWidth: 2, borderColor: done ? theme.colors.accent : theme.colors.border,
-          }}>
-            {done && <Check size={12} color={theme.colors.textOnAccent} />}
-          </View>
-          <Text style={[theme.typography.textStyles.bodyStrong, { color: C.text, textDecorationLine: done ? "line-through" : "none" }]}>
-            {done ? "已完成，做到了" : "标记为完成"}
-          </Text>
-        </Pressable>
-        {done && (
-          <Card style={{ alignItems: "center", backgroundColor: theme.colors.accentSoft }}>
-            <Text style={[theme.typography.textStyles.body, { color: C.text }]}>做完了，今天又少了一件事 🌿</Text>
-          </Card>
-        )}
-        </View>
-      </PageContainer>
-    </ScrollView>
-  );
-}
-
-/** 三日寄存详情示例屏。 */
-export function StorageDetail({ onBack }: { onBack: () => void }) {
-  const { theme, C } = useMailboxSurface();
-  const [action, setAction] = useState<"none" | "treasure" | "release">("none");
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-      <PageContainer maxWidth={760}>
-        <PageHeader
-          action={<IconButton accessibilityLabel="返回信箱" icon={<ChevronLeft color={theme.colors.textSecondary} size={20} />} onPress={onBack} />}
-          eyebrow="三日寄存"
-          title="那次和妈妈的通话"
-          description="有些感受不必立刻决定去留。"
-        />
-        <View style={{ gap: theme.spacing[4] }}>
-        <Card>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <Chip>情绪</Chip>
-            <Text style={[theme.typography.textStyles.caption, { color: C.muted }]}>1天后到期</Text>
-          </View>
-          <Text style={[theme.typography.textStyles.body, { color: C.text2 }]}>
-            昨晚说到你们的对话，你有点担心她最近的状态。这个感受被我留在这里了，三天后如果你没有更多想说的，我会轻轻放下它。
-          </Text>
-        </Card>
-        {action === "none" && (
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            <Pressable onPress={() => setAction("treasure")}
-              style={({ pressed }) => [{
-                flex: 1, paddingVertical: 16, borderRadius: 20, alignItems: "center", gap: 8,
-                backgroundColor: theme.colors.accentSoft, borderWidth: 1, borderColor: theme.colors.border,
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              }]}>
-              <Star size={20} color={theme.colors.accent} />
-              <Text style={{ fontSize: 14, fontWeight: "500", color: C.text }}>珍藏</Text>
-            </Pressable>
-            <Pressable onPress={() => setAction("release")}
-              style={({ pressed }) => [{
-                flex: 1, paddingVertical: 16, borderRadius: 20, alignItems: "center", gap: 8,
-                backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              }]}>
-              <Archive size={20} color={theme.colors.support} />
-              <Text style={{ fontSize: 14, fontWeight: "500", color: C.text }}>放下</Text>
-            </Pressable>
-          </View>
-        )}
-        {action !== "none" && (
-          <Card style={{
-            padding: 20, alignItems: "center",
-            backgroundColor: action === "treasure" ? theme.colors.accentSoft : theme.colors.surface,
-          }}>
-            <Text style={{ fontSize: 22, marginBottom: 8 }}>{action === "treasure" ? "⭐" : "🌊"}</Text>
-            <Text style={{ fontSize: 14, color: C.text }}>
-              {action === "treasure" ? "已加入长久珍藏" : "已轻轻放下，谢谢你把它告诉我"}
-            </Text>
-          </Card>
-        )}
-        </View>
-      </PageContainer>
-    </ScrollView>
   );
 }

@@ -168,11 +168,12 @@ function SceneInviteCard({ attachment, onEnter, entering }: {
 }
 
 /** 拆开后的信纸：正文段落 + 附件 + 收到/回信/珍藏操作。 */
-function LetterPaper({ letter, petName, saved, onAck, acking, acked, onReply, onSave, onEnterScene, entering }: {
+function LetterPaper({ letter, petName, saved, onAck, acking, acked, onReply, onSave, onEnterScene, entering, onGotoKeepsakes }: {
   letter: ApiLetter; petName: string;
   saved: boolean; onAck: () => void; acking?: boolean; acked?: boolean;
   onReply: () => void; onSave: () => void;
   onEnterScene?: () => void; entering?: boolean;
+  onGotoKeepsakes?: () => void;
 }) {
   const [attachSaved, setAttachSaved] = useState(false);
   const sceneInvite = isSceneInvite(letter);
@@ -256,8 +257,8 @@ function LetterPaper({ letter, petName, saved, onAck, acking, acked, onReply, on
             </Text>
           )}
           {saved && (
-            <Pressable style={{ alignItems: "center", marginTop: 8 }}>
-              <Text style={{ fontSize: 12, color: paperColors.dim }}>去长久珍藏看看</Text>
+            <Pressable onPress={onGotoKeepsakes} style={{ alignItems: "center", marginTop: 8 }}>
+              <Text style={{ fontSize: 12, color: paperColors.dim }}>去「我留下的」看看</Text>
             </Pressable>
           )}
         </View>
@@ -285,14 +286,14 @@ function WaitingLetterState() {
   );
 }
 
-/** 来信页主视图：按 letterState 在等待/信封/信纸之间切换。 */
-export function DailyLetterView({ letters, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter, acking, ackedIds, onEnterScene, entering }: {
-  letters: ApiLetter[]; petName: string; letterState: LetterState;
+/** 来信主视图：按 letterState 在等待/信封/信纸之间切换。letter 为当前展示的信件。 */
+export function DailyLetterView({ letter, petName, letterState, onReply, onOpenLetter, onSaveLetter, onAckLetter, acking, ackedIds, onEnterScene, entering, onGotoKeepsakes }: {
+  letter: ApiLetter | null; petName: string; letterState: LetterState;
   onReply: () => void; onOpenLetter: () => void; onSaveLetter: () => void; onAckLetter: () => void;
   acking?: boolean; ackedIds?: Set<number>;
   onEnterScene?: (letter: ApiLetter) => void; entering?: boolean;
+  onGotoKeepsakes?: () => void;
 }) {
-  const letter = letters[0] ?? null;
   const saved = letterState === "saved";
   const isOpening = letterState === "opening";
   const showEnvelope = letter != null && (letterState === "sealed" || letterState === "opening");
@@ -311,7 +312,7 @@ export function DailyLetterView({ letters, petName, letterState, onReply, onOpen
           onAck={onAckLetter} acking={acking} acked={ackedIds?.has(letter.id) ?? false}
           onReply={onReply} onSave={onSaveLetter}
           onEnterScene={onEnterScene ? () => onEnterScene(letter) : undefined}
-          entering={entering} />
+          entering={entering} onGotoKeepsakes={onGotoKeepsakes} />
       )}
     </View>
   );

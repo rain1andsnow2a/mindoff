@@ -17,3 +17,7 @@ frontend-demo/.expo/
 backend/static/tts_audio/
 
 deploy/artifacts/
+
+# 本地工具状态，不入库
+.reasonix/
+.mcp-ssh.lock

@@ -107,7 +107,7 @@ uv run python scripts/auth_smoke.py          # 账号全流程
 uv run python scripts/test_conversations.py  # 对话 + 从会话生成倾倒
 uv run python scripts/test_brain_dumps.py    # 倾倒 SSE + 回执回取
 uv run python scripts/test_pets.py           # 桌宠 + 交接信
-uv run python scripts/test_mailbox_ext.py    # 来信/三日寄存/珍藏
+uv run python scripts/test_mailbox_ext.py    # 来信/临时思绪/珍藏
 uv run python scripts/test_memories.py       # 记忆 CRUD
 uv run python scripts/test_stores.py         # 五类存储（待办/小结/灵感/情绪）
 uv run python scripts/handoff_smoke.py       # 交接信
@@ -126,7 +126,7 @@ service 层测试（免启动服务，需 `PYTHONPATH=.`）：
 uv run python scripts/test_stage.py            # 片场供给/结算
 uv run python scripts/test_proactive.py        # 信任门控
 uv run python scripts/test_phase6.py           # 隐私/上下文/审阅（含 HTTP 段，需服务）
-uv run python scripts/test_burn_raw.py         # keep_raw_dump→burn_raw_ref 焚原文 + 情绪落 7 天 TTL
+uv run python scripts/test_burn_raw.py         # keep_raw_dump→burn_raw_ref 焚原文 + 情绪落 30 天 TTL
 uv run python scripts/test_ephemeral_weekly.py # 到期硬删（行+历史）+ 周报生成/幂等
 ```
 
@@ -148,8 +148,8 @@ uv run python scripts/test_ephemeral_weekly.py # 到期硬删（行+历史）+ �
   `app/services/privacy.py` 的 `can_send_external`。
 - **检索纯本地、无向量库**：召回 = 结构化分层 + 关键词/实体匹配，
   做梦聚类 = 纯 entity 交集。私密内容没有任何外发路径。
-- 来信每天 ≤1–2 封；每周日 20:00（东八区）投一封周报（`type=weekly`，只取 surface 素材）。
-- 寄存 7 天（`inbox.EPHEMERAL_TTL_DAYS`）到期**硬删**：物理删记忆行 + 历史行，不留人物/地点/原话/事件
-  （`inbox._hard_delete_memory`；Property 4 的受限例外，仅到期寄存）。
+- 来信不设每日数量上限（游戏邮箱口径），但各来源靠 generation_key 幂等，同一来源同天只有一封；每周日 20:00（东八区）投一封周报（`type=weekly`，只取 surface 素材）。
+- 临时思绪保存 30 天（`inbox.EPHEMERAL_TTL_DAYS`）到期**硬删**：物理删记忆行 + 历史行，不留人物/地点/原话/事件
+  （`inbox._hard_delete_memory`；Property 4 的受限例外，仅到期思绪）。
 - 原始倾诉按用户 `keep_raw_dump` 开关：关则提取成功后即焚 `raw_ref`（含语音，走 `privacy.burn_raw_ref`），
   仅留整理后的 `surface_text`；提取失败不焚（先接住用户）。agent 上下文只读 `surface_text`，焚原文不影响记忆连续性。

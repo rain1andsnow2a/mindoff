@@ -1,4 +1,4 @@
-"""信箱服务：今日待启、三日寄存遗忘、桌宠来信。
+"""信箱服务：今日待启、临时思绪遗忘、桌宠来信。
 
 Property 6: build_today 只返回 depth=surface 记忆，绝不含 personal/vulnerable/core。
 """
@@ -15,9 +15,10 @@ from app.models.memory import MemoryItem
 
 logger = logging.getLogger(__name__)
 
-# 寄存 TTL（天）：倾倒产生的情绪/未确认片段默认寄存时长，到期硬删。
-# 单一事实源，dump_ingest 与文档口径都引用此值。
-EPHEMERAL_TTL_DAYS = 7
+# 临时思绪保存期（天）：倾倒产生的情绪/未确认片段默认保存时长，到期硬删。
+# 单一事实源，dump_ingest 与文档口径都引用此值。产品决定：信箱不做短命分类，
+# 思绪统一给一个月的缓冲期，期间用户可以随时珍藏或放下。
+EPHEMERAL_TTL_DAYS = 30
 
 # 需行动的 kind（进「今日待启」）
 ACTIONABLE_KINDS = {"待办"}

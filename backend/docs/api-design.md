@@ -118,10 +118,10 @@
 睡前整理把内容分流到下面五类资源；也支持手动增改。
 已实现（`app/routers/stores.py`，底层复用 memory_items + kind 专属字段 status/due_date）。
 
-### 6.1 待办 Todos ★（= 信箱"今日待启"）
+### 6.1 待办 Todos ★（在信箱「思绪」层展示）
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/todos` ★ | `?status=pending\|done&due=today`（`due=today` 即"今日待启"） |
+| GET | `/todos` ★ | `?status=pending\|done&due=today`（`due=today` 过滤当天到期项） |
 | POST | `/todos` ○ | 手动新建 |
 | GET | `/todos/{id}` | 详情 |
 | PATCH | `/todos/{id}` ★ | 改内容/截止/状态（完成/取消，保留至完成或取消） |
@@ -135,7 +135,7 @@
 
 ### 6.4 情绪 Emotions ★
 | GET `/emotions` ★ · GET `/emotions/{id}` · DELETE `/emotions/{id}` |
-> 只承接不强转任务；一般不编辑，可删除（隐私）。默认进"寄存"（7 天到期硬删）。
+> 只承接不强转任务；一般不编辑，可删除（隐私）。默认进"临时思绪"（30 天到期硬删）。
 
 ## 7. 片场 Theater ★
 
@@ -212,7 +212,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/mailbox` ★ | 聚合概览：今日待启数、未读来信（`unread_letters_count`）、寄存概况（7 天，`ephemeral_count`）、珍藏入口（`treasures_count`） |
+| GET | `/mailbox` ★ | 聚合概览：今日待启数、未读来信（`unread_letters_count`）、思绪概况（30 天，`ephemeral_count`）、珍藏入口（`treasures_count`） |
 
 ### 8.1 桌宠来信 Letters ★（主动陪伴产物）— ✅ 已实现
 | 方法 | 路径 | 说明 |
@@ -236,19 +236,19 @@
 - 与 `/reply` 的区别：ack **不开会话、不留对话记录**，只要一句就地显示的短反馈。
 - LLM 失败返回 `reply: null`（HTTP 仍 200），前端退回兜底提示，不报错。
 
-> 生成是服务端主动行为（定时/触发），非公开写接口；落库创建统一走 `LetterStore.create_generated`（内部入口）。来源幂等键彼此独立，数据库槽位保证每天≤1–2 封、无内容不发。
+> 生成是服务端主动行为（定时/触发），非公开写接口；落库创建统一走 `LetterStore.create_generated`（内部入口）。来源幂等键彼此独立（同一来源同天只有一封），不设每日数量上限、无内容不发。
 > `type=weekly` 为每周小结：每周日 20:00（东八区）由 `weekly_report.run_weekly_reports_all` 投递，聚合本周情绪走向/完成待办；只取 depth=surface 素材，不含被焚原话。
 > ✅ 已实现（`app/routers/letters.py`、`app/services/letter_store.py`、`app/services/weekly_report.py`、`app/models/letter.py`）。
 
-### 8.2 寄存 Ephemeral ★（7 天 TTL）— ✅ 已实现
+### 8.2 临时思绪 Ephemeral ★（30 天 TTL）— ✅ 已实现
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/ephemeral` ★ | 临时寄存（情绪/生活片段/未确认候选），每项带 `expiresAt`（默认 7 天） |
+| GET | `/ephemeral` ★ | 临时思绪（情绪/生活片段/未确认候选），每项带 `expiresAt`（默认 30 天） |
 | POST | `/ephemeral/{id}/keep` ★ | 用户主动留下 → 转入长久珍藏（副作用动作） |
 | DELETE | `/ephemeral/{id}` ○ | 立即删除 |
 > 到期**硬删**：物理删除记忆行 + 其历史行，不保留人物/地点/原话/具体事件（隐私红线）。
-> 这是记忆系统「软删+历史审计」(Property 4) 的受限例外，仅对到期寄存生效。
-> ✅ 已实现：TTL 由 `dump_ingest` 在创建情绪/片段时落（`inbox.EPHEMERAL_TTL_DAYS=7`）；
+> 这是记忆系统「软删+历史审计」(Property 4) 的受限例外，仅对到期思绪生效。
+> ✅ 已实现：TTL 由 `dump_ingest` 在创建情绪/片段时落（`inbox.EPHEMERAL_TTL_DAYS=30`）；
 > 到期硬删走 `inbox.expire_ephemeral`（`_hard_delete_memory`，含 FK 断链）。
 
 ### 8.3 长久珍藏 Treasures ★ — ✅ 已实现
