@@ -25,6 +25,7 @@ import {
   useTheme,
 } from "../design-system";
 import { createScene } from "../api";
+import { HomePetArtwork } from "../components/HomePetArtwork";
 import { useRealtimeCall, type CallStatus } from "../useRealtimeCall";
 
 /** 字幕流里的一行：role 决定说话人标签，draft 表示还没定稿。 */
@@ -126,6 +127,7 @@ type VoiceCallProps = {
   onToast?: (message: string) => void;
   petEmoji: string;
   petName: string;
+  petPresetId: string | null;
 };
 
 export function VoiceCall({
@@ -134,6 +136,7 @@ export function VoiceCall({
   onToast,
   petEmoji,
   petName,
+  petPresetId,
 }: VoiceCallProps) {
   const theme = useTheme();
   const { isCompact, isExpanded } = useResponsive();
@@ -286,7 +289,7 @@ export function VoiceCall({
         />
         <Text
           style={[
-            theme.typography.textStyles.bodyStrong,
+            theme.typography.textStyles.ambient,
             { color: theme.colors.textSecondary },
           ]}
         >
@@ -314,7 +317,7 @@ export function VoiceCall({
     </View>
   );
 
-  /** 未接通：整块只有一个呼吸的桌宠印记 + 一句提示，这是光圈唯一名正言顺的时刻。 */
+  /** 未接通：整块只有一个呼吸的桌宠立绘 + 一句提示。 */
   const connectingStage = (
     <View
       style={{
@@ -326,12 +329,6 @@ export function VoiceCall({
     >
       <Animated.View
         style={{
-          width: 72,
-          height: 72,
-          borderRadius: theme.radii.dialog,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.colors.accentSoft,
           opacity: breathe.interpolate({
             inputRange: [0, 1],
             outputRange: [0.6, 1],
@@ -346,7 +343,11 @@ export function VoiceCall({
           ],
         }}
       >
-        <Text style={{ fontSize: 30 }}>{petEmoji}</Text>
+        <HomePetArtwork
+          fallbackEmoji={petEmoji}
+          presetId={petPresetId}
+          size={72}
+        />
       </Animated.View>
       <View style={{ alignItems: "center", gap: theme.spacing[2] }}>
         <Text
@@ -388,13 +389,15 @@ export function VoiceCall({
         lines.map((line, index) => {
           const isCurrent = index === lines.length - 1;
           const isUser = line.role === "user";
+          // 剧本格式：说话人标签是页眉小字；它的台词用衬线（像读出来的词），
+          // 你的台词保持无衬线（像写下来的话）。历史句整体淡去。
           return (
-            <View key={line.key} style={{ opacity: isCurrent ? 1 : 0.44 }}>
+            <View key={line.key} style={{ opacity: isCurrent ? 1 : 0.5 }}>
               <Text
                 style={[
-                  theme.typography.textStyles.label,
+                  theme.typography.textStyles.ambient,
                   {
-                    marginBottom: theme.spacing[1],
+                    marginBottom: theme.spacing[2],
                     color: isUser ? theme.colors.textMuted : theme.colors.accent,
                   },
                 ]}
@@ -403,13 +406,24 @@ export function VoiceCall({
               </Text>
               <Text
                 style={{
-                  fontSize: isCurrent
-                    ? theme.typography.fontSizes.pageTitle - 8
-                    : theme.typography.fontSizes.bodyLarge,
-                  lineHeight: isCurrent ? 31 : theme.typography.lineHeights.bodyLarge,
-                  fontWeight: isCurrent
+                  fontSize: isUser
+                    ? isCurrent
+                      ? theme.typography.fontSizes.bodyLarge
+                      : theme.typography.fontSizes.body
+                    : isCurrent
+                      ? 17
+                      : theme.typography.fontSizes.body,
+                  lineHeight: isCurrent
+                    ? isUser
+                      ? theme.typography.lineHeights.bodyLarge
+                      : theme.typography.lineHeights.serifBody
+                    : theme.typography.lineHeights.body,
+                  fontWeight: isUser && isCurrent
                     ? theme.typography.fontWeights.medium
                     : theme.typography.fontWeights.regular,
+                  fontFamily: isUser
+                    ? undefined
+                    : theme.typography.fontFamilies.serif,
                   fontStyle: line.draft ? "italic" : "normal",
                   color: line.draft
                     ? theme.colors.textSecondary

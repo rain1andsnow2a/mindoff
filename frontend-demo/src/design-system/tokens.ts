@@ -1,72 +1,79 @@
 /**
- * MindOff 设计基础。
+ * MindOff 设计基础 —— Quiet Ambient OS × Digital Storybook。
  *
+ * 骨架（Quiet Ambient OS）：环境行、低 chrome（靠纸色分层而非描边）、日夜一体
+ * （夜间不是蓝黑，而是同一盏灯调暗后的暖炭色）。灵魂（Digital Storybook）：
+ * 叙事内容（信、台词、批注）用衬线，操作界面用无衬线。
+ *
+ * 色板全部取自米露原画：奶油毛色→纸底，瞳金→accent，尾杏→陶土，暖炭→夜底。
  * Token 使用语义命名；素材色、图片蒙层和特殊场景色不放在这里。
- * 中文与拉丁文字均使用平台系统无衬线字体，因此不设置 fontFamily。
  */
 import { Platform } from "react-native";
 
 export const lightColors = {
-  background: "#FCFAF7",
-  backgroundSubtle: "#F4F1EC",
-  surface: "#FFFDFA",
-  surfaceElevated: "#FFFFFF",
-  surfaceHover: "#F7F4EF",
-  surfacePressed: "#F0ECE5",
-  textPrimary: "#403A35",
-  textSecondary: "#756C63",
-  textMuted: "#9D9389",
-  textOnAccent: "#4B463F",
+  background: "#F5EFE2",
+  backgroundSubtle: "#EFE7D5",
+  surface: "#FCF8EE",
+  surfaceElevated: "#FFFEF8",
+  surfaceHover: "#F3ECDC",
+  surfacePressed: "#ECE3CF",
+  textPrimary: "#3B3428",
+  textSecondary: "#6E6350",
+  textMuted: "#9C907C",
+  textOnAccent: "#FFFDF4",
   textOnDanger: "#FFF9F5",
-  placeholder: "#9D9389",
-  border: "#E8E2D8",
-  divider: "#E8E2D8",
-  accent: "#B8860B",
-  accentSurface: "#F6E7A8",
-  accentSoft: "rgba(246,225,143,0.48)",
-  accentHover: "#E8D48B",
-  accentPressed: "#DCC87A",
+  placeholder: "#9C907C",
+  border: "rgba(90,76,55,0.18)",
+  divider: "rgba(90,76,55,0.10)",
+  accent: "#A97E22",
+  accentSurface: "rgba(184,134,11,0.12)",
+  accentSoft: "rgba(184,134,11,0.08)",
+  accentHover: "#B98F33",
+  accentPressed: "#8F6A1B",
   support: "#718879",
   focus: "#C4953A",
-  disabledSurface: "#EFEBE4",
-  disabledText: "#AAA096",
+  disabledSurface: "#EFE9DA",
+  disabledText: "#B8AD99",
   success: "#5E7D68",
   warning: "#A66A32",
   error: "#A8483D",
-  overlay: "rgba(64,58,53,0.42)",
-  scrim: "rgba(64,58,53,0.16)",
+  overlay: "rgba(59,52,40,0.38)",
+  scrim: "rgba(59,52,40,0.16)",
 } as const;
 
-/** 夜间模式在本轮只保证完整语义、可读性与可操作性。 */
+/**
+ * 夜间 = 同一盏灯调暗：暖炭纸底，墨色换成暖米，金换成烛光金。
+ * 刻意不用蓝黑——夜里依然是那间书房，只是灯拧小了。
+ */
 export const darkColors: ColorTokens = {
-  background: "#292630",
-  backgroundSubtle: "#322E38",
-  surface: "#3B3540",
-  surfaceElevated: "#45404A",
-  surfaceHover: "#46404B",
-  surfacePressed: "#504955",
-  textPrimary: "#F4EFEA",
-  textSecondary: "#C5BBC1",
-  textMuted: "#A399A0",
-  textOnAccent: "#2F2020",
+  background: "#262019",
+  backgroundSubtle: "#2C251D",
+  surface: "#332B22",
+  surfaceElevated: "#3A3128",
+  surfaceHover: "#3A3128",
+  surfacePressed: "#42382C",
+  textPrimary: "#EFE6D2",
+  textSecondary: "#C9BCA4",
+  textMuted: "#97896E",
+  textOnAccent: "#2A2114",
   textOnDanger: "#FFF9F5",
-  placeholder: "#A399A0",
-  border: "rgba(255,255,255,0.14)",
-  divider: "rgba(255,255,255,0.09)",
-  accent: "#D28E80",
-  accentSurface: "#D28E80",
-  accentSoft: "rgba(210,142,128,0.20)",
-  accentHover: "#DEA092",
-  accentPressed: "#BD796C",
-  support: "#91A899",
-  focus: "#E2C46F",
-  disabledSurface: "#403A45",
-  disabledText: "#7F767D",
-  success: "#8EB19A",
+  placeholder: "#97896E",
+  border: "rgba(238,227,206,0.14)",
+  divider: "rgba(238,227,206,0.09)",
+  accent: "#D8A94E",
+  accentSurface: "rgba(216,169,78,0.14)",
+  accentSoft: "rgba(216,169,78,0.09)",
+  accentHover: "#E4BC6B",
+  accentPressed: "#C2933C",
+  support: "#8FA98F",
+  focus: "#D8A94E",
+  disabledSurface: "#332C22",
+  disabledText: "#6E6350",
+  success: "#8FA98F",
   warning: "#D5A16B",
-  error: "#E18A80",
-  overlay: "rgba(12,10,14,0.68)",
-  scrim: "rgba(12,10,14,0.34)",
+  error: "#C96A55",
+  overlay: "rgba(12,9,5,0.55)",
+  scrim: "rgba(12,9,5,0.30)",
 };
 
 export type ColorTokens = {
@@ -90,7 +97,21 @@ export const paperColors = {
   goldInk: "#463F3C", // 奶油胶囊按钮文字
 } as const;
 
+/**
+ * 叙事衬线：信、台词、扉页等「被阅读的内容」用衬线；
+ * Android 走系统 Noto Serif（覆盖中文），iOS 用宋体-简，web 交给 CSS 泛型族。
+ */
+export const fontFamilies = {
+  serif: Platform.select({
+    ios: "Songti SC",
+    android: "serif",
+    default: "serif",
+  }),
+  sans: undefined,
+} as const;
+
 export const fontSizes = {
+  ambient: 11,
   label: 12,
   caption: 13,
   body: 15,
@@ -107,6 +128,7 @@ export const fontWeights = {
 } as const;
 
 export const lineHeights = {
+  ambient: 16,
   label: 16,
   caption: 19,
   body: 23,
@@ -114,6 +136,7 @@ export const lineHeights = {
   sectionTitle: 26,
   pageTitle: 36,
   display: 46,
+  serifBody: 30,
 } as const;
 
 export const letterSpacings = {
@@ -121,6 +144,7 @@ export const letterSpacings = {
   normal: 0,
   relaxed: 0.2,
   label: 0.4,
+  ambient: 3.3,
 } as const;
 
 export const textStyles = {
@@ -166,9 +190,25 @@ export const textStyles = {
     fontWeight: fontWeights.medium,
     letterSpacing: letterSpacings.label,
   },
+  /** 环境行：屏顶那行小字，像书页天头的页眉。 */
+  ambient: {
+    fontSize: fontSizes.ambient,
+    lineHeight: lineHeights.ambient,
+    fontWeight: fontWeights.regular,
+    letterSpacing: letterSpacings.ambient,
+  },
+  /** 衬线正文：信与台词等被阅读的内容（17/30，接近书页行距）。 */
+  serifBody: {
+    fontSize: 17,
+    lineHeight: lineHeights.serifBody,
+    fontWeight: fontWeights.regular,
+    letterSpacing: letterSpacings.relaxed,
+    fontFamily: fontFamilies.serif,
+  },
 } as const;
 
 export const typography = {
+  fontFamilies,
   fontSizes,
   fontWeights,
   lineHeights,
@@ -222,14 +262,14 @@ const nativeShadows = {
     elevation: 0,
   },
   soft: {
-    shadowColor: "#403A35",
+    shadowColor: "#3B3428",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 2,
   },
   floating: {
-    shadowColor: "#403A35",
+    shadowColor: "#3B3428",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.14,
     shadowRadius: 28,
@@ -242,10 +282,10 @@ const webShadows = {
     boxShadow: "none",
   },
   soft: {
-    boxShadow: "0 4px 12px rgba(64,58,53,0.08)",
+    boxShadow: "0 4px 12px rgba(59,52,40,0.08)",
   },
   floating: {
-    boxShadow: "0 12px 28px rgba(64,58,53,0.14)",
+    boxShadow: "0 12px 28px rgba(59,52,40,0.14)",
   },
 } as const;
 
@@ -267,7 +307,8 @@ export const motion = {
     state: 220,
     enter: 300,
     exit: 240,
-    ambient: 3_600,
+    /** 呼吸周期：4.6s，与原型 breathe 关键帧一致。 */
+    ambient: 4_600,
   },
   distances: {
     subtle: 4,

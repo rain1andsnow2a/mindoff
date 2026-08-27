@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Lock, Mic } from "lucide-react-native";
-import { Button, CreamRipple, useReducedMotion, useResponsive, paperColors } from "../../design-system";
+import { Button, CreamRipple, useReducedMotion, useResponsive, useTheme, paperColors } from "../../design-system";
 import { parseSceneNarration, parseSceneRole } from "../../api";
 import type { SceneParseResult } from "../../api";
 import { useVoiceInput } from "../../useVoiceInput";
@@ -23,6 +23,7 @@ export const CAROUSEL_SIDE = Math.max(16, (Dimensions.get("window").width - CARO
 export function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
   scene: BuiltInScene; index: number; scrollX: Animated.Value; isActive: boolean; onEnter: () => void;
 }) {
+  const theme = useTheme();
   // 跟手连续缩放/淡入：当前卡片 1.0，相邻卡片缩到 0.9 且变淡，随滑动平滑过渡。
   const inputRange = [(index - 1) * CAROUSEL_SNAP, index * CAROUSEL_SNAP, (index + 1) * CAROUSEL_SNAP];
   const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: "clamp" });
@@ -43,12 +44,30 @@ export function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
           position: "absolute", bottom: 60, right: 30, width: 140, height: 140, borderRadius: 70,
           backgroundColor: scene.ambientColor2,
         }} />
+        {/* 竖排戏名：水牌右侧，衬线金字（RN 无 writing-mode，逐字换行竖排）。 */}
+        <View style={{ position: "absolute", top: 26, right: 22, alignItems: "center" }} pointerEvents="none">
+          <Text
+            style={{
+              fontFamily: theme.typography.fontFamilies.serif,
+              fontSize: 26,
+              lineHeight: 36,
+              letterSpacing: 4,
+              textAlign: "center",
+              color: "#E9D6A6",
+              textShadowColor: "rgba(20,14,6,0.45)",
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 6,
+            }}
+          >
+            {scene.title.split("").join("\n")}
+          </Text>
+        </View>
         <View style={{ position: "absolute", top: 20, left: 20 }}>
           <View style={{
             paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
-            backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)",
+            backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)",
           }}>
-            <Text style={{ fontSize: 10, fontWeight: "500", color: "rgba(255,255,255,0.72)" }}>内置场景</Text>
+            <Text style={{ fontSize: 10, fontWeight: "500", color: "rgba(255,255,255,0.72)" }}>排练中</Text>
           </View>
         </View>
         <LinearGradient
@@ -57,7 +76,6 @@ export function ScenePortal({ scene, index, scrollX, isActive, onEnter }: {
           <Text style={{ fontSize: 11, marginBottom: 8, color: "rgba(255,255,255,0.55)" }}>
             {scene.relationships.join(" · ")}
           </Text>
-          <Text style={{ fontSize: 22, fontWeight: "500", marginBottom: 4, color: "rgba(255,255,255,0.95)" }}>{scene.title}</Text>
           <Text style={{ fontSize: 13, lineHeight: 18, marginBottom: 16, color: "rgba(255,255,255,0.65)" }}>{scene.desc}</Text>
           {isActive && (
             <Pressable onPress={onEnter}

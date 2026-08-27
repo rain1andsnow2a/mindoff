@@ -143,11 +143,10 @@ export function PageHeader({
         {eyebrow ? (
           <Text
             style={[
-              theme.typography.textStyles.label,
+              theme.typography.textStyles.ambient,
               {
                 marginBottom: spacing[2],
                 color: theme.colors.accent,
-                textTransform: "uppercase",
               },
             ]}
           >
@@ -158,7 +157,10 @@ export function PageHeader({
           accessibilityRole="header"
           style={[
             theme.typography.textStyles.pageTitle,
-            { color: theme.colors.textPrimary },
+            {
+              fontFamily: theme.typography.fontFamilies.serif,
+              color: theme.colors.textPrimary,
+            },
           ]}
         >
           {title}

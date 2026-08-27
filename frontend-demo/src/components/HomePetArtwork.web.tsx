@@ -17,17 +17,14 @@ type HomePetArtworkProps = {
   size?: number;
 };
 
-const MIN_IDLE_DELAY_MS = 5_000;
-const MAX_IDLE_DELAY_MS = 12_000;
-
-function nextIdleDelay() {
-  return MIN_IDLE_DELAY_MS + Math.random() * (MAX_IDLE_DELAY_MS - MIN_IDLE_DELAY_MS);
-}
-
-function moduleIds(sources: ImageSourcePropType[]) {
+function moduleIds(sources: (ImageSourcePropType | undefined)[]) {
   return sources.filter((source): source is number => typeof source === "number");
 }
 
+/**
+ * 首页桌宠（web）：静态首帧永远垫底，当前时段的动图（GIF）盖在上面。
+ * 与原生版同构；web 端 <img> 原生循环播放 GIF。
+ */
 export function HomePetArtwork({
   presetId,
   fallbackEmoji,
@@ -35,13 +32,12 @@ export function HomePetArtwork({
 }: HomePetArtworkProps) {
   const night = useTheme().isNight;
   const artwork = useMemo(() => getPetArtwork(presetId), [presetId]);
-  const frames = useMemo(() => (artwork ? [artwork.idle, ...artwork.groom] : []), [artwork]);
+  const motion = night ? artwork?.motionNight : artwork?.motionDay;
   const [assetsReady, setAssetsReady] = useState(false);
-  const [animationFailed, setAnimationFailed] = useState(false);
+  const [motionFailed, setMotionFailed] = useState(false);
   const [staticFailed, setStaticFailed] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
-  const [frameIndex, setFrameIndex] = useState(-1);
 
   useEffect(() => {
     let alive = true;
@@ -60,64 +56,38 @@ export function HomePetArtwork({
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      const active = state === "active";
-      setAppActive(active);
-      if (!active) setFrameIndex(-1);
+      setAppActive(state === "active");
     });
     return () => subscription.remove();
   }, []);
 
   useEffect(() => {
     setAssetsReady(false);
-    setAnimationFailed(false);
+    setMotionFailed(false);
     setStaticFailed(false);
-    setFrameIndex(-1);
     if (!artwork) return;
 
     let alive = true;
-    Asset.loadAsync(moduleIds([artwork.idle, ...artwork.groom]))
+    Asset.loadAsync(
+      moduleIds([artwork.idle, artwork.motionDay, artwork.motionNight]),
+    )
       .then(() => {
         if (alive) setAssetsReady(true);
       })
       .catch(() => {
-        if (alive) setAnimationFailed(true);
+        if (alive) setMotionFailed(true);
       });
     return () => {
       alive = false;
     };
   }, [artwork]);
 
-  useEffect(() => {
-    if (!artwork || !artwork.groom.length || !assetsReady || animationFailed || reduceMotion || !appActive) {
-      setFrameIndex(-1);
-      return;
-    }
-
-    const delay = frameIndex < 0 ? nextIdleDelay() : 1_000 / artwork.frameRate;
-    const timeout = setTimeout(() => {
-      if (frameIndex < 0) {
-        setFrameIndex(0);
-      } else if (frameIndex < artwork.groom.length - 1) {
-        setFrameIndex((current) => current + 1);
-      } else {
-        setFrameIndex(-1);
-      }
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, [appActive, animationFailed, artwork, assetsReady, frameIndex, reduceMotion]);
-
   if (!artwork || staticFailed) {
     return <PetPlaceholder size={size} emoji={fallbackEmoji} />;
   }
 
-  const activeFrame = frameIndex >= 0 ? frameIndex + 1 : 0;
-  const onFrameError = (index: number) => {
-    if (index === 0) setStaticFailed(true);
-    else {
-      setAnimationFailed(true);
-      setFrameIndex(-1);
-    }
-  };
+  const showMotion =
+    assetsReady && !motionFailed && !reduceMotion && appActive && motion != null;
 
   return (
     <View
@@ -136,18 +106,32 @@ export function HomePetArtwork({
           height: size * 1.34,
           borderRadius: size,
           backgroundColor: night
-            ? "rgba(221,199,143,0.08)"
-            : "rgba(246,231,168,0.14)",
+            ? "rgba(216,169,78,0.10)"
+            : "rgba(184,134,11,0.09)",
         }}
       />
       <View style={{ width: size * 1.42, height: size * 1.42 }}>
-        {frames.map((src, index) => (
+        <Image
+          source={artwork.idle}
+          resizeMode="contain"
+          fadeDuration={0}
+          onError={() => setStaticFailed(true)}
+          accessibilityIgnoresInvertColors
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        />
+        {showMotion ? (
           <Image
-            key={index}
-            source={src}
+            key={night ? "night" : "day"}
+            source={motion}
             resizeMode="contain"
             fadeDuration={0}
-            onError={() => onFrameError(index)}
+            onError={() => setMotionFailed(true)}
             accessibilityIgnoresInvertColors
             style={{
               position: "absolute",
@@ -155,10 +139,9 @@ export function HomePetArtwork({
               left: 0,
               width: "100%",
               height: "100%",
-              opacity: index === activeFrame ? 1 : 0,
             }}
           />
-        ))}
+        ) : null}
       </View>
     </View>
   );

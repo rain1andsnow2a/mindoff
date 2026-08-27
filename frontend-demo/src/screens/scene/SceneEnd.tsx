@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "lucide-react-native";
 
 import {
   Button,
@@ -95,10 +96,10 @@ function StepIndicator({ step, dark = false }: { step: ExitStep; dark?: boolean 
           height: 3,
           borderRadius: 2,
           backgroundColor: item === step
-            ? (dark ? "#F6E7A8" : theme.colors.accent)
+            ? (dark ? "#D8A94E" : theme.colors.accent)
             : item < step
-              ? (dark ? "rgba(246,231,168,0.58)" : theme.colors.accentHover)
-              : (dark ? "rgba(255,255,255,0.28)" : theme.colors.border),
+              ? (dark ? "rgba(216,169,78,0.58)" : theme.colors.accentHover)
+              : (dark ? "rgba(238,227,206,0.28)" : theme.colors.border),
         }} />
       ))}
     </View>
@@ -246,10 +247,10 @@ function PerspectiveCard({ card, companionComment, petName }: {
       ))}
       <View style={{
         marginTop: 16, padding: 13, borderRadius: theme.radii.control,
-        backgroundColor: "#F4F1EC", flexDirection: "row", gap: 10,
+        backgroundColor: "#EFE7D5", flexDirection: "row", gap: 10,
       }}>
-        <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(246,225,143,0.48)" }}>
-          <Text style={{ fontSize: 17 }}>🌿</Text>
+        <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(184,134,11,0.14)" }}>
+          <Feather size={16} color="#A97E22" strokeWidth={1.8} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 12, color: paperColors.meta }}>{petName}</Text>

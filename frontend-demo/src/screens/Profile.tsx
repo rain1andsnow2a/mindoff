@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import {
-  Archive, Bell, ChevronRight, Clock, Layers, LogOut, Moon, Shield, Trash2, Type,
+  Archive, Bell, Check, ChevronRight, Clock, Layers, LogOut, Moon, Shield, Trash2, Type,
 } from "lucide-react-native";
 import {
   Button,
@@ -93,7 +93,7 @@ function WheelColumn({ data, index, onChange, night }: {
           <View key={i} style={{ height: WHEEL_ITEM_H, alignItems: "center", justifyContent: "center" }}>
             <Text style={{
               fontSize: 26, fontVariant: ["tabular-nums"],
-              color: i === active ? (night ? "#F4EFEA" : "#4B463F") : (night ? "#7F767D" : "#C0B5A8"),
+              color: i === active ? (night ? "#EFE6D2" : "#3B3428") : (night ? "#97896E" : "#B8AD99"),
               fontWeight: i === active ? "600" : "400",
             }}>{v}</Text>
           </View>
@@ -114,9 +114,9 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
     setH(Number.isFinite(hh) ? Math.max(0, Math.min(23, hh)) : 22);
     setM(Number.isFinite(mm) ? (Math.round((mm % 60) / 5) % 12) : 0);
   }, [visible]);
-  const bg = night ? "#2E2A34" : "#FFFBF3";
-  const txt = night ? "#F4EFEA" : "#4B463F";
-  const sub = night ? "#A399A0" : "#C0B5A8";
+  const bg = night ? "#332B22" : "#FCF8EE";
+  const txt = night ? "#EFE6D2" : "#3B3428";
+  const sub = night ? "#97896E" : "#9C907C";
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={{ flex: 1, backgroundColor: "rgba(30,22,12,0.35)" }} onPress={onCancel} />
@@ -127,7 +127,7 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
         <View style={{ height: WHEEL_ITEM_H * WHEEL_VISIBLE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <View pointerEvents="none" style={{
             position: "absolute", left: 24, right: 24, height: WHEEL_ITEM_H, top: (WHEEL_ITEM_H * (WHEEL_VISIBLE - 1)) / 2,
-            borderRadius: 14, backgroundColor: "rgba(246,231,168,0.5)", borderWidth: 1, borderColor: "rgba(196,149,58,0.25)",
+            borderRadius: 14, backgroundColor: "rgba(216,169,78,0.14)", borderWidth: 1, borderColor: "rgba(216,169,78,0.35)",
           }} />
           <WheelColumn data={HOURS} index={h} onChange={setH} night={night} />
           <Text style={{ fontSize: 26, fontWeight: "600", color: txt }}>:</Text>
@@ -138,8 +138,8 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
             <Text style={{ fontSize: 14, color: sub }}>取消</Text>
           </Pressable>
           <Pressable onPress={() => onConfirm(`${HOURS[h]}:${MINS[m]}`)}
-            style={{ flex: 1, paddingVertical: 13, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(246,231,168,0.85)" }}>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#4D4249" }}>保存 {HOURS[h]}:{MINS[m]}</Text>
+            style={{ flex: 1, paddingVertical: 13, borderRadius: 999, alignItems: "center", backgroundColor: "rgba(216,169,78,0.9)" }}>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: "#2A2114" }}>保存 {HOURS[h]}:{MINS[m]}</Text>
           </Pressable>
         </View>
       </View>
@@ -148,12 +148,12 @@ function TimePickerSheet({ visible, initial, night, onCancel, onConfirm }: {
 }
 
 export function ProfileScreen({
-  onChangePet, night, onNightToggle, petName, petEmoji, petSummary,
+  onChangePet, night, onNightToggle, petName, petEmoji, petPresetId, petSummary,
   onMemory, onMemoryReview, preferences, onSetPreference, onLogout,
   onUserProfile,
 }: {
   onChangePet: () => void; night: boolean; onNightToggle: () => void;
-  petName: string; petEmoji: string; petSummary?: string;
+  petName: string; petEmoji: string; petPresetId?: string | null; petSummary?: string;
   onMemory: () => void; onMemoryReview: () => void;
   onUserProfile: () => void;
   preferences: Preferences;
@@ -185,45 +185,115 @@ export function ProfileScreen({
   };
 
   const sections = [
-    { title: "陪伴设置", rows: [
+    { numeral: "壹", title: "陪伴设置", rows: [
       { icon: <Bell size={16} color={C.text2} />, label: "主动陪伴频率", val: preferences.proactive_frequency, act: cycleFrequency },
       { icon: <Clock size={16} color={C.text2} />, label: "睡前提醒", val: preferences.sleep_reminder_time, act: () => setShowTimePicker(true) },
     ]},
-    { title: "记忆与隐私", rows: [
+    { numeral: "贰", title: "记忆与隐私", rows: [
       { icon: <Shield size={16} color={C.text2} />, label: "喵灵对我的理解", val: "可查看与纠正", act: onUserProfile },
       { icon: <Archive size={16} color={C.text2} />, label: "记忆管理", val: "", act: onMemory },
-      { icon: <Clock size={16} color={C.text2} />, label: "三日寄存规则", val: `${preferences.ephemeral_ttl_days}天` },
+      { icon: <Clock size={16} color={C.text2} />, label: "思绪保存期", val: `${preferences.ephemeral_ttl_days}天` },
       { icon: <Shield size={16} color={C.text2} />, label: "记忆审阅", val: "", act: onMemoryReview },
     ]},
-    { title: "界面与体验", rows: [
+    { numeral: "叁", title: "界面与体验", rows: [
       { icon: <Moon size={16} color={C.text2} />, label: "夜间氛围", val: night ? "开启" : "关闭", act: onNightToggle },
       { icon: <Type size={16} color={C.text2} />, label: "字体大小", val: preferences.font_size, act: cycleFontSize },
       { icon: <Layers size={16} color={C.text2} />, label: "减少透明度", val: preferences.reduce_transparency ? "开启" : "关闭", act: () => onSetPreference({ reduce_transparency: !preferences.reduce_transparency }) },
     ]},
   ];
+  const avatar = getPetAvatar(petPresetId ?? null);
   return (
     <View style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
         <PageContainer maxWidth={1100}>
         <PageHeader eyebrow="个人空间" title="我的" description="管理陪伴方式、记忆边界与阅读体验。" />
         <View style={{ flexDirection: isExpanded ? "row" : "column", alignItems: "flex-start", gap: theme.spacing[6] }}>
-        <Card style={{ width: isExpanded ? 320 : "100%", flexDirection: "row", alignItems: "center", gap: theme.spacing[4] }} onPress={onChangePet}>
-          <View style={{
-            width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-            backgroundColor: theme.colors.accentSoft, borderWidth: 1, borderColor: theme.colors.border,
-          }}>
-            <Text style={{ fontSize: 24 }}>{petEmoji}</Text>
+        {/* 扉页：藏书票式双线框，伙伴立像与名讳 */}
+        <Card style={{ width: isExpanded ? 320 : "100%", padding: theme.spacing[3] }} onPress={onChangePet}>
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radii.control - 2,
+              padding: 3,
+            }}
+          >
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: theme.colors.divider,
+                borderRadius: theme.radii.control - 5,
+                alignItems: "center",
+                paddingVertical: theme.spacing[6],
+                paddingHorizontal: theme.spacing[4],
+                gap: theme.spacing[2],
+              }}
+            >
+              {avatar ? (
+                <Image
+                  source={avatar}
+                  resizeMode="contain"
+                  accessibilityIgnoresInvertColors
+                  style={{ width: 96, height: 96 }}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 96,
+                    height: 96,
+                    borderRadius: 48,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: theme.colors.accentSoft,
+                  }}
+                >
+                  <Text style={{ fontSize: 36 }}>{petEmoji}</Text>
+                </View>
+              )}
+              <Text
+                style={[
+                  theme.typography.textStyles.sectionTitle,
+                  {
+                    fontFamily: theme.typography.fontFamilies.serif,
+                    color: C.text,
+                    marginTop: theme.spacing[2],
+                  },
+                ]}
+              >
+                {petName}
+              </Text>
+              <Text
+                style={[
+                  theme.typography.textStyles.ambient,
+                  { color: C.muted, textAlign: "center" },
+                ]}
+              >
+                {petSummary ?? "你的陪伴伙伴"}
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: theme.spacing[1],
+                  marginTop: theme.spacing[3],
+                }}
+              >
+                <Text
+                  style={[theme.typography.textStyles.label, { color: theme.colors.accent }]}
+                >
+                  换一位伙伴
+                </Text>
+                <ChevronRight size={12} color={theme.colors.accent} />
+              </View>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "500", color: C.text }}>{petName}</Text>
-            <Text style={{ fontSize: 13, marginTop: 2, color: C.text2 }}>{petSummary ?? "你的陪伴伙伴"}</Text>
-          </View>
-          <ChevronRight size={16} color={theme.colors.textMuted} />
         </Card>
         <View style={{ flex: 1, width: "100%" }}>
         {sections.map((sec, si) => (
           <View key={si} style={{ marginBottom: 16 }}>
-            <Text style={[theme.typography.textStyles.label, { marginBottom: theme.spacing[2], paddingHorizontal: theme.spacing[1], color: C.text2 }]}>{sec.title}</Text>
+            <Text style={[theme.typography.textStyles.label, { marginBottom: theme.spacing[2], paddingHorizontal: theme.spacing[1], color: C.text2 }]}>
+              {`${sec.numeral} · ${sec.title}`}
+            </Text>
             <Card style={{ padding: theme.spacing[1] }}>
               {sec.rows.map((row, ri) => (
                 <View key={ri}>
@@ -319,7 +389,7 @@ export function PetChange({ pets, activePetId, onBack, onHandoff }: {
             </View>
             {sel === i && (
               <View style={{ width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSurface }}>
-                <Text style={{ fontSize: 10, color: theme.colors.textOnAccent }}>✓</Text>
+                <Check size={12} color={theme.colors.accent} strokeWidth={2.4} />
               </View>
             )}
           </Card>
@@ -381,7 +451,7 @@ function SensitivityBadge({ label, night }: { label: string; night: boolean }) {
   };
   return (
     <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors[label] ?? "#D4B483" }}>
-      <Text style={{ fontSize: 11, color: night ? "#2A252E" : "#4B463F" }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: night ? "#2A2114" : "#3B3428" }}>{label}</Text>
     </View>
   );
 }

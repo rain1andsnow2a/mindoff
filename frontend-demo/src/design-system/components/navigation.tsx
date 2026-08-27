@@ -6,7 +6,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { Film, Mail, MessageCircle, User } from "lucide-react-native";
+import { Bookmark, Clapperboard, Feather, Mail } from "lucide-react-native";
 
 import { useTheme } from "../theme";
 import { iconSizes, spacing, touchTarget, zIndices } from "../tokens";
@@ -19,10 +19,10 @@ type NavigationProps = {
 };
 
 const items = [
-  { id: "companion", label: "陪伴", icon: MessageCircle },
+  { id: "companion", label: "今日", icon: Feather },
   { id: "mailbox", label: "信箱", icon: Mail },
-  { id: "scene", label: "片场", icon: Film },
-  { id: "profile", label: "我的", icon: User },
+  { id: "scene", label: "片场", icon: Clapperboard },
+  { id: "profile", label: "我的", icon: Bookmark },
 ] as const;
 
 function NavigationItem({
@@ -34,33 +34,12 @@ function NavigationItem({
 }: {
   active: boolean;
   compact: boolean;
-  icon: typeof MessageCircle;
+  icon: typeof Feather;
   label: string;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
-  const selectedBackground = theme.isNight
-    ? "rgba(232, 211, 139, 0.20)"
-    : theme.colors.accentSoft;
-  const selectedForeground = theme.isNight ? "#E8D38B" : theme.colors.accent;
-  const selectedBorder = theme.isNight
-    ? "rgba(232, 211, 139, 0.24)"
-    : "rgba(224, 193, 84, 0.30)";
-  const selectedGlow: ViewStyle = Platform.select({
-    web: {
-      boxShadow: theme.isNight
-        ? "0 0 18px rgba(232, 211, 139, 0.14)"
-        : "0 0 18px rgba(232, 199, 88, 0.22)",
-    },
-    default: {
-      shadowColor: "#E8C758",
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: theme.isNight ? 0.12 : 0.18,
-      shadowRadius: 10,
-      elevation: 1,
-    },
-  }) as ViewStyle;
 
   return (
     <Pressable
@@ -82,26 +61,25 @@ function NavigationItem({
         justifyContent: "center",
         gap: spacing[1],
         borderWidth: 1,
-        borderColor: active ? selectedBorder : "transparent",
+        borderColor: active ? theme.colors.border : "transparent",
         backgroundColor: active
-          ? selectedBackground
+          ? theme.colors.accentSurface
           : hovered
             ? theme.colors.surfaceHover
             : "transparent",
         opacity: pressed ? 0.82 : 1,
         transform: [{ scale: pressed ? 0.97 : 1 }],
-        ...(active ? selectedGlow : null),
       })}
     >
       <Icon
         size={iconSizes.default}
-        color={active ? selectedForeground : theme.colors.textMuted}
+        color={active ? theme.colors.accent : theme.colors.textMuted}
         strokeWidth={active ? 2.2 : 1.8}
       />
       <Text
         style={[
           theme.typography.textStyles.label,
-          { color: active ? selectedForeground : theme.colors.textMuted },
+          { color: active ? theme.colors.accent : theme.colors.textMuted },
         ]}
       >
         {label}
@@ -121,7 +99,7 @@ export function BottomNavigation({ active, onChange }: NavigationProps) {
         : "0 -8px 24px rgba(64,58,53,0.07)",
     },
     default: {
-      shadowColor: theme.isNight ? "#000000" : "#403A35",
+      shadowColor: theme.isNight ? "#000000" : "#3B3428",
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: theme.isNight ? 0.24 : 0.08,
       shadowRadius: 12,
@@ -190,10 +168,10 @@ export function SideNavigation({ active, onChange }: NavigationProps) {
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 14,
-          backgroundColor: theme.colors.accentSoft,
+          backgroundColor: theme.colors.accentSurface,
         }}
       >
-        <Text style={{ fontSize: 20 }}>🌿</Text>
+        <Feather size={20} color={theme.colors.accent} strokeWidth={1.8} />
       </View>
 
       <View style={{ gap: spacing[2] }}>
