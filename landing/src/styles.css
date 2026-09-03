@@ -1,0 +1,406 @@
+/* ============ 设计 token ============ */
+:root{
+  --night-0:#070a18;        /* 最深的夜 */
+  --night-1:#0d1026;        /* 夜空底 */
+  --night-2:#171536;        /* 蓝紫深处 */
+  --lavender:#b9a8ec;       /* 薰衣草紫 */
+  --lavender-dim:#8f83c4;
+  --starlight:#ffd98c;      /* 暖黄星光 */
+  --starlight-soft:#f5c96b;
+  --rose:#f2b8d0;           /* logo 里的粉 */
+  --ink:#eef0ff;            /* 主文字 */
+  --ink-dim:rgba(238,240,255,.62);
+  --ink-faint:rgba(238,240,255,.38);
+  --glass:rgba(255,255,255,.055);
+  --glass-line:rgba(255,255,255,.12);
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC","Microsoft YaHei",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --ease-soft:cubic-bezier(.22,.8,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--night-1);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.75;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(255,217,140,.28);color:#fff}
+
+/* ============ 夜空底景:星野 + 呼吸光晕 ============ */
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+.aura{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;opacity:.5}
+.aura-a{width:56vw;height:56vw;left:-14vw;top:-18vh;background:radial-gradient(circle,rgba(93,76,176,.42),transparent 65%);animation:breathe 11s ease-in-out infinite}
+.aura-b{width:44vw;height:44vw;right:-12vw;top:22vh;background:radial-gradient(circle,rgba(242,184,208,.16),transparent 65%);animation:breathe 13s ease-in-out -4s infinite}
+.aura-c{width:40vw;height:40vw;left:22vw;bottom:-24vh;background:radial-gradient(circle,rgba(255,217,140,.10),transparent 62%);animation:breathe 15s ease-in-out -8s infinite}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.42}50%{transform:scale(1.12);opacity:.6}}
+
+main{position:relative;z-index:1}
+section{position:relative;padding:0 6vw}
+.wrap{max-width:1200px;margin:0 auto}
+
+/* ============ 顶部导航 ============ */
+nav{
+  position:absolute;top:0;left:0;right:0;z-index:10;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:26px 6vw;
+}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}
+.brand img{width:34px;height:34px;border-radius:9px;box-shadow:0 0 18px rgba(255,217,140,.25)}
+.brand b{font-size:17px;letter-spacing:.04em;font-weight:600}
+.brand span{color:var(--ink-faint);font-size:13px;margin-left:2px;letter-spacing:.08em}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--ink-dim);text-decoration:none;font-size:14px;letter-spacing:.05em;transition:color .25s}
+.nav-links a:hover{color:var(--starlight)}
+
+/* ============ 通用文字 ============ */
+.eyebrow{
+  font-size:14px;letter-spacing:.28em;color:var(--lavender);
+  margin-bottom:22px;text-transform:uppercase;
+}
+h1,h2{font-family:var(--serif);font-weight:600;text-wrap:pretty;letter-spacing:.02em}
+h1{font-size:clamp(34px,4.6vw,60px);line-height:1.32}
+h2{font-size:clamp(28px,3.4vw,44px);line-height:1.4}
+.lede{color:var(--ink-dim);font-size:clamp(15px,1.25vw,18px);max-width:34em}
+.glow-word{color:var(--starlight);text-shadow:0 0 26px rgba(255,217,140,.45)}
+
+/* ============ Hero ============ */
+#hero{min-height:100vh;display:flex;align-items:center;padding-top:90px}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:4vw;align-items:center;width:100%}
+.hero-copy p.lede{margin:26px 0 40px;white-space:pre-line}
+.hero-copy .eyebrow{color:var(--starlight)}
+
+.dl-row{display:flex;gap:18px;flex-wrap:wrap}
+.dl-btn{
+  display:flex;align-items:center;gap:14px;
+  padding:15px 26px 15px 20px;border-radius:18px;
+  background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+  border:1px solid var(--glass-line);
+  color:var(--ink);text-decoration:none;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.10);
+  transition:transform .3s var(--ease-soft),box-shadow .3s,border-color .3s;
+}
+.dl-btn:hover{
+  transform:translateY(-3px);
+  border-color:rgba(255,217,140,.45);
+  box-shadow:0 14px 44px rgba(0,0,0,.45),0 0 34px rgba(255,217,140,.16),inset 0 1px 0 rgba(255,255,255,.14);
+}
+.dl-btn svg{width:30px;height:30px;flex:none}
+.dl-btn .t1{display:block;font-size:16px;font-weight:600;letter-spacing:.02em;line-height:1.3}
+.dl-btn .t2{display:block;font-size:12px;color:var(--ink-faint);letter-spacing:.06em;margin-top:1px}
+.dl-note{margin-top:20px;font-size:13px;color:var(--ink-faint);letter-spacing:.06em}
+.dl-note i{font-style:normal;color:var(--lavender-dim)}
+
+/* Hero 米露舞台 */
+.hero-stage{position:relative;display:flex;justify-content:center;align-items:center;will-change:transform,opacity}
+.miro{
+  position:relative;width:min(30vw,430px);
+  animation:hover-float 7s ease-in-out infinite;
+  filter:drop-shadow(0 26px 60px rgba(0,0,0,.5)) drop-shadow(0 0 54px rgba(255,224,160,.14));
+}
+.miro img{width:100%;display:block;user-select:none;-webkit-user-drag:none}
+.miro .blink{position:absolute;inset:0;opacity:0;transition:opacity .13s ease}
+.miro.is-blink .blink{opacity:1}
+.miro-halo{
+  position:absolute;width:70%;height:30%;left:15%;bottom:-6%;
+  background:radial-gradient(ellipse,rgba(255,217,140,.16),transparent 70%);
+  filter:blur(18px);z-index:-1;
+}
+@keyframes hover-float{0%,100%{transform:translateY(0) rotate(-.4deg)}50%{transform:translateY(-16px) rotate(.5deg)}}
+
+/* 漂浮的思绪碎片 */
+.frag{
+  position:absolute;padding:10px 16px;border-radius:14px;
+  background:var(--glass);border:1px solid var(--glass-line);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font-size:13px;color:var(--ink-dim);letter-spacing:.04em;white-space:nowrap;
+  box-shadow:0 6px 24px rgba(0,0,0,.25);
+  animation:drift var(--dur,9s) ease-in-out var(--delay,0s) infinite alternate;
+}
+.frag::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--starlight);margin-right:9px;vertical-align:2px;box-shadow:0 0 8px var(--starlight)}
+@keyframes drift{from{transform:translate(0,0) rotate(var(--rot,0deg))}to{transform:translate(var(--dx,8px),var(--dy,-14px)) rotate(var(--rot,0deg))}}
+.spark{
+  position:absolute;width:var(--s,14px);height:var(--s,14px);
+  background:var(--starlight);
+  clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);
+  filter:drop-shadow(0 0 8px rgba(255,217,140,.8));
+  animation:twinkle var(--dur,4s) ease-in-out var(--delay,0s) infinite;
+}
+.spark.pink{background:var(--rose);filter:drop-shadow(0 0 8px rgba(242,184,208,.8))}
+.spark.lav{background:var(--lavender);filter:drop-shadow(0 0 8px rgba(185,168,236,.8))}
+@keyframes twinkle{0%,100%{transform:scale(.7);opacity:.5}50%{transform:scale(1.15);opacity:1}}
+
+.scroll-hint{
+  position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+  color:var(--ink-faint);font-size:12px;letter-spacing:.34em;text-indent:.34em;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.scroll-hint::after{
+  content:"";width:1px;height:44px;
+  background:linear-gradient(to bottom,var(--starlight),transparent);
+  animation:hint-fall 2.2s ease-in-out infinite;
+}
+@keyframes hint-fall{0%{transform:scaleY(0);transform-origin:top}45%{transform:scaleY(1);transform-origin:top}55%{transform:scaleY(1);transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* ============ 滚动显现 ============ */
+.reveal{opacity:0;transform:translateY(36px);transition:opacity .9s var(--ease-soft),transform .9s var(--ease-soft)}
+.reveal.in{opacity:1;transform:none}
+
+/* ============ Feature 01 · 倾倒 ============ */
+#dump{padding:19vh 6vw 15vh}
+.f1-grid{display:grid;grid-template-columns:.92fr 1.08fr;gap:5vw;align-items:center}
+.chat-panel{
+  border-radius:26px;padding:30px 30px 26px;
+  background:linear-gradient(165deg,rgba(255,255,255,.075),rgba(255,255,255,.02));
+  border:1px solid var(--glass-line);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  box-shadow:0 30px 80px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.09);
+}
+.bubble{max-width:88%;padding:13px 18px;border-radius:18px;font-size:14.5px;line-height:1.7}
+.bubble.user{
+  margin-left:auto;background:rgba(185,168,236,.16);
+  border:1px solid rgba(185,168,236,.25);border-bottom-right-radius:6px;color:var(--ink);
+}
+.bubble.miro-b{
+  margin-top:14px;background:rgba(255,217,140,.09);
+  border:1px solid rgba(255,217,140,.2);border-bottom-left-radius:6px;color:var(--ink);
+}
+.bubble .who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--starlight);letter-spacing:.1em;margin-bottom:6px}
+.bubble .who img{width:18px;height:18px;border-radius:50%}
+.tidy{
+  margin-top:24px;padding-top:20px;border-top:1px dashed rgba(255,255,255,.14);
+}
+.tidy-label{font-size:12px;letter-spacing:.22em;color:var(--ink-faint);margin-bottom:14px}
+.chips{display:flex;flex-direction:column;gap:10px}
+.chip{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 16px;border-radius:14px;
+  background:rgba(255,255,255,.06);border:1px solid var(--glass-line);
+  font-size:14px;color:var(--ink);
+  opacity:0;transform:translate(var(--fx),var(--fy)) rotate(var(--fr));
+  transition:opacity .8s var(--ease-soft) var(--d),transform .8s var(--ease-soft) var(--d);
+}
+.in .chip{opacity:1;transform:none}
+.chip .mark{
+  width:20px;height:20px;flex:none;border-radius:7px;
+  border:1.5px solid var(--starlight);
+  display:grid;place-items:center;color:var(--starlight);font-size:12px;
+  box-shadow:0 0 10px rgba(255,217,140,.25);
+}
+.f1-tag{margin-top:26px;font-size:15px;color:var(--ink-dim)}
+.f1-tag b{color:var(--starlight);font-weight:600}
+
+/* ============ Feature 02 · 记忆星河 ============ */
+#memory{padding:16vh 6vw;overflow:hidden}
+.galaxy{position:relative;height:520px;margin-top:8px}
+.galaxy-core{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:190px;text-align:center;z-index:2;
+}
+.galaxy-core img{width:150px;filter:drop-shadow(0 0 44px rgba(255,224,160,.28));animation:hover-float 8s ease-in-out infinite}
+.galaxy-core .ring{
+  position:absolute;left:50%;top:44%;width:280px;height:280px;
+  transform:translate(-50%,-50%);border-radius:50%;
+  border:1px solid rgba(255,217,140,.12);z-index:-1;
+  animation:ring-spin 40s linear infinite;
+}
+.galaxy-core .ring::before{content:"";position:absolute;top:-3px;left:50%;width:6px;height:6px;border-radius:50%;background:var(--starlight);box-shadow:0 0 12px var(--starlight)}
+@keyframes ring-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.memo{
+  position:absolute;padding:12px 18px;border-radius:16px;max-width:230px;
+  background:rgba(20,18,46,.55);border:1px solid rgba(185,168,236,.22);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  font-size:13.5px;color:var(--ink-dim);letter-spacing:.03em;line-height:1.6;
+  box-shadow:0 10px 30px rgba(0,0,0,.3);
+  animation:memo-fall var(--dur,14s) ease-in-out var(--delay,0s) infinite alternate;
+}
+.memo em{font-style:normal;color:var(--lavender)}
+@keyframes memo-fall{
+  from{transform:translate(0,0) rotate(var(--rot,0deg))}
+  to{transform:translate(var(--tx),var(--ty)) rotate(0deg)}
+}
+#memory .head{position:relative;z-index:3;max-width:640px}
+
+/* ============ Feature 03 · 桌宠 ============ */
+#desk{padding:16vh 6vw}
+.desk-scene{
+  position:relative;margin-top:54px;border-radius:24px;overflow:hidden;
+  border:1px solid var(--glass-line);
+  box-shadow:0 40px 100px rgba(0,0,0,.5);
+  background:linear-gradient(170deg,#1c1a3e 0%,#12102a 55%,#0b0e1e 100%);
+  aspect-ratio:16/9.4;
+}
+.desk-bar{
+  display:flex;align-items:center;gap:7px;padding:12px 16px;
+  background:rgba(255,255,255,.045);border-bottom:1px solid rgba(255,255,255,.07);
+}
+.desk-bar i{width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.16)}
+.desk-bar i:first-child{background:rgba(242,184,208,.5)}
+.desk-bar i:nth-child(2){background:rgba(255,217,140,.5)}
+.desk-body{position:absolute;inset:44px 0 0}
+.desk-icon{
+  position:absolute;display:flex;flex-direction:column;align-items:center;gap:7px;
+  font-size:11px;color:var(--ink-faint);letter-spacing:.05em;
+}
+.desk-icon b{
+  width:44px;height:44px;border-radius:12px;
+  background:linear-gradient(150deg,rgba(255,255,255,.14),rgba(255,255,255,.04));
+  border:1px solid rgba(255,255,255,.12);
+  display:grid;place-items:center;font-weight:400;
+}
+.desk-icon svg{width:20px;height:20px;opacity:.7}
+.desk-glow{
+  position:absolute;right:-4%;bottom:-10%;width:46%;height:70%;
+  background:radial-gradient(ellipse,rgba(255,217,140,.13),transparent 65%);
+  filter:blur(24px);
+}
+.desk-miro{position:absolute;right:5%;bottom:0;width:21%;min-width:130px;animation:hover-float 8.5s ease-in-out infinite;z-index:3}
+.desk-miro img{width:100%;display:block;filter:drop-shadow(0 14px 30px rgba(0,0,0,.5))}
+.reminder-card{
+  position:absolute;right:23%;bottom:34%;z-index:4;
+  padding:13px 18px;border-radius:15px;max-width:210px;
+  background:rgba(252,248,235,.96);color:#4a4030;
+  box-shadow:0 16px 40px rgba(0,0,0,.4),0 0 30px rgba(255,217,140,.2);
+  transform:rotate(-3.5deg);
+  animation:card-bob 6s ease-in-out infinite;
+}
+.reminder-card .rc-t{font-size:11px;letter-spacing:.14em;color:#a08c5a;margin-bottom:4px}
+.reminder-card .rc-b{font-size:14px;font-weight:600;line-height:1.5}
+@keyframes card-bob{0%,100%{transform:rotate(-3.5deg) translateY(0)}50%{transform:rotate(-2.5deg) translateY(-8px)}}
+.pet-states{display:flex;gap:4vw;justify-content:center;margin-top:56px;flex-wrap:wrap}
+.pstate{width:200px;text-align:center}
+.pstate .frame{
+  width:130px;height:130px;margin:0 auto 16px;border-radius:50%;
+  background:radial-gradient(circle at 50% 68%,rgba(255,217,140,.13),rgba(185,168,236,.07) 70%);
+  border:1px solid var(--glass-line);
+  display:grid;place-items:end center;overflow:hidden;
+}
+.pstate img{width:104px;margin-bottom:-6px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.4))}
+.pstate p{font-size:13.5px;color:var(--ink-dim);letter-spacing:.04em}
+
+/* ============ Feature 04 · 场景重演 ============ */
+#theater{padding:16vh 6vw 18vh}
+.theater-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:5vw;align-items:center}
+.vn{
+  position:relative;border-radius:24px;overflow:hidden;
+  border:1px solid var(--glass-line);aspect-ratio:4/4.6;
+  background:linear-gradient(180deg,#0a0d22 0%,#141236 46%,#1d1630 72%,#0a0a18 100%);
+  box-shadow:0 40px 100px rgba(0,0,0,.5);
+}
+.vn-moon{
+  position:absolute;top:9%;left:16%;width:52px;height:52px;border-radius:50%;
+  background:radial-gradient(circle at 38% 36%,#fdf6dd,#e8d9a8 68%);
+  box-shadow:0 0 40px rgba(253,246,221,.5),0 0 90px rgba(253,246,221,.2);
+}
+.vn-lamp{position:absolute;left:50%;bottom:26%;transform:translateX(-50%);width:8px;height:31%;background:#06070f;border-radius:4px 4px 0 0}
+.vn-lamp::before{
+  content:"";position:absolute;top:-16px;left:50%;transform:translateX(-50%);
+  width:26px;height:18px;border-radius:8px 8px 4px 4px;background:#06070f;
+}
+.vn-lamp::after{
+  content:"";position:absolute;top:2px;left:50%;transform:translateX(-50%);
+  width:10px;height:10px;border-radius:50%;background:#ffe9b0;
+  box-shadow:0 0 22px 8px rgba(255,224,150,.75),0 0 90px 40px rgba(255,214,130,.28);
+}
+.vn-cone{
+  position:absolute;left:50%;bottom:26%;transform:translateX(-50%);
+  width:210px;height:32%;
+  background:linear-gradient(to bottom,rgba(255,220,140,.20),rgba(255,220,140,.02));
+  clip-path:polygon(42% 0,58% 0,100% 100%,0 100%);
+  filter:blur(5px);
+}
+.vn-ground{
+  position:absolute;left:0;right:0;bottom:0;height:26%;
+  background:linear-gradient(to bottom,#131022,#07070f);
+}
+.vn-ground::before{
+  content:"";position:absolute;left:50%;top:0;transform:translateX(-50%);
+  width:150px;height:100%;
+  background:linear-gradient(to bottom,rgba(255,220,140,.16),transparent 75%);
+  clip-path:polygon(34% 0,66% 0,88% 100%,12% 100%);filter:blur(6px);
+}
+.vn-fig{position:absolute;bottom:24.5%;width:34px;background:#05060f;border-radius:16px 16px 5px 5px}
+.vn-fig::before{content:"";position:absolute;top:-19px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:#05060f}
+.vn-fig.a{left:calc(50% - 56px);height:82px}
+.vn-fig.b{left:calc(50% + 24px);height:74px;width:30px}
+.vn-miro{position:absolute;right:9%;bottom:22%;width:19%;min-width:64px;animation:hover-float 9s ease-in-out infinite}
+.vn-miro img{width:100%;filter:drop-shadow(0 0 26px rgba(255,224,160,.2))}
+.vn-line{
+  position:absolute;left:5%;right:5%;bottom:5%;z-index:3;
+  padding:15px 20px;border-radius:14px;
+  background:rgba(8,9,20,.72);border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font-size:14px;color:var(--ink-dim);line-height:1.7;
+}
+.vn-line b{color:var(--starlight);font-weight:600;letter-spacing:.06em;margin-right:8px;font-size:12.5px}
+.vn-stars i{
+  position:absolute;width:2.5px;height:2.5px;border-radius:50%;background:#fff;
+  animation:twinkle var(--dur,4s) ease-in-out var(--delay,0s) infinite;opacity:.7;
+}
+
+/* ============ Download ============ */
+#download{padding:20vh 6vw 16vh;text-align:center}
+.dl-scene{position:relative;max-width:760px;margin:0 auto}
+.big-star{
+  position:relative;width:110px;height:110px;margin:0 auto 8px;
+  background:radial-gradient(circle,#fff3d0,#ffd98c 60%);
+  clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);
+  filter:drop-shadow(0 0 34px rgba(255,217,140,.65)) drop-shadow(0 0 90px rgba(255,217,140,.3));
+  animation:star-breathe 5s ease-in-out infinite;
+}
+@keyframes star-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.dl-miro{width:210px;margin:6px auto 0;position:relative;z-index:2;animation:hover-float 8s ease-in-out infinite}
+.dl-miro img{width:100%;filter:drop-shadow(0 20px 44px rgba(0,0,0,.5))}
+#download h2{margin:34px 0 40px}
+#download .dl-row{justify-content:center}
+#download .dl-btn{padding:19px 34px 19px 24px;border-radius:20px}
+#download .dl-btn svg{width:34px;height:34px}
+.version-line{margin-top:26px;font-size:13px;color:var(--ink-faint);letter-spacing:.14em}
+.version-line i{font-style:normal;color:var(--starlight-soft)}
+
+/* ============ Footer ============ */
+footer{
+  position:relative;z-index:1;
+  border-top:1px solid rgba(255,255,255,.07);
+  padding:44px 6vw 52px;
+}
+.foot{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.foot-links{display:flex;gap:26px}
+.foot-links a{color:var(--ink-faint);text-decoration:none;font-size:13.5px;letter-spacing:.05em;transition:color .25s}
+.foot-links a:hover{color:var(--starlight)}
+.foot-slogan{width:100%;text-align:center;margin-top:30px;font-family:var(--serif);font-size:14px;color:var(--ink-faint);letter-spacing:.1em}
+
+/* ============ 响应式 ============ */
+@media (max-width:960px){
+  .hero-grid{grid-template-columns:1fr;gap:6vh;text-align:center}
+  .hero-copy .lede{margin-left:auto;margin-right:auto}
+  .dl-row{justify-content:center}
+  .hero-stage{order:-1;margin-top:2vh}
+  .miro{width:min(58vw,320px)}
+  .f1-grid,.theater-grid{grid-template-columns:1fr;gap:7vh}
+  .theater-grid .vn{order:-1}
+  .galaxy{height:600px}
+  .memo{max-width:180px;font-size:12.5px}
+  #hero{padding-top:70px;min-height:auto;padding-bottom:10vh}
+  .nav-links a:not(:last-child){display:none}
+}
+@media (max-width:560px){
+  .dl-btn{width:100%;justify-content:flex-start}
+  #download .dl-btn{width:auto;flex:1;min-width:240px}
+  .reminder-card{right:20%;bottom:40%;max-width:170px;padding:10px 14px}
+  .reminder-card .rc-b{font-size:12.5px}
+  .pstate{width:44%}
+  .scroll-hint{display:none}
+}
+
+/* ============ reduced motion ============ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none}
+  .chip{opacity:1;transform:none}
+}

@@ -1,0 +1,12 @@
+# 构建产物与依赖
+node_modules/
+dist/
+
+# 安装包不进 git（走服务器 /dl 与 Release 渠道）
+public/dl/
+
+# 截图测试产物（可用 scripts/shoot.cjs 重新生成）
+shot-*.png
+shots/
+shots-live/
+shots-v2/
